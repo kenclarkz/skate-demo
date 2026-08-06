@@ -1,0 +1,1018 @@
+/* Skate — the overlay. The game itself is a canvas; everything here sits on top
+   of it.
+
+   Two constraints shape all of it. It has to stay out of the way, because the
+   player is watching a board four metres in front of them and not a dashboard.
+   And it has to survive a phone: safe-area insets on every edge, no scrolling,
+   no double-tap zoom, and tap targets you can hit with a thumb. */
+
+:root {
+  --ink: #eef1f4;
+  --dim: #9aa3ad;
+  --panel: rgba(14, 18, 24, 0.9);
+  --line: rgba(238, 241, 244, 0.14);
+  --hot: #ffc93f;
+  --good: #6ddc8b;
+  --bad: #ff6a5e;
+  --pad-t: env(safe-area-inset-top, 0px);
+  --pad-b: env(safe-area-inset-bottom, 0px);
+  --pad-l: env(safe-area-inset-left, 0px);
+  --pad-r: env(safe-area-inset-right, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* An explicit `display` on a class or an id beats the UA stylesheet's [hidden]
+   rule, and nearly everything in this file sets one. Without this the hidden
+   attribute silently does nothing and every screen shows at once. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #10141a;
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Stops a swipe becoming a scroll, a pull-to-refresh or a zoom. */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+#view {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Drawn straight from Input's own pointer tracking — never in the way of a
+   touch, only ever a picture of one already happening. */
+#gesture-trail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* --- the in-run readouts ------------------------------------------------- */
+#hud {
+  position: absolute;
+  inset: 0;
+  /* The HUD is a window onto the canvas: only its own controls take clicks. */
+  pointer-events: none;
+}
+
+#stats {
+  position: absolute;
+  top: calc(10px + var(--pad-t));
+  left: calc(14px + var(--pad-l));
+  display: flex;
+  gap: 18px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.readout span:last-child {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.readout .label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  order: -1;
+}
+
+.readout.speed {
+  margin-left: auto;
+  flex-direction: row;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.readout.speed .label {
+  order: 0;
+  font-size: 10px;
+}
+
+.readout.logos span:last-child {
+  color: var(--hot);
+}
+
+.readout.coins span:last-child {
+  color: #f4c95d;
+}
+
+#air {
+  position: absolute;
+  top: 54px;
+  left: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hot);
+  letter-spacing: 0.02em;
+}
+
+/* The trick call-out. Big, brief, and gone. */
+#callout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 22%;
+  margin: 0;
+  text-align: center;
+  font-size: clamp(22px, 6vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  text-shadow: 0 3px 16px rgba(0, 0, 0, 0.75);
+}
+
+#callout.sketchy {
+  color: var(--hot);
+}
+
+#callout.banked {
+  color: var(--good);
+}
+
+#callout.small {
+  font-size: clamp(15px, 3.4vw, 22px);
+  color: var(--hot);
+}
+
+#callout.coin {
+  font-size: clamp(15px, 3.4vw, 22px);
+  color: #f4c95d;
+}
+
+#callout.pop {
+  animation: callout 1.6s ease-out forwards;
+}
+
+@keyframes callout {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+/* The live combo, low and central so it never covers the board. */
+#combo {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(74px + var(--pad-b));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  max-width: min(92vw, 520px);
+  text-align: center;
+}
+
+#combo-list {
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+#combo-mult {
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- balance ------------------------------------------------------------- */
+#balance {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(24px + var(--pad-b));
+  width: min(52vw, 260px);
+  text-align: center;
+}
+
+.balance-label {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.balance-track {
+  position: relative;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: rgba(10, 14, 18, 0.8);
+  border: 1px solid var(--line);
+  /* The centre line: without it there is nothing to be centred on. */
+  background-image: linear-gradient(to right, transparent calc(50% - 1px), var(--line) calc(50% - 1px), var(--line) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+#balance-pip {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 24px;
+  height: 10px;
+  margin-left: -12px;
+  border-radius: 999px;
+  background: var(--good);
+  box-shadow: 0 0 12px rgba(109, 220, 139, 0.5);
+  transition: background-color 0.15s linear;
+}
+
+#balance.warn #balance-pip {
+  background: var(--bad);
+  box-shadow: 0 0 14px rgba(255, 106, 94, 0.55);
+}
+
+/* --- the charge meter ---------------------------------------------------- */
+#charge {
+  position: absolute;
+  right: calc(20px + var(--pad-r));
+  bottom: calc(28px + var(--pad-b));
+  width: 110px;
+}
+
+.charge-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(10, 14, 18, 0.8);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+#charge-bar {
+  display: block;
+  height: 100%;
+  background: var(--hot);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+#charge.full #charge-bar {
+  background: var(--bad);
+}
+
+/* --- the steering/walking joystick --------------------------------------- */
+/* Floating: input.js drops it wherever the left half of the screen is first
+   touched, rather than pinning it to one fixed spot a thumb has to find. */
+#joystick-base {
+  position: absolute;
+  width: 108px;
+  height: 108px;
+  margin-left: -54px;
+  margin-top: -54px;
+  border-radius: 50%;
+  background: rgba(20, 24, 30, 0.35);
+  border: 1px solid var(--line);
+}
+
+#joystick-thumb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin-left: -23px;
+  margin-top: -23px;
+  border-radius: 50%;
+  background: rgba(238, 241, 244, 0.55);
+  border: 1px solid rgba(238, 241, 244, 0.8);
+}
+
+/* --- dismount / mount / sit ----------------------------------------------- */
+#action-buttons {
+  position: absolute;
+  left: calc(20px + var(--pad-l));
+  bottom: calc(28px + var(--pad-b));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+#action-buttons button {
+  pointer-events: auto;
+  padding: 9px 14px;
+  font-size: 13px;
+  min-height: 0;
+  background: var(--panel);
+}
+
+#btn-mount {
+  background: var(--hot);
+  color: #17130a;
+  border-color: transparent;
+  font-weight: 700;
+}
+
+/* Bottom-centre rather than either side: the left half is the steering
+   joystick's territory and the right half the flick/charge gesture's, and by
+   the time a grab is worth reaching for, both thumbs are already free of
+   whatever popped the ollie in the first place. */
+#grab-buttons {
+  position: absolute;
+  left: 50%;
+  bottom: calc(22px + var(--pad-b));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+
+#grab-buttons button {
+  pointer-events: auto;
+  padding: 10px 12px;
+  font-size: 12px;
+  min-height: 0;
+  background: var(--panel);
+  /* Held, not tapped — a native tap highlight or a text-selection cursor
+     lingering under a thumb that is holding this down for the best part of a
+     second reads as the browser fighting the gesture rather than the game. */
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: none;
+}
+
+/* --- install and debug --------------------------------------------------- */
+#install {
+  position: absolute;
+  top: calc(10px + var(--pad-t));
+  right: calc(14px + var(--pad-r));
+  pointer-events: auto;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* Stacked below #install rather than beside it: #install can appear at any
+   time (it tracks the browser's own install-prompt readiness, not the game
+   state), so the two are never guaranteed to be at most one wide between
+   them — stacking is the only arrangement that can't collide. */
+#btn-pause {
+  position: absolute;
+  top: calc(54px + var(--pad-t));
+  right: calc(14px + var(--pad-r));
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  min-height: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
+
+#debug {
+  position: absolute;
+  left: calc(14px + var(--pad-l));
+  bottom: calc(14px + var(--pad-b));
+  margin: 0;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #b8f0c8;
+  background: rgba(6, 9, 12, 0.66);
+  padding: 6px 8px;
+  border-radius: 6px;
+  white-space: pre;
+}
+
+/* --- screens ------------------------------------------------------------- */
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: calc(20px + var(--pad-t)) calc(18px + var(--pad-r)) calc(20px + var(--pad-b)) calc(18px + var(--pad-l));
+  background: radial-gradient(120% 90% at 50% 40%, rgba(8, 11, 15, 0.55), rgba(8, 11, 15, 0.9));
+  backdrop-filter: blur(3px);
+}
+
+.screen {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  text-align: center;
+  max-height: 100%;
+  overflow-y: auto;
+  /* The body turns off every touch gesture so a swipe on the canvas cannot
+     become a scroll or a pull-to-refresh mid-run; a menu needs that one
+     gesture back, or its own overflow-y above does nothing on a phone. */
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.screen.wide {
+  max-width: 720px;
+  text-align: left;
+}
+
+.screen h1 {
+  margin: 0 0 2px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.logo {
+  font-size: clamp(46px, 15vw, 76px) !important;
+  letter-spacing: -0.05em !important;
+  line-height: 0.9;
+  margin: 0 !important;
+}
+
+.logo b {
+  color: var(--hot);
+}
+
+.tag {
+  margin: 0 0 6px;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.stat-lines {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin: 2px 0 10px;
+  font-size: 12px;
+  color: var(--dim);
+  text-align: left;
+}
+
+.stat-lines span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.stat-lines b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* --- the speed setting ---------------------------------------------------- */
+.setting-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-height: 46px;
+}
+
+.setting-row label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.setting-row span {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
+}
+
+.setting-row input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(10, 14, 18, 0.8);
+  border: 1px solid var(--line);
+  outline: none;
+}
+
+.setting-row input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--hot);
+  cursor: pointer;
+  border: 2px solid #17130a;
+}
+
+.setting-row input[type='range']::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--hot);
+  cursor: pointer;
+  border: 2px solid #17130a;
+}
+
+.setting-row input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+button,
+.link {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 16px;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  /* 44px minimum, so a thumb can hit it. */
+  min-height: 46px;
+}
+
+button:hover,
+.link:hover {
+  background: rgba(44, 53, 65, 0.95);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button.primary {
+  background: var(--hot);
+  border-color: transparent;
+  color: #17130a;
+}
+
+button.primary:hover {
+  background: #ffd766;
+}
+
+button.quiet,
+.link.quiet {
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dim);
+  min-height: 38px;
+  padding: 8px;
+}
+
+button.off {
+  color: var(--dim);
+}
+
+/* --- the park picker ------------------------------------------------------ */
+.park-now {
+  margin: -4px 0 4px;
+  font-size: 12px;
+  color: var(--hot);
+  font-weight: 600;
+}
+
+/* --- day/night selector, above the park grid ------------------------------ */
+.lighting-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.lighting-opt {
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.lighting-opt.active {
+  background: var(--hot);
+  border-color: transparent;
+  color: #17130a;
+}
+
+.park-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.park-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  min-height: 84px;
+  padding: 12px 14px;
+}
+
+.park-card b {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.park-card span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dim);
+  font-weight: 400;
+}
+
+.park-card.current {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+.park-card.current b {
+  color: var(--hot);
+}
+
+/* --- the board shop -------------------------------------------------------- */
+.store-section-title {
+  margin: 4px 0 8px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.board-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 6px;
+  text-align: left;
+}
+
+.board-type h3 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+
+.board-type-blurb {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.board-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.board-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  padding: 12px 14px;
+}
+
+.board-swatch {
+  width: 100%;
+  height: 28px;
+  border-radius: 6px;
+}
+
+/* Each type's swatch hints at its own deck's silhouette, not just its
+   colour — a longboard reads as a long thin bar, a penny as a short stub. */
+.board-swatch--longboard {
+  height: 20px;
+  border-radius: 10px;
+  margin: 4px 0;
+}
+
+.board-swatch--penny {
+  width: 62%;
+  height: 30px;
+  border-radius: 15px;
+}
+
+.board-swatch--cruiser {
+  width: 85%;
+  height: 26px;
+  border-radius: 12px;
+}
+
+/* A collar notch top-centre is the one shape cue that reads as "shirt"
+   rather than "board" at this size — a plain bar would look like one more
+   deck colour among the others above it. */
+.board-swatch--shirt {
+  height: 34px;
+  border-radius: 8px;
+  -webkit-mask-image: radial-gradient(circle at 50% 0%, transparent 7px, #000 7.5px);
+  mask-image: radial-gradient(circle at 50% 0%, transparent 7px, #000 7.5px);
+}
+
+.board-card b {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.board-status {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.board-card.current {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+.board-card.current b {
+  color: var(--hot);
+}
+
+.board-card.locked .board-status {
+  color: var(--bad);
+}
+
+/* --- the skater rack ------------------------------------------------------- */
+/* Wider minimum than the board cards: each of these carries a full-length
+   portrait plus a line of prose, and squeezing four across a phone would
+   shrink the figure to the point where the headwear — the whole thing that
+   tells them apart — stops being legible. */
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 6px;
+  text-align: left;
+}
+
+.char-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  padding: 12px 12px 14px;
+}
+
+/* A backdrop behind the figure. Deliberately mid-slate rather than as dark as
+   the card it sits on: Nova's charcoal hoodie and near-black jeans disappeared
+   entirely against a dark panel, and a rider you cannot see is a poor advert
+   for picking them. Fixed aspect so every portrait is drawn at the same scale
+   and the four of them line up as a row of people the same height. */
+.char-portrait {
+  width: 100%;
+  max-width: 108px;
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  background: linear-gradient(#5d6b80, #3c4859);
+}
+
+.char-card b {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.char-blurb {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--dim);
+}
+
+.char-card.current {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+.char-card.current b {
+  color: var(--hot);
+}
+
+/* --- the tutorial ---------------------------------------------------------- */
+.tut-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+}
+
+.tut-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.tut-dots i.on {
+  background: var(--hot);
+}
+
+.tut-card {
+  text-align: left;
+  padding: 4px 2px 8px;
+}
+
+/* The live demo: same rounded panel language as everything else, letterboxed
+   rather than stretched so a low, wide shot never distorts. */
+.tut-demo-wrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.tut-demo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  background: #14171c;
+}
+
+/* The gesture diagram: a small picture-in-picture over the demo's own
+   corner, so the trick and the swipe that causes it read as one thing
+   rather than two panels a player has to glance back and forth between. */
+.tut-gesture {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 27%;
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  background: rgba(16, 20, 26, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(2px);
+}
+
+.tut-card h2 {
+  margin: 0 0 6px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.tut-card p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--dim);
+}
+
+.tut-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tut-input {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.tut-input:empty,
+.tut-input:has(span:last-child:empty) {
+  display: none;
+}
+
+.tut-input-label {
+  flex-shrink: 0;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  padding-top: 1px;
+}
+
+.tut-input span:last-child {
+  text-align: right;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tut-nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.tut-nav button {
+  flex: 1;
+}
+
+.tut-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* --- the iOS install sheet ---------------------------------------------- */
+#ios-hint {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + var(--pad-b));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: 13px;
+  pointer-events: auto;
+}
+
+#ios-hint p {
+  margin: 0;
+  flex: 1;
+}
+
+#ios-dismiss {
+  padding: 4px 10px;
+  min-height: 0;
+  font-size: 18px;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  color: var(--dim);
+}
+
+@media (max-height: 520px) {
+  .logo {
+    font-size: 40px !important;
+  }
+
+  .stat-lines {
+    display: none;
+  }
+}

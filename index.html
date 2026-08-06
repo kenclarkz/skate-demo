@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <!-- viewport-fit=cover is mandatory: without it every env(safe-area-inset-*)
+         below evaluates to 0 and the score sits under an iPhone's notch. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <title>Skate</title>
+    <meta name="description" content="A skateboarding game with a physics-driven skater: flick to pop, carve to turn, and land it or slam.">
+
+    <link rel="stylesheet" href="css/skate.css">
+
+    <!-- Every path is relative on purpose: this is the root of its own site,
+         served at the repo's own GitHub Pages URL. -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#10141a">
+
+    <!-- iOS ignores the manifest for both the icon and the display mode. -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Skate">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view"></canvas>
+
+      <!-- The live gesture trail: purely a readout of what Input is already
+           tracking, drawn above the game and below the HUD's own controls. -->
+      <canvas id="gesture-trail"></canvas>
+
+      <div id="hud">
+        <div id="stats">
+          <div class="readout"><span class="label">Score</span><span id="score">0</span></div>
+          <div class="readout"><span class="label">Best</span><span id="best">0</span></div>
+          <div class="readout coins"><span class="label">Coins</span><span id="coins">0</span></div>
+          <div class="readout logos" id="logos-readout" hidden><span class="label">Logos</span><span id="logos-count">0/6</span></div>
+          <div class="readout speed"><span id="speed">0</span><span class="label">km/h</span></div>
+          <div id="air" hidden>0.00 m</div>
+        </div>
+        <button id="install" type="button" hidden>Install</button>
+
+        <!-- Mobile has no Escape/P key to pause with — this is that button.
+             Shown only while playing or walking; main.js drives .hidden. -->
+        <button id="btn-pause" type="button" aria-label="Pause" hidden>&#9208;</button>
+
+        <!-- On the board: step off and go explore on foot. On foot, near the
+             board: get back on. Both are one tap, never both at once. -->
+        <div id="action-buttons">
+          <button id="btn-dismount" type="button" hidden>Get off board</button>
+          <button id="btn-mount" type="button" hidden>Get on board</button>
+          <button id="btn-sit" type="button" hidden>Sit</button>
+        </div>
+
+        <!-- Grabs only mean anything in the air, so the whole row is hidden
+             the rest of the time — main.js shows it exactly while airborne.
+             Hold one down to hold the grab, let go to let go of it: these call
+             input.beginGrab()/endGrab() straight from a pointerdown/pointerup
+             on the button itself, not through the drag-gesture machinery the
+             flip tricks use, because there is nothing here to classify — the
+             hold *is* the trick. -->
+        <div id="grab-buttons" hidden>
+          <button type="button" data-grab="indy">Indy</button>
+          <button type="button" data-grab="mute">Mute</button>
+          <button type="button" data-grab="nosegrab">Nose</button>
+          <button type="button" data-grab="tailgrab">Tail</button>
+          <button type="button" data-grab="method">Method</button>
+        </div>
+
+        <p id="callout" hidden></p>
+
+        <div id="combo" hidden>
+          <span id="combo-list"></span>
+          <b id="combo-mult"></b>
+        </div>
+
+        <!-- Balance: an inverted pendulum, so it always needs correcting. -->
+        <div id="balance" hidden>
+          <span class="balance-label">balance</span>
+          <div class="balance-track"><i id="balance-pip"></i></div>
+        </div>
+
+        <!-- How loaded the legs are. Deeper pull, bigger pop. -->
+        <div id="charge" hidden>
+          <div class="charge-track"><i id="charge-bar"></i></div>
+        </div>
+
+        <!-- The steering/walking joystick. Purely visual — input.js positions
+             it from the exact same pointer events it already tracks. -->
+        <div id="joystick-base" hidden>
+          <div id="joystick-thumb"></div>
+        </div>
+
+        <pre id="debug" hidden></pre>
+      </div>
+
+      <div id="overlay" hidden>
+        <section id="screen-start" class="screen">
+          <h1 class="logo"><span>skate</span><b>.</b></h1>
+          <p class="tag">Pull back to load. Flick to pop.</p>
+          <p class="park-now" id="park-now">Skating: Home Park</p>
+          <div id="stat-lines" class="stat-lines"></div>
+          <nav class="menu">
+            <button id="btn-play" class="primary" type="button">Skate</button>
+            <button id="btn-parks" type="button">Choose park</button>
+            <button id="btn-store" type="button">Shop</button>
+            <button id="btn-guide" type="button">How to play</button>
+            <button id="btn-settings" type="button">Settings</button>
+            <button id="opt-reset" class="quiet" type="button">Reset stats</button>
+            <a class="quiet link" href="https://kenclarkz.github.io/kenclarkzpage/">Back to the portfolio</a>
+          </nav>
+        </section>
+
+        <section id="screen-settings" class="screen" hidden>
+          <h1>Settings</h1>
+          <nav class="menu">
+            <div class="setting-row">
+              <label for="speed-range">Top speed</label>
+              <input type="range" id="speed-range" min="8" max="50" step="1" value="16">
+              <span id="speed-value">16 m/s</span>
+            </div>
+            <div class="setting-row">
+              <label for="camzoom-range">Camera distance</label>
+              <input type="range" id="camzoom-range" min="50" max="100" step="1" value="100">
+              <span id="camzoom-value">Default</span>
+            </div>
+            <div class="setting-row">
+              <label for="music-range">Music volume</label>
+              <input type="range" id="music-range" min="0" max="100" step="1" value="50">
+              <span id="music-value">50%</span>
+            </div>
+            <button id="opt-sound" type="button">Sound: On</button>
+            <button id="opt-holdpush" type="button">Hold to push: On</button>
+          </nav>
+          <button id="btn-settings-back" class="primary" type="button">Back</button>
+        </section>
+
+        <section id="screen-parks" class="screen wide" hidden>
+          <h1>Choose a park</h1>
+          <div class="lighting-toggle" id="lighting-toggle">
+            <button type="button" class="lighting-opt" data-lighting="day">☀️ Day</button>
+            <button type="button" class="lighting-opt" data-lighting="night">🌙 Night</button>
+          </div>
+          <div class="park-grid" id="park-grid"></div>
+          <button id="btn-parks-back" class="primary" type="button">Back</button>
+        </section>
+
+        <section id="screen-store" class="screen wide" hidden>
+          <h1>Shop</h1>
+          <p class="tag">Land tricks to earn coins. <b id="store-coins">0</b> coins</p>
+          <h2 class="store-section-title">Skaters</h2>
+          <p class="board-type-blurb">Free to pick, and they all ride exactly the same. Shirts below go on over the top.</p>
+          <div class="char-grid" id="char-grid"></div>
+          <h2 class="store-section-title">Boards</h2>
+          <div class="board-grid" id="board-grid"></div>
+          <h2 class="store-section-title">Shirts</h2>
+          <div class="board-grid" id="outfit-grid"></div>
+          <button id="btn-store-back" class="primary" type="button">Back</button>
+        </section>
+
+        <section id="screen-guide" class="screen" hidden>
+          <h1>How to play</h1>
+          <div class="tut-dots" id="tut-dots"></div>
+          <div class="tut-card">
+            <div class="tut-demo-wrap">
+              <!-- Not a screenshot: a second tiny scene, running the real
+                   physics live, so the demo can never drift out of sync with
+                   how the move actually plays. Hidden on steps with none. -->
+              <canvas id="tut-demo" class="tut-demo" hidden></canvas>
+              <!-- The gesture that causes it, drawn from the same angle and
+                   curl the recogniser itself reads — never a hand-drawn
+                   picture that could show something the game would not
+                   actually accept. Hidden on steps with no gesture of their
+                   own (grinds, manuals, on foot...). -->
+              <canvas id="tut-gesture" class="tut-gesture" hidden></canvas>
+            </div>
+            <h2 id="tut-title"></h2>
+            <p id="tut-body"></p>
+            <div class="tut-inputs">
+              <div class="tut-input"><span class="tut-input-label">Keyboard</span><span id="tut-keys"></span></div>
+              <div class="tut-input"><span class="tut-input-label">Touch</span><span id="tut-touch"></span></div>
+              <div class="tut-input"><span class="tut-input-label">Gamepad</span><span id="tut-pad"></span></div>
+            </div>
+          </div>
+          <div class="tut-nav">
+            <button id="btn-tut-prev" type="button">Back</button>
+            <button id="btn-tut-next" class="primary" type="button">Next</button>
+          </div>
+          <button id="btn-guide-back" class="quiet" type="button">Menu</button>
+        </section>
+
+        <section id="screen-paused" class="screen" hidden>
+          <h1>Paused</h1>
+          <button id="btn-resume" class="primary" type="button">Keep skating</button>
+          <button id="btn-pause-menu" type="button">Home Screen</button>
+        </section>
+
+        <!-- There is no slam screen. A fall ends a combo, not a run: the rider
+             gets back up where they landed and the reason appears as a callout
+             over the game, so nothing interrupts. -->
+      </div>
+
+      <div id="ios-hint" hidden>
+        <p>Install it: tap <b>Share</b>, then <b>Add to Home Screen</b>.</p>
+        <button id="ios-dismiss" type="button" aria-label="Dismiss">&times;</button>
+      </div>
+    </div>
+
+    <noscript>
+      <p style="color:#e6e8ea;font:16px system-ui;padding:24px">This game needs JavaScript.</p>
+    </noscript>
+
+    <script type="module" src="js/skate/main.js"></script>
+  </body>
+</html>
