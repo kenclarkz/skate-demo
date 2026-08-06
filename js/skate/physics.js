@@ -145,7 +145,7 @@ export class Ride {
     this.sketch = 0;
     this.bailReason = null;
     this.bailTimer = 0;
-    this.revert = null;       // a landing pivot: { target, total, t } while active
+    this.revert = null;       // a landing pivot: { target, total, t }; t counts down the delay
 
     this.combo = { points: 0, names: [], live: false, idle: 0 };
     this.trickCount = 0;
@@ -196,7 +196,7 @@ export class Ride {
 
   /** How hard the landing pivot is working right now, 0..1. Drives the audio. */
   get revertK() {
-    if (!this.revert) return 0;
+    if (!this.revert || this.revert.t < 0) return 0;
     const d = Math.abs(C.angleDelta(this.yaw, this.revert.target));
     return C.clamp(d / C.REVERT_TRIGGER, 0, 1);
   }
@@ -528,6 +528,13 @@ export class Ride {
    */
   stepRevert(dt) {
     const r = this.revert;
+    // The save is deliberately late: for REVERT_DELAY seconds after touchdown
+    // the board holds its line — no pivot yet — so the catch reads as a real
+    // recovery from a near-loss of control rather than an instant snap-round.
+    if (r.t < 0) {
+      r.t += dt;
+      return;
+    }
     const d = C.angleDelta(this.yaw, r.target);
     if (Math.abs(d) < C.REVERT_DONE) {
       this.revert = null;
@@ -662,24 +669,23 @@ export class Ride {
     let reason = null;
     if (impact > C.LAND_VY_BAIL) reason = 'flat';
     else if (rotErr > C.LAND_FLIP_OK) reason = 'primo';
-    else if (slip > C.LAND_SLIP_SKETCH && speed > 1.4) reason = 'slide-out';
     else if (Math.abs(airPitch) > C.LAND_PITCH_OK) reason = 'nose';
 
-    // A revert: the board came down pointed off the direction of travel but not
-    // so far that it is a slide-out, so instead of snapping it round in one step
-    // and calling the landing sketchy, it is caught and pivoted back smoothly.
-    // landOn is told not to snap the heading, leaving the misalignment in speed
-    // and side for stepRevert() to turn back along the board.
+    // A revert: the board came down pointed off the direction of travel —
+    // sideways or even backwards — so instead of snapping it round in one step
+    // or sliding out, it is caught and pivoted back onto the direction of
+    // travel, after a beat's delay so the save reads as a recovery rather than
+    // a magnet. landOn is told not to snap the heading, leaving the
+    // misalignment in speed and side for stepRevert() to turn back along the
+    // board.
     const wantRevert =
-      !reason &&
       !this.sliding &&
       speed > C.REVERT_MIN_SPEED &&
       slip > C.REVERT_TRIGGER;
-    const back = Math.abs(C.angleDelta(this.yaw, velYaw)) > Math.PI / 2;
 
     this.landOn(_n, velYaw, speed, !wantRevert);
     if (wantRevert) {
-      this.revert = { target: back ? velYaw + Math.PI : velYaw, total: slip, t: 0 };
+      this.revert = { target: velYaw, total: slip, t: -C.REVERT_DELAY };
       this.emit('revertStart', { angle: slip });
     }
     if (reason) {
