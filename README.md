@@ -29,6 +29,10 @@ Play it at **[kenclarkz.github.io/skate](https://kenclarkz.github.io/skate/)**.
 - **Grinds, manuals, and powerslides**, each riding the same balance model:
   an inverted pendulum with a random bias, so holding one always takes
   active correction.
+- **Automatic reverts** — land with the board off the direction of travel
+  and the wheels pivot it back under you in a smooth fraction of a second:
+  a little speed and a wheel chirp instead of the sketchy wobble (and past
+  the limit it still slides out).
 - **A ragdoll bail system** — a Verlet-integrated body picks up the board's
   velocity and spin at the moment of the slam and carries it into the fall.
   A slam doesn't stop the run: the rider gets back up where they came down
