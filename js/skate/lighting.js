@@ -42,6 +42,7 @@ const PRESETS = {
     starOpacity: 0,
     moonOpacity: 0,
     floodIntensity: 0,
+    lampIntensity: 0,
     bulbColor: 0xa79a76,     // an unlit bulb, dull in daylight
     bulbEmissive: 0.0,
     signOpacity: 0.08,       // a sign in daylight is just a dark panel
@@ -58,16 +59,17 @@ const PRESETS = {
     fogColor: 0x0a1226,
     fogNear: 34,
     fogFar: 170,
-    hemiSky: 0x1b2c4d,
-    hemiGround: 0x07080d,
-    hemiIntensity: 0.5,
-    keyColor: 0x9fb2e0,      // moonlight: cool and dim next to the sun
-    keyIntensity: 0.55,
+    hemiSky: 0x2c4270,
+    hemiGround: 0x11141d,
+    hemiIntensity: 1.15,
+    keyColor: 0xaebfe8,      // moonlight: cool next to the sun, but no longer dim
+    keyIntensity: 1.1,
     keyPos: [11, 15, -7],
-    exposure: 0.82,
+    exposure: 1.05,
     starOpacity: 1,
     moonOpacity: 1,
     floodIntensity: 1,
+    lampIntensity: 1,
     bulbColor: 0xffdfa0,
     bulbEmissive: 1.4,
     signOpacity: 1,
@@ -294,6 +296,7 @@ export class LightingManager {
     // glow sprite standing in for the lamps' actual light — see setPark().
     this.parkMaterials = [];
     this._lampGlows = [];
+    this._lampLights = [];
 
     this._applyImmediate(PRESETS[DAY]);
   }
@@ -365,18 +368,36 @@ export class LightingManager {
     this.sign.position.set(signX, 3.4, signZ);
     this.sign.rotation.y = park.noFence ? 0 : Math.PI;
 
-    // Light up the park's own street-lamp bulbs at night, and drop a small
-    // glow sprite at each one — cheap stand-ins for real point lights, which
-    // would each cost a lighting pass over the entire park mesh.
+    // Light up the park's own street-lamp bulbs at night: each one gets a
+    // small downward spotlight of its own, on top of the glow sprite that
+    // sells the bulb itself. More real lights than the two floodlights
+    // alone, so if this park has more than a handful of lamps only the
+    // nearest LAMP_LIGHT_CAP get a real light — the rest keep their glow
+    // sprite, which is still visibly "on" without adding to the per-fragment
+    // light count everything in the scene pays for.
     this.parkMaterials = [park.material, park.sceneryMaterial].filter(Boolean);
     this._bulbMaterial = park.bulbMaterial || null;
     for (const g of this._lampGlows) this.scene.remove(g);
-    this._lampGlows = (park.lampPositions || []).map(([x, y, z]) => {
+    for (const l of this._lampLights) {
+      this.scene.remove(l.target);
+      this.scene.remove(l);
+    }
+    const lampSpots = park.lampPositions || [];
+    this._lampGlows = lampSpots.map(([x, y, z]) => {
       const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTextureCache(), color: 0xffdfa0, transparent: true, opacity: 0, depthWrite: false, fog: false }));
       spr.scale.set(1.4, 1.4, 1);
       spr.position.set(x, y - 0.1, z);
       this.scene.add(spr);
       return spr;
+    });
+    const LAMP_LIGHT_CAP = 8;
+    this._lampLights = lampSpots.slice(0, LAMP_LIGHT_CAP).map(([x, y, z]) => {
+      const light = new THREE.SpotLight(0xffdfa0, 0, 11, Math.PI / 3.4, 0.65, 1.6);
+      light.position.set(x, y, z);
+      light.target.position.set(x, park.heightAt(x, z), z);
+      this.scene.add(light);
+      this.scene.add(light.target);
+      return light;
     });
 
     this._applyToMaterials(this._cur);
@@ -486,7 +507,7 @@ export class LightingManager {
     this._haloMat.opacity = cur.moonOpacity * 0.8;
 
     this.floodlights.forEach(({ light, head }) => {
-      light.intensity = cur.floodIntensity * 26;
+      light.intensity = cur.floodIntensity * 55;
       head.material.opacity = cur.floodIntensity * 0.9;
     });
 
@@ -494,6 +515,7 @@ export class LightingManager {
     this._signMat.opacity = Math.max(cur.signOpacity, 0.08);
 
     for (const g of this._lampGlows) g.material.opacity = cur.floodIntensity;
+    for (const l of this._lampLights) l.intensity = cur.lampIntensity * 9;
     if (this._bulbMaterial) this._bulbMaterial.color.copy(colorOf(cur.bulbColor));
 
     this._applyToMaterials(cur);
