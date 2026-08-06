@@ -50,6 +50,7 @@ export class Audio {
     this.lastTick = 0;
     this.lastFollow = 0;
     this.wasSliding = false;
+    this.wasReverting = false;
     this.musicVolume = 0.5;
   }
 
@@ -400,7 +401,7 @@ export class Audio {
    * Follow the ride. Called every frame with how fast the board is going, whether
    * it is on the ground, and whether it is on a rail.
    */
-  follow(speed, grounded, grinding, rough, sliding = false) {
+  follow(speed, grounded, grinding, rough, sliding = false, revert = 0) {
     if (!this.ready) return;
     const t = this.ctx.currentTime;
     const v = clamp(speed / 9, 0, 1.2);
@@ -429,14 +430,31 @@ export class Audio {
 
     // Powerslide. The bite on the way in is a one-shot on the rising edge, so
     // starting a slide has an attack instead of just fading up.
-    const slideNow = sliding && rolling && speed > 1.5;
-    this.slideGain.gain.setTargetAtTime(slideNow ? 0.045 + v * 0.14 : 0, t, 0.04);
+    const revertNow = revert > 0.02 && rolling && speed > 0.8;
+    const slideNow = sliding && rolling && speed > 1.5 && !revertNow;
+    this.slideGain.gain.setTargetAtTime(
+      slideNow ? 0.045 + v * 0.14 : revertNow ? 0.05 + v * 0.13 : 0,
+      t,
+      0.04
+    );
     if (slideNow) {
       this.slideBand.frequency.setTargetAtTime(1100 + v * 1400, t, 0.1);
       this.slideSqueal.frequency.setTargetAtTime(2600 + v * 1500, t, 0.12);
       if (!this.wasSliding) this.slide();
     }
     this.wasSliding = slideNow;
+
+    // A landing pivot scrubs the wheels sideways across their own axis — the
+    // same physics as a powerslide, so it drives the same squeal layer, for
+    // the couple of tenths of a second the pivot lasts instead of for as long
+    // as the stick is held over. Volume and pitch follow the speed the board
+    // is carrying into it, and the layer drops away the moment it finishes.
+    if (revertNow) {
+      this.slideBand.frequency.setTargetAtTime(1150 + v * 1200, t, 0.1);
+      this.slideSqueal.frequency.setTargetAtTime(2700 + v * 1300, t, 0.12);
+      if (!this.wasReverting) this.slide();
+    }
+    this.wasReverting = revertNow;
 
     // --- slab joints ------------------------------------------------------
     // Paced by ground covered rather than by time, which is what makes them

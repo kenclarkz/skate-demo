@@ -786,7 +786,8 @@ function updateHud(dt) {
       ride.mode === GROUND,
       ride.mode === GRIND,
       ride.surf.kind === ROUGH,
-      ride.sliding
+      ride.sliding,
+      ride.revertK
     );
   } else if (state === WALKING) {
     hud.setSpeed(Math.abs(walker.speed));

@@ -140,6 +140,25 @@ export const COMPRESS_RECOVER = 7.0; // spring rate back to the ride stance
 export const SKETCH_SPEED_LOSS = 0.68;
 export const SKETCH_TIME = 0.55;     // how long the wobble lasts
 
+// --- revert ---------------------------------------------------------------
+// A landing that comes down off the direction of travel is normally a sketchy
+// wobble (or, past LAND_SLIP_SKETCH, a slide-out). A revert catches the board
+// instead: the wheels pivot it back round under the rider over a couple of
+// tenths of a second, so the run keeps going — at the cost of a little speed
+// scrubbed by the pivot. The trigger sits right where LAND_SLIP_CLEAN does, so
+// a clean landing stays clean and the sketchy band becomes a pivot rather than
+// a wobble. Anything past LAND_SLIP_SKETCH still slides out: a revert can only
+// save what a skater could actually save.
+export const REVERT_TRIGGER = 0.35;   // rad of board-vs-travel mismatch that earns a revert
+export const REVERT_MIN_SPEED = 1.6;  // below this the wheels just grip and stop
+export const REVERT_DONE = 0.035;     // rad left at which the pivot is finished
+export const REVERT_RATE = 6.2;       // rad/s of pivot at full rate
+export const REVERT_EASE_IN = 0.05;   // s to build up to full rate — no snap
+export const REVERT_SCRUB = 1.15;     // m/s of speed lost per radian pivoted
+export const REVERT_CROUCH = 0.05;    // extra knee bend through the pivot, m
+export const REVERT_TWIST = 0.6;      // max rad the body leads the board by
+export const REVERT_TWIST_GAIN = 0.65; // how much of the remaining angle the body leads with
+
 // --- grinds ---------------------------------------------------------------
 export const GRIND_SNAP_XZ = 0.34;   // how close the board must pass the rail
 export const GRIND_SNAP_Y = 0.30;    // vertical window, generous on the way down

@@ -441,6 +441,86 @@ section('Spins and stance');
 }
 
 // --------------------------------------------------------------------------
+section('Reverts');
+{
+  // Landing with the board not pointing where it is going normally wobbles
+  // sketchy (or slides out past LAND_SLIP_SKETCH). A revert catches it: the
+  // heading pivots back onto the velocity over a couple of tenths of a second,
+  // costs a little speed for the pivot, and never bails.
+  const reverted = await run(() => {
+    const g = window.__skate;
+    g.place(-10, -20, 0, 7);
+    g.drive(1 / 120, { trick: 'ollie', trickCharge: 1 });
+    // A short stick-over as the board leaves the ground: ~0.45 rad of air spin,
+    // so it comes down pointed well off its own velocity.
+    for (let i = 0; i < 7; i++) g.drive(1 / 120, { steer: -1 });
+    const events = [];
+    for (let i = 0; i < 400 && g.ride.mode === 1; i++) {
+      g.drive(1 / 120, { steer: 0, charge: false, slide: false, push: false });
+      for (const e of g.ride.events) events.push(e);
+    }
+    const land = events.find((e) => e.name === 'land');
+    const start = events.find((e) => e.name === 'revertStart');
+    const speedAtLand = g.ride.groundSpeed;
+    // Ride out the pivot (up to a second) and read where the heading ends.
+    for (let i = 0; i < 120 && g.ride.revert; i++) g.drive(1 / 120, {});
+    return {
+      reverted: !!start,
+      slip: start?.angle || 0,
+      clean: land?.sketchy === false,
+      mode: g.ride.mode,
+      speedAtLand,
+      yaw: g.ride.yaw,
+      velYaw: Math.atan2(g.ride.vel.x, g.ride.vel.z),
+      speed: g.ride.groundSpeed,
+    };
+  });
+  ok(reverted.reverted, 'an off-direction landing starts a revert');
+  ok(reverted.slip > 0.35, `with real misalignment to fix (${reverted.slip.toFixed(2)} rad)`);
+  ok(reverted.clean, 'and it lands clean — the wobble is replaced by a pivot');
+  ok(reverted.mode === 0, 'and does not bail');
+  // Fold the heading onto the velocity, whichever way round the board ended up.
+  const slip = Math.abs(reverted.yaw - reverted.velYaw) % Math.PI;
+  const aligned = Math.min(slip, Math.PI - slip);
+  ok(aligned < 0.12, `and ends with the board back on its velocity (off by ${aligned.toFixed(3)} rad)`);
+  ok(
+    reverted.speed < reverted.speedAtLand,
+    `and the pivot costs a little speed (${reverted.speedAtLand.toFixed(2)} → ${reverted.speed.toFixed(2)} m/s)`
+  );
+  ok(reverted.speed > 4, 'without killing the run');
+
+  // A clean landing — board pointing where it is going — does not trigger one.
+  const clean = await run(() => {
+    const g = window.__skate;
+    g.place(-10, -20, 0, 7);
+    g.drive(1 / 120, { trick: 'ollie', trickCharge: 1 });
+    const events = [];
+    for (let i = 0; i < 400 && g.ride.mode === 1; i++) {
+      g.drive(1 / 120, { steer: 0, charge: false, slide: false, push: false });
+      for (const e of g.ride.events) events.push(e);
+    }
+    return { reverted: events.some((e) => e.name === 'revertStart') };
+  });
+  ok(!clean.reverted, 'and a straight landing does not');
+
+  // Too far off and it is still a slide-out — the revert only saves what a
+  // skater could actually save.
+  const far = await run(() => {
+    const g = window.__skate;
+    g.place(-10, -20, 0, 7);
+    g.drive(1 / 120, { trick: 'ollie', trickCharge: 1 });
+    for (let i = 0; i < 20; i++) g.drive(1 / 120, { steer: -1 }); // > 1.0 rad off
+    for (let i = 0; i < 400 && g.ride.mode === 1; i++) g.drive(1 / 120, {});
+    return { mode: g.ride.mode, reason: g.ride.bailReason, revert: g.ride.revert };
+  });
+  ok(
+    far.mode === 3 && far.reason === 'slide-out',
+    `and landing far too sideways still slides out (${far.reason || 'n/a'})`
+  );
+  ok(far.revert === null, 'with no revert started for it');
+}
+
+// --------------------------------------------------------------------------
 section('Transitions');
 {
   // Riding a quarterpipe: up costs speed, and down gives it back with

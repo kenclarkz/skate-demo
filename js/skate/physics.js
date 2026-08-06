@@ -145,6 +145,7 @@ export class Ride {
     this.sketch = 0;
     this.bailReason = null;
     this.bailTimer = 0;
+    this.revert = null;       // a landing pivot: { target, total, t } while active
 
     this.combo = { points: 0, names: [], live: false, idle: 0 };
     this.trickCount = 0;
@@ -191,6 +192,13 @@ export class Ride {
   /** Height above whatever is directly below. Drives the HUD and the shadow. */
   get airHeight() {
     return Math.max(0, this.pos.y - this.park.heightAt(this.pos.x, this.pos.z));
+  }
+
+  /** How hard the landing pivot is working right now, 0..1. Drives the audio. */
+  get revertK() {
+    if (!this.revert) return 0;
+    const d = Math.abs(C.angleDelta(this.yaw, this.revert.target));
+    return C.clamp(d / C.REVERT_TRIGGER, 0, 1);
   }
 
   // =========================================================================
@@ -393,33 +401,42 @@ export class Ride {
     }
 
     // --- steering ----------------------------------------------------------
-    const aLat = 9.81 * Math.tan(this.lean);
-    let yawRate = 0;
-    if (Math.abs(aLat) > 1e-3) {
-      const r = Math.max(C.TURN_R_MIN, (sp * sp) / Math.abs(aLat));
-      yawRate = Math.sign(aLat) * Math.min(C.YAW_RATE_MAX, sp / r);
-    }
-    // Twisting the board round under you. Only worth anything at a crawl, which
-    // is exactly when the carve above has nothing to work with.
-    yawRate += -this.steer * PIVOT_RATE * Math.max(0, 1 - sp / 2.5) * (this.manual ? 2.2 : 1);
-    // A cross-slope steers you downhill, harder the slower you are going — which
-    // is why holding a line across a transition takes work.
-    yawRate += (C.GRAVITY_STEER * (C.GRAVITY * _l.y)) / Math.max(2.5, sp);
-    if (this.manual) yawRate *= 1.5;
-    // Rolling backwards reverses which way a given lean turns you, exactly as it
-    // does on a real board.
-    this.yaw += yawRate * dt * sgn;
-
-    // Tyre scrub: a carve costs speed in proportion to how hard it is.
-    a -= sgn * C.CARVE_SCRUB * Math.abs(aLat);
-    this.speed += a * dt;
-
-    // --- sideways ----------------------------------------------------------
-    if (this.sliding && sp > C.SLIDE_MIN_SPEED) {
-      this.powerslide(dt);
+    if (this.revert) {
+      // A landing pivot owns the heading for the tenths of a second it lasts:
+      // the board rotates under the rider to line up with the direction of
+      // travel, and the carve is suspended so it cannot fight the rotation.
+      // Roll friction still applies; the pivot has its own scrub below.
+      this.stepRevert(dt);
+      this.speed += a * dt;
     } else {
-      this.slideYaw *= Math.exp(-6 * dt);
-      this.side *= Math.exp(-GRIP_RATE * dt);   // the wheels grip
+      const aLat = 9.81 * Math.tan(this.lean);
+      let yawRate = 0;
+      if (Math.abs(aLat) > 1e-3) {
+        const r = Math.max(C.TURN_R_MIN, (sp * sp) / Math.abs(aLat));
+        yawRate = Math.sign(aLat) * Math.min(C.YAW_RATE_MAX, sp / r);
+      }
+      // Twisting the board round under you. Only worth anything at a crawl, which
+      // is exactly when the carve above has nothing to work with.
+      yawRate += -this.steer * PIVOT_RATE * Math.max(0, 1 - sp / 2.5) * (this.manual ? 2.2 : 1);
+      // A cross-slope steers you downhill, harder the slower you are going — which
+      // is why holding a line across a transition takes work.
+      yawRate += (C.GRAVITY_STEER * (C.GRAVITY * _l.y)) / Math.max(2.5, sp);
+      if (this.manual) yawRate *= 1.5;
+      // Rolling backwards reverses which way a given lean turns you, exactly as it
+      // does on a real board.
+      this.yaw += yawRate * dt * sgn;
+
+      // Tyre scrub: a carve costs speed in proportion to how hard it is.
+      a -= sgn * C.CARVE_SCRUB * Math.abs(aLat);
+      this.speed += a * dt;
+
+      // --- sideways ----------------------------------------------------------
+      if (this.sliding && sp > C.SLIDE_MIN_SPEED) {
+        this.powerslide(dt);
+      } else {
+        this.slideYaw *= Math.exp(-6 * dt);
+        this.side *= Math.exp(-GRIP_RATE * dt);   // the wheels grip
+      }
     }
 
     if (this.manual) {
@@ -501,6 +518,49 @@ export class Ride {
     this.side *= f;
   }
 
+  /**
+   * A landing pivot. The board came down off the direction of travel, and is
+   * rotated back under the rider on whatever it landed on. As it turns, the
+   * speed that was pointing sideways is redirected back along the board — the
+   * same arithmetic powerslide() uses — and a little is scrubbed per radian
+   * turned, which is the cost of the save. The velocity itself stays where it
+   * was going in the world; only the board moves to catch up with it.
+   */
+  stepRevert(dt) {
+    const r = this.revert;
+    const d = C.angleDelta(this.yaw, r.target);
+    if (Math.abs(d) < C.REVERT_DONE) {
+      this.revert = null;
+      this.emit('revertEnd', {});
+      return;
+    }
+    // Ease in so the pivot does not snap, and ease off as it closes on the
+    // heading the way a skater's ankle lets the last few degrees come gently.
+    const easeIn = Math.min(1, r.t / C.REVERT_EASE_IN);
+    const easeOut = 0.4 + 0.6 * Math.min(1, Math.abs(d) / Math.max(1e-6, r.total));
+    const step = Math.min(C.REVERT_RATE * easeIn * easeOut * dt, Math.abs(d));
+    const dYaw = Math.sign(d) * step;
+    this.yaw += dYaw;
+
+    // Redirect the velocity through the pivot, then scrub a fraction of it off.
+    const c = Math.cos(dYaw);
+    const s = Math.sin(dYaw);
+    const fwd = this.speed * c + this.side * s;
+    const lat = -this.speed * s + this.side * c;
+    const mag = Math.hypot(fwd, lat);
+    const f = Math.max(0, 1 - (C.REVERT_SCRUB * step) / Math.max(0.01, mag));
+    this.speed = fwd * f;
+    this.side = lat * f;
+
+    // The heading moved, so rebuild the surface frame now — the velocity
+    // reconstruction in stepGround must use the frame this speed and side were
+    // projected onto, or the world velocity would rotate with the board instead
+    // of staying where it was going.
+    this.surfaceFrame(this.up);
+
+    r.t += dt;
+  }
+
   /** Ease the frame's up vector towards a target, so kinks do not snap. */
   easeUp(dt, target, rate) {
     this.up.lerp(target, 1 - Math.exp(-rate * dt)).normalize();
@@ -526,6 +586,7 @@ export class Ride {
   // =========================================================================
   takeOff() {
     this.endManual();
+    this.revert = null;
     this.mode = AIR;
     this.airTime = 0;
     this.airYaw = 0;
@@ -604,14 +665,32 @@ export class Ride {
     else if (slip > C.LAND_SLIP_SKETCH && speed > 1.4) reason = 'slide-out';
     else if (Math.abs(airPitch) > C.LAND_PITCH_OK) reason = 'nose';
 
-    this.landOn(_n, velYaw, speed);
+    // A revert: the board came down pointed off the direction of travel but not
+    // so far that it is a slide-out, so instead of snapping it round in one step
+    // and calling the landing sketchy, it is caught and pivoted back smoothly.
+    // landOn is told not to snap the heading, leaving the misalignment in speed
+    // and side for stepRevert() to turn back along the board.
+    const wantRevert =
+      !reason &&
+      !this.sliding &&
+      speed > C.REVERT_MIN_SPEED &&
+      slip > C.REVERT_TRIGGER;
+    const back = Math.abs(C.angleDelta(this.yaw, velYaw)) > Math.PI / 2;
+
+    this.landOn(_n, velYaw, speed, !wantRevert);
+    if (wantRevert) {
+      this.revert = { target: back ? velYaw + Math.PI : velYaw, total: slip, t: 0 };
+      this.emit('revertStart', { angle: slip });
+    }
     if (reason) {
       this.bail(reason);
       return;
     }
 
     const sketchy =
-      rotErr > C.LAND_ROLL_CLEAN || (slip > C.LAND_SLIP_CLEAN && speed > 1.4) || impact > 6.5;
+      rotErr > C.LAND_ROLL_CLEAN ||
+      (slip > C.LAND_SLIP_CLEAN && speed > 1.4 && !this.revert) ||
+      impact > 6.5;
     // The legs absorb the impact, and how much they had to absorb is exactly how
     // deep the compression looks.
     this.compress = Math.min(C.CROUCH_MAX * 0.9, impact * C.LAND_COMPRESS);
@@ -629,15 +708,17 @@ export class Ride {
   }
 
   /** Settle onto a surface, and re-derive the rolling speed from the velocity. */
-  landOn(n, velYaw, speed) {
+  landOn(n, velYaw, speed, snap = true) {
     this.mode = GROUND;
     this.up.copy(n);
     // Snap the board to whichever way round it is closest to travelling, so a 180
     // lands rolling fakie instead of instantly sliding out. Below walking pace
     // the velocity's direction is noise — a board dropping almost straight down
     // into a transition has barely any horizontal motion to read — so the
-    // heading is left alone.
-    if (speed > 0.8) {
+    // heading is left alone. When a revert is about to pivot the board anyway
+    // (see touchDown), the snap is skipped so the misalignment is left in speed
+    // and side for stepRevert() to turn back along the board.
+    if (snap && speed > 0.8) {
       const back = Math.abs(C.angleDelta(this.yaw, velYaw)) > Math.PI / 2;
       this.yaw = back ? velYaw + Math.PI : velYaw;
     }
@@ -816,6 +897,7 @@ export class Ride {
     };
     this.mode = GRIND;
     this.yaw = railYaw;
+    this.revert = null;
     this.pos.set(
       hit.px,
       hit.py + rail.radius - (sideways ? GRIND_DROP_DECK : GRIND_DROP_TRUCK),
@@ -899,6 +981,7 @@ export class Ride {
   // balance
   // =========================================================================
   startManual() {
+    this.revert = null;
     this.manual = true;
     this.manualDist = 0;
     this.balance = (Math.random() - 0.5) * 0.16;
@@ -1008,6 +1091,7 @@ export class Ride {
     this.trick = null;
     this.grab = null;
     this.pop = -1;
+    this.revert = null;
     this.dropCombo();
     this.emit('bail', { reason, speed: this.groundSpeed });
   }
@@ -1038,6 +1122,12 @@ export class Ride {
     if (this.manual) crouch += 0.07;
     if (this.grab) crouch += 0.05; // knees pull up towards a held grab
     if (this.push >= 0) crouch += 0.06 * Math.sin(Math.min(1, this.push * 1.6) * Math.PI);
+    // A landing pivot gets a little extra bend for stability, easing out as the
+    // board lines back up with the direction of travel.
+    if (this.revert) {
+      const d = Math.abs(C.angleDelta(this.yaw, this.revert.target));
+      crouch += C.REVERT_CROUCH * Math.min(1, d / C.REVERT_TRIGGER);
+    }
     s.crouch = Math.min(C.CROUCH_MAX, crouch);
     s.stiff = this.pop >= 0 && this.pop < C.POP_LEVEL;
 
@@ -1056,6 +1146,20 @@ export class Ride {
     // Shoulders lead into a turn, and wind up against a spin before it.
     s.shoulderLead = -this.steer * 0.22 - (air ? Math.sign(this.airYaw) * 0.18 : 0);
     s.lookYaw = 1.1 - Math.min(0.5, Math.abs(this.steer) * 0.3);
+
+    // Through a landing pivot the body leads the board: the torso turns into
+    // the direction of travel ahead of the heading, then settles square as the
+    // wheels line up — the reading of a real revert, feet pinned while the
+    // hips and shoulders come round.
+    if (this.revert) {
+      const d = C.angleDelta(this.yaw, this.revert.target);
+      const dir = Math.sign(d);
+      const lead = Math.min(C.REVERT_TWIST, Math.abs(d) * C.REVERT_TWIST_GAIN);
+      s.twist = dir * lead;
+      s.shoulderLead = dir * lead * 0.5;
+      s.lookYaw = 1.1 - dir * lead * 0.5;
+      s.hipShift = -dir * lead * 0.22;
+    }
 
     // --- the deck ---------------------------------------------------------
     let pitch = this.popPitch();
@@ -1079,6 +1183,7 @@ export class Ride {
     let spread = 0.22 + Math.min(0.3, s.speed * 0.02);
     if (this.grind) spread = 0.85;
     else if (this.manual) spread = 0.7;
+    else if (this.revert) spread = 0.5; // arms up a little to balance the pivot
     else if (air) spread = this.trick && !this.trick.done ? 0.34 : 0.5;
     // Tucked, to keep a spin going: arms in is how you spin faster, on a board or
     // anywhere else.
