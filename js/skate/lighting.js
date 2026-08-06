@@ -43,6 +43,8 @@ const PRESETS = {
     moonOpacity: 0,
     floodIntensity: 0,
     lampIntensity: 0,
+    ambientIntensity: 0,
+    playerLightIntensity: 0,
     bulbColor: 0xa79a76,     // an unlit bulb, dull in daylight
     bulbEmissive: 0.0,
     signOpacity: 0.08,       // a sign in daylight is just a dark panel
@@ -59,17 +61,29 @@ const PRESETS = {
     fogColor: 0x0a1226,
     fogNear: 34,
     fogFar: 170,
-    hemiSky: 0x2c4270,
-    hemiGround: 0x11141d,
-    hemiIntensity: 1.15,
-    keyColor: 0xaebfe8,      // moonlight: cool next to the sun, but no longer dim
-    keyIntensity: 1.1,
+    hemiSky: 0x33538c,
+    hemiGround: 0x171b26,
+    hemiIntensity: 1.6,
+    keyColor: 0xb7c6f0,      // moonlight: cool next to the sun, but no longer dim
+    keyIntensity: 1.5,
     keyPos: [11, 15, -7],
-    exposure: 1.05,
+    exposure: 1.15,
     starOpacity: 1,
     moonOpacity: 1,
     floodIntensity: 1,
     lampIntensity: 1,
+    // A flat, from-everywhere fill so the rider and every AI skater read
+    // clearly wherever they are on the pad — the moon (a DirectionalLight)
+    // only lights one side of a body, and the floodlights/lamps are fixed in
+    // place and cannot reach the whole park. An AmbientLight is the cheapest
+    // light three.js has (one constant added per fragment, no direction or
+    // falloff math at all), which is what makes it the right tool for
+    // "everyone stays visible" rather than another positioned light.
+    ambientIntensity: 0.9,
+    // On top of the ambient fill, a small light rides along with the player
+    // specifically, so the one skater the camera is actually behind is never
+    // just a silhouette even in the darkest corner of a map.
+    playerLightIntensity: 1,
     bulbColor: 0xffdfa0,
     bulbEmissive: 1.4,
     signOpacity: 1,
@@ -232,6 +246,11 @@ export class LightingManager {
     // --- hemisphere + key light (the sun by day, the moon by night) ---------
     this.hemi = new THREE.HemisphereLight(PRESETS[DAY].hemiSky, PRESETS[DAY].hemiGround, PRESETS[DAY].hemiIntensity);
     scene.add(this.hemi);
+    // A flat fill with no position or direction of its own — see
+    // PRESETS.night.ambientIntensity for why this exists. Zero by day: the
+    // sun and hemisphere light already do that job without it.
+    this.ambient = new THREE.AmbientLight(0x9fb0d9, 0);
+    scene.add(this.ambient);
     this.key = new THREE.DirectionalLight(PRESETS[DAY].keyColor, PRESETS[DAY].keyIntensity);
     this.key.position.set(...PRESETS[DAY].keyPos);
     scene.add(this.key);
@@ -254,6 +273,13 @@ export class LightingManager {
     this.key.target.position.set(0, 0, 0);
     scene.add(this.key.target);
     this._keyOffset = new THREE.Vector3(...PRESETS[DAY].keyPos);
+
+    // --- a small light that rides along with the player ---------------------
+    // Not attached to the rider's own frame — following its world position
+    // each frame instead means it survives dismounting, bailing and walking
+    // without needing to be re-parented through every one of those states.
+    this.playerLight = new THREE.PointLight(0xdfe8ff, 0, 9, 1.6);
+    scene.add(this.playerLight);
 
     // --- floodlights ----------------------------------------------------------
     // Two is enough to sell "the lights are on" over the whole pad without
@@ -465,6 +491,7 @@ export class LightingManager {
         followPos.y + this._keyOffset.y,
         followPos.z + this._keyOffset.z
       );
+      this.playerLight.position.set(followPos.x, followPos.y + 1.8, followPos.z);
       const wantShadow = this._cur.shadowStrength > 0.02;
       if (this.key.castShadow !== wantShadow) this.key.castShadow = wantShadow;
       if (this._casters) {
@@ -497,10 +524,12 @@ export class LightingManager {
     this.hemi.color.copy(colorOf(cur.hemiSky));
     this.hemi.groundColor.copy(colorOf(cur.hemiGround));
     this.hemi.intensity = cur.hemiIntensity;
+    this.ambient.intensity = cur.ambientIntensity;
 
     this.key.color.copy(colorOf(cur.keyColor));
     this.key.intensity = cur.keyIntensity;
     this._keyOffset.set(cur.keyPos[0], cur.keyPos[1], cur.keyPos[2]);
+    this.playerLight.intensity = cur.playerLightIntensity * 12;
 
     this._starMat.opacity = cur.starOpacity;
     this._moonMat.opacity = cur.moonOpacity;
