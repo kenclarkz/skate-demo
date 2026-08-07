@@ -1,0 +1,24 @@
+name: opencode-test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-oidc:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check OIDC
+        run: |
+          echo "Checking OIDC..."
+
+          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            echo "OIDC missing"
+            exit 1
+          else
+            echo "OIDC available"
+          fi
