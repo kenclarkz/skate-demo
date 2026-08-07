@@ -26,6 +26,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Debug GitHub Token
+        run: |
+          if [ -n "$GITHUB_TOKEN" ]; then
+            echo "GITHUB_TOKEN exists"
+          else
+            echo "GITHUB_TOKEN missing"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         with:
