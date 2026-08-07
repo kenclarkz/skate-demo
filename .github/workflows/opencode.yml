@@ -1,24 +1,36 @@
-name: opencode-test
+name: opencode
 
 on:
+  issue_comment:
+    types: [created]
   workflow_dispatch:
 
 permissions:
+  contents: write
+  issues: write
+  pull-requests: write
   id-token: write
-  contents: read
 
 jobs:
-  test-oidc:
+  opencode:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.comment.body, '/opencode')
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check OIDC
-        run: |
-          echo "Checking OIDC..."
-          
-          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
-            echo "❌ OIDC URL missing"
-            exit 1
-          else
-            echo "✅ OIDC URL exists"
-          fi
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          use_github_token: true
+          share: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
