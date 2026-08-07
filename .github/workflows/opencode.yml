@@ -6,6 +6,12 @@ on:
   pull_request_review_comment:
     types: [created]
 
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
 jobs:
   opencode:
     if: |
@@ -14,17 +20,9 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
