@@ -800,6 +800,21 @@ button.off {
   color: var(--bad);
 }
 
+/* An accessory card is a board-card carrying a head-and-shoulders portrait of
+   the equipped rider wearing it — smaller than the skater rack's full figure,
+   so a row of hats stays compact, but still a real drawing rather than a
+   colour bar, because a top hat and a beanie share no colour that would tell
+   them apart on a swatch. */
+.accessory-card {
+  align-items: center;
+}
+
+.accessory-card .char-portrait {
+  width: 64px;
+  aspect-ratio: 3 / 4;
+  align-self: center;
+}
+
 /* --- the skater rack ------------------------------------------------------- */
 /* Wider minimum than the board cards: each of these carries a full-length
    portrait plus a line of prose, and squeezing four across a phone would

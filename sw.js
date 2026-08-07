@@ -6,7 +6,7 @@
 //
 // To ship an update: bump VERSION. That is the entire release process.
 
-const VERSION = 'v18';
+const VERSION = 'v19';
 const CACHE = `skate-${VERSION}`;
 
 // All relative — this worker's scope is the repo's own Pages root.
@@ -26,6 +26,7 @@ const ASSETS = [
   'js/skate/board.js',
   'js/skate/boards.js',
   'js/skate/outfits.js',
+  'js/skate/accessories.js',
   'js/skate/characters.js',
   'js/skate/character-portrait.js',
   'js/skate/skater.js',

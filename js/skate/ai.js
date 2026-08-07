@@ -23,7 +23,7 @@ import * as THREE from '../game/three.js';
 import * as C from './config.js';
 import { Board } from './board.js';
 import { Skater, PALETTE } from './skater.js';
-import { Ride, GROUND, BAIL } from './physics.js';
+import { Ride, GROUND, AIR, BAIL } from './physics.js';
 import { Walker } from './walk.js';
 
 const TRICKS = ['ollie', 'kickflip', 'heelflip', 'shuvit', 'fsshuvit'];
@@ -54,6 +54,8 @@ const STYLES = [
 const BAIL_WAIT = 1.6;      // seconds a wipeout is held before the reset
 const ARRIVE_R = 2.2;       // metres from a ride waypoint that counts as "there"
 const CRUISE_SPEED = 5.2;   // m/s a bot tries to hold on the flat
+const BOUND_MARGIN = 12;    // metres from the park's curb a riding bot keeps clear of
+const BOUND_AIR_PUSH = 6;   // m/s² an airborne bot gets steered back by, near the curb
 
 // --- carrying the board on foot --------------------------------------------
 // The held half of main.js's own poseCarriedBoard — a social bot never sits
@@ -129,8 +131,31 @@ function stepPatrol(ride, bot, dt) {
     bot.target = (bot.target + 1) % bot.patrol.length;
   }
 
-  const wantYaw = Math.atan2(dx, dz);
-  const steer = C.clamp(C.angleDelta(ride.yaw, wantYaw) / 1.1, -1, 1);
+  let wantYaw = Math.atan2(dx, dz);
+
+  // The curb around the pad is a boundary, not a wall — a bot that reaches it
+  // is pinned there by the physics clamp and bails in place, so turn back to
+  // open ground while there is still room to. Blended in progressively as the
+  // edge closes rather than as a hard line, so a patrol running parallel to a
+  // fence reads as an easy carve, not a swerve. The concrete's edge is what
+  // the (padOnly) parks clamp to; on Open World it is huge compared to the
+  // patrol loop, so the same rule is harmlessly inactive there.
+  const ex = ride.park.extentX;
+  const ez = ride.park.extentZ;
+  const cx = ex - Math.abs(ride.pos.x);
+  const cz = ez - Math.abs(ride.pos.z);
+  const clear = Math.min(cx, cz);
+  const nearEdge = clear < BOUND_MARGIN;
+  if (nearEdge) {
+    const w = 1 - Math.max(0, clear) / BOUND_MARGIN;
+    const away = cx <= cz ? -Math.sign(ride.pos.x) * Math.PI / 2 : (ride.pos.z >= 0 ? Math.PI : 0);
+    wantYaw += C.angleDelta(wantYaw, away) * w;
+  }
+
+  // Steering sign: positive steer carves the board towards -X (see stepGround's
+  // lean), so closing a positive angleDelta — the board needs to turn the
+  // *other* way — takes a negated steer, exactly as Walker does on foot.
+  const steer = C.clamp(-C.angleDelta(ride.yaw, wantYaw) / 1.1, -1, 1);
   const input = { steer, charge: false, slide: false, push: false, trick: null, trickCharge: undefined };
 
   if (bot.pushCool > 0) bot.pushCool -= dt;
@@ -139,7 +164,10 @@ function stepPatrol(ride, bot, dt) {
     bot.pushCool = 0.5;
   }
 
-  if (ride.mode === GROUND && !ride.grind && !ride.manual) {
+  // No tricks near the curb: an ollie carries the bot a few metres further in
+  // the air, and a trick popped this close would be the very launch that puts
+  // it over the edge it is steering away from.
+  if (ride.mode === GROUND && !ride.grind && !ride.manual && !nearEdge) {
     bot.trickCool -= dt;
     if (bot.trickCool <= 0 && Math.abs(ride.speed) > 2.4) {
       input.trick = TRICKS[(Math.random() * TRICKS.length) | 0];
@@ -149,6 +177,20 @@ function stepPatrol(ride, bot, dt) {
   }
 
   ride.update(dt, input);
+
+  // Once airborne there is no carve to steer back with — the same stick only
+  // spins the body — so a bot launched towards the curb is nudged straight
+  // back to open ground instead of clamping at the edge and hanging there.
+  // Applied after the step, so the frame that takes off keeps its launch
+  // velocity untouched.
+  if (ride.mode === AIR) {
+    if (cx < BOUND_MARGIN && Math.sign(ride.pos.x) * ride.vel.x > 0.2) {
+      ride.vel.x -= Math.sign(ride.pos.x) * BOUND_AIR_PUSH * dt;
+    }
+    if (cz < BOUND_MARGIN && Math.sign(ride.pos.z) * ride.vel.z > 0.2) {
+      ride.vel.z -= Math.sign(ride.pos.z) * BOUND_AIR_PUSH * dt;
+    }
+  }
 }
 
 /** A bot that tours the patrol loop the whole time it is in the park. */

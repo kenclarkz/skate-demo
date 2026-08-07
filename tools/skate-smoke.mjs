@@ -1487,6 +1487,59 @@ section('AI skaters');
 }
 
 // --------------------------------------------------------------------------
+section('AI skaters navigate, and stay off the park boundary');
+{
+  // The patrol-seeking behaviour is supposed to steer at the next waypoint —
+  // so a bot dropped on a waypoint should close right in on it, not spiral
+  // away the way a wrong-signed steer does until the boundary stops it.
+  const arrived = await run(() => {
+    const g = window.__skate;
+    g.switchPark('home');
+    const bot = g.bots.find((b) => b.walker == null);
+    bot.toStart();
+    const from = bot.target;
+    const wp = bot.patrol[from];
+    let best = Infinity;
+    for (let i = 0; i < 360; i++) {
+      bot.step(1 / 60);
+      const dx = wp.x - bot.ride.pos.x;
+      const dz = wp.z - bot.ride.pos.z;
+      best = Math.min(best, Math.hypot(dx, dz));
+    }
+    return { best, from, to: bot.target };
+  });
+  ok(arrived.best < 3, `a fresh touring bot closes right in on its waypoint (closest ${arrived.best.toFixed(2)} m)`);
+  ok(arrived.to !== arrived.from, `and gets there to move on to the next one (waypoint ${arrived.from} → ${arrived.to})`);
+
+  // The curb around the pad is a boundary, not a wall — a bot that reaches it
+  // is pinned there by the physics clamp and bails in place. Launch one from
+  // just inside the edge, straight at it, and it must steer back (or bail and
+  // reset) rather than grind along the fence for the whole sim.
+  const keptIn = await run(() => {
+    const g = window.__skate;
+    g.switchPark('home');
+    const bot = g.bots.find((b) => b.walker == null);
+    const ride = bot.ride;
+    const ex = ride.park.extentX;
+    const ez = ride.park.extentZ;
+    ride.reset({ x: ex - 12, y: 0, z: 0, yaw: Math.PI / 2 });
+    ride.speed = 6;
+    bot.trickCool = 0; // give it a launch to carry towards the curb
+    let worst = Infinity;
+    let lastClear = Infinity;
+    for (let i = 0; i < 600; i++) {
+      bot.step(1 / 60);
+      const cl = Math.min(ex - Math.abs(ride.pos.x), ez - Math.abs(ride.pos.z));
+      worst = Math.min(worst, cl);
+      lastClear = cl;
+    }
+    return { worst, lastClear };
+  });
+  ok(keptIn.worst >= 0, `a bot launched straight at the curb never crosses the pad edge (worst ${keptIn.worst.toFixed(2)} m)`);
+  ok(keptIn.lastClear > 5, `and is back rolling on the pad by the end, not pinned against the fence (${keptIn.lastClear.toFixed(1)} m inside)`);
+}
+
+// --------------------------------------------------------------------------
 section('Birds');
 {
   const count = await run(() => window.__skate.birds.length);
@@ -2381,6 +2434,143 @@ section('Outfit shop and the wind glow');
 }
 
 // --------------------------------------------------------------------------
+section('Accessory shop');
+{
+  const initial = await run(() => {
+    const g = window.__skate;
+    g.hud.on.reset();
+    return { accessories: g.save.accessories, accessoryId: g.save.accessoryId };
+  });
+  ok(
+    initial.accessories.length === 1 && initial.accessories[0] === 'none',
+    `a fresh save owns only the starter accessory (${initial.accessories.join(', ')})`
+  );
+  ok(initial.accessoryId === 'none', 'and has it equipped');
+
+  const catalogue = await run(() =>
+    window.__skate.accessories.map((a) => ({ id: a.id, price: a.price }))
+  );
+  ok(catalogue.length === 7, `the shop stocks seven accessories (${catalogue.length})`);
+  ok(catalogue[0].price === 0, 'the starter accessory is free');
+  ok(catalogue.slice(1).every((a) => a.price > 0), 'and every other one costs coins');
+
+  const denied = await run(() => window.__skate.selectAccessory('tophat')); // 350 coins, none yet
+  ok(denied === false, 'buying a hat with no coins is refused');
+
+  const bought = await run(() => {
+    const g = window.__skate;
+    g.save.addCoins(500);
+    const capBefore = g.skater.palette.cap;
+    const headBefore = g.skater.style.head;
+    const ok1 = g.selectAccessory('tophat');
+    return {
+      ok1,
+      headChanged: g.skater.style.head !== headBefore,
+      capChanged: g.skater.palette.cap !== capBefore,
+      head: g.skater.style.head,
+      cap: g.skater.palette.cap,
+      coins: g.save.coins,
+      accessoryId: g.save.accessoryId,
+      owned: g.save.accessories,
+    };
+  });
+  ok(bought.ok1, 'buying it with enough coins succeeds');
+  ok(bought.headChanged && bought.head === 'tophat', "and the rider's headwear actually changes");
+  ok(bought.capChanged && bought.cap === 0x1c1c20, 'and re-colours to match the hat');
+  ok(bought.coins === 150, `and the price is deducted (500 → ${bought.coins})`);
+  ok(bought.accessoryId === 'tophat', 'the bought hat is worn immediately');
+  ok(
+    bought.owned.includes('tophat') && bought.owned.includes('none'),
+    'and it joins the owned list without losing the starter'
+  );
+
+  // One head-slot, like the one shirt: buying shades puts the character's own
+  // headwear back and layers the glasses over that, rather than stacking on
+  // top of the hat that was there a moment ago.
+  const layered = await run(() => {
+    const g = window.__skate;
+    g.save.addCoins(200);
+    const ok2 = g.selectAccessory('gold-shades');
+    return {
+      ok2,
+      head: g.skater.style.head,
+      shades: g.skater.style.shades,
+      frame: g.skater.palette.shades,
+      coins: g.save.coins,
+    };
+  });
+  ok(layered.ok2, 'buying shades on top also succeeds');
+  ok(layered.head === 'cap', 'and swaps back to the character\'s own headwear');
+  ok(layered.shades === true && layered.frame === 0xc9a04e, 'with the glasses added over that');
+  ok(layered.coins === 50, `and the shades cost their own price (350 → ${layered.coins})`);
+
+  // Back to "Original" takes everything off again.
+  const undone = await run(() => {
+    const g = window.__skate;
+    g.selectAccessory('none');
+    return { head: g.skater.style.head, shades: g.skater.style.shades };
+  });
+  ok(undone.head === 'cap' && undone.shades === false, '"Original" takes the hat and glasses back off');
+
+  // The tutorial's demo rider wears it too, and the shop draws a portrait of
+  // the equipped rider with the accessory on — not a generic swatch.
+  const screen = await run(() => {
+    const g = window.__skate;
+    g.save.addCoins(500);
+    g.selectAccessory('bucket');
+    const demo = g.hud.preview?.skater;
+    g.showStore();
+    const grid = document.getElementById('accessory-grid');
+    const cards = [...grid.querySelectorAll('[data-accessory]')];
+    const canvases = [...grid.querySelectorAll('canvas.char-portrait')];
+    const painted = canvases.map((c) => {
+      const ctx = c.getContext('2d');
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+      return n;
+    });
+    const bucketCard = grid.querySelector('[data-accessory="bucket"]');
+    return {
+      demoHead: demo?.style.head,
+      demoCap: demo?.palette.cap,
+      cards: cards.length,
+      current: grid.querySelectorAll('.accessory-card.current').length,
+      currentId: grid.querySelector('.accessory-card.current')?.dataset.accessory,
+      painted,
+      bucketPainted: bucketCard
+        ? (() => {
+            const c = bucketCard.querySelector('canvas');
+            const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+            let n = 0;
+            for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+            return n;
+          })()
+        : 0,
+      state: g.state,
+    };
+  });
+  ok(screen.demoHead === 'bucket' && screen.demoCap === 0x8a9a5c, "and the tutorial's demo rider changes to match");
+  ok(screen.cards === 7, 'with a card per accessory');
+  ok(screen.current === 1 && screen.currentId === 'bucket', 'and exactly one marked as the one being worn');
+  ok(
+    screen.painted.length === 7 && screen.painted.every((n) => n > 400),
+    `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
+  );
+
+  // Leave the game the way the rest of the suite expects to find it.
+  await run(() => {
+    const g = window.__skate;
+    g.hud.on.reset();
+    if (g.state === 'walking') {
+      g.walker.pos.set(g.board.group.position.x, g.walker.pos.y, g.board.group.position.z);
+      g.mount();
+    }
+    g.respawn();
+  });
+}
+
+// --------------------------------------------------------------------------
 section('Menu scrolling and back buttons, on a short screen');
 {
   // A phone-shaped viewport, short enough that the shop's four board types
@@ -2468,16 +2658,16 @@ section('Skater picker');
       // Every character has to carry a full palette, or the rig would build a
       // mesh with an undefined colour in it and fail silently to black.
       keys: g.characters.every((c) =>
-        ['skin', 'hair', 'cap', 'shirt', 'sleeve', 'pants', 'pantsDark', 'shoe', 'sole', 'band'].every(
+        ['skin', 'hair', 'cap', 'shirt', 'sleeve', 'pants', 'pantsDark', 'shoe', 'sole', 'band', 'shades', 'lens'].every(
           (k) => typeof c.palette[k] === 'number'
         )
       ),
     };
   });
-  ok(cat.count === 4, `there are four skaters to choose between (${cat.ids.join(', ')})`);
+  ok(cat.count === 8, `there are eight skaters to choose between (${cat.ids.join(', ')})`);
   ok(cat.named, 'each with a name and a line describing them');
   ok(cat.keys, 'and a complete palette');
-  ok(new Set(cat.heads).size === 4, `and each with their own headwear (${cat.heads.join(', ')})`);
+  ok(new Set(cat.heads).size === 7, `and each with their own headwear (${cat.heads.join(', ')})`);
 
   // Picking one rebuilds the live rig, and the pick survives a reload the same
   // way the board and the shirt do.
@@ -2553,10 +2743,10 @@ section('Skater picker');
   ok(screen.state === 'store', 'the skater rack lives in the shop');
   ok(screen.visible && screen.hasBack, 'which shows, and has a back button');
   ok(!!screen.aboveBoards, 'with the skaters above the boards');
-  ok(screen.cards === 4, 'and a card per skater');
+  ok(screen.cards === 8, 'and a card per skater');
   ok(screen.current === 1 && screen.currentId === 'nova', 'and exactly one marked as the one being skated');
   ok(
-    screen.painted.length === 4 && screen.painted.every((n) => n > 400),
+    screen.painted.length === 8 && screen.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
   );
 
@@ -2627,7 +2817,7 @@ section('Start menu: every button opens what it says');
     const r = card?.getBoundingClientRect();
     return { cards: grid ? grid.querySelectorAll('[data-character]').length : 0, sized: !!r && r.width > 40 && r.height > 40 };
   });
-  ok(reachable.cards === 4 && reachable.sized, 'and the four skaters are laid out inside it');
+  ok(reachable.cards === 8 && reachable.sized, 'and the eight skaters are laid out inside it');
   await page.click('#btn-store-back', { timeout: 4000 });
 }
 

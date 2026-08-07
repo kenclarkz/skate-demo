@@ -17,7 +17,8 @@ import { Audio } from './audio.js';
 import { save } from './save.js';
 import { BOARDS, TYPES as BOARD_TYPES, byId as boardById, typeById as boardTypeById } from './boards.js';
 import { OUTFITS, byId as outfitById } from './outfits.js';
-import { CHARACTERS, byId as charById, lookOf } from './characters.js';
+import { ACCESSORIES, byId as accessoryById } from './accessories.js';
+import { CHARACTERS, byId as charById, lookOf, styleOf } from './characters.js';
 import { GRABS } from './tricks.js';
 import { makeAiSkaters } from './ai.js';
 import { makeBirds } from './bird.js';
@@ -74,14 +75,20 @@ lighting.setPark(park);
 
 const equipped = boardById[save.boardId];
 const board = new Board(equipped?.palette, boardTypeById[equipped?.type]?.shape);
-/** The equipped character, with the equipped shirt over the top. */
+/** The equipped character, with the equipped shirt and accessory over the top. */
 function currentLook() {
   const character = charById[save.characterId] ?? CHARACTERS[0];
-  return { character, palette: lookOf(character, outfitById[save.outfitId]) };
+  const outfit = outfitById[save.outfitId];
+  const accessory = accessoryById[save.accessoryId];
+  return {
+    character,
+    palette: lookOf(character, outfit, accessory),
+    style: styleOf(character, accessory),
+  };
 }
 
 const startLook = currentLook();
-const skater = new Skater(startLook.palette, { style: startLook.character.style });
+const skater = new Skater(startLook.palette, { style: startLook.style });
 const ride = new Ride(park, board, skater);
 scene.add(ride.frame);
 
@@ -240,7 +247,7 @@ hud.setHoldToPush(save.holdToPush);
 hud.setStats(save);
 hud.setCurrentPark(park.name);
 hud.setCoins(save.coins);
-hud.setPreviewLook(startLook.palette, startLook.character.style);
+hud.setPreviewLook(startLook.palette, startLook.style);
 C.setTopSpeed(save.speed);
 C.setCamZoom(save.camZoom);
 C.setHoldToPush(save.holdToPush);
@@ -304,9 +311,11 @@ function showParks() {
 function showStore() {
   state = STOREMENU;
   input.enabled = false;
+  const look = currentLook();
   hud.renderCharacters(CHARACTERS, save.characterId);
   hud.renderBoards(BOARD_TYPES, BOARDS, save);
-  hud.renderOutfits(OUTFITS, save, currentLook().character.palette);
+  hud.renderOutfits(OUTFITS, save, look.character.palette);
+  hud.renderAccessories(ACCESSORIES, save, look);
   hud.show('store');
 }
 
@@ -357,6 +366,7 @@ hud.on.settings = () => showSettings();
 hud.on.pause = () => togglePause();
 hud.on.board = (id) => selectBoard(id);
 hud.on.outfit = (id) => selectOutfit(id);
+hud.on.accessory = (id) => selectAccessory(id);
 hud.on.character = (id) => selectCharacter(id);
 hud.on.dismount = () => dismount();
 hud.on.mount = () => mount();
@@ -382,9 +392,12 @@ function selectOutfit(id) {
   if (!save.outfits.includes(id) && !save.buyOutfit(id)) return false; // can't afford it
   save.setOutfit(id);
   const look = currentLook();
-  skater.rebuild(look.palette, look.character.style);
-  hud.setPreviewLook(look.palette, look.character.style);
+  skater.rebuild(look.palette, look.style);
+  hud.setPreviewLook(look.palette, look.style);
   hud.renderOutfits(OUTFITS, save, look.character.palette);
+  // The accessory portraits are drawn on the equipped rider, so a new shirt
+  // repaints them just like it repaints the "Original" outfit swatch.
+  hud.renderAccessories(ACCESSORIES, save, look);
   return true;
 }
 
@@ -396,13 +409,29 @@ function selectOutfit(id) {
 function selectCharacter(id) {
   if (!charById[id] || !save.setCharacter(id)) return false;
   const look = currentLook();
-  skater.rebuild(look.palette, look.character.style);
-  hud.setPreviewLook(look.palette, look.character.style);
+  skater.rebuild(look.palette, look.style);
+  hud.setPreviewLook(look.palette, look.style);
   hud.renderCharacters(CHARACTERS, save.characterId);
   // The shirt rack sits under the skaters in the same screen, and its "Original"
   // swatch is whatever the equipped rider wears — so swapping rider has to
   // repaint that too, or the card goes on advertising the old one's colours.
+  // The accessory portraits are drawn on the equipped rider as well, so they
+  // get repainted for the same reason.
   hud.renderOutfits(OUTFITS, save, look.character.palette);
+  hud.renderAccessories(ACCESSORIES, save, look);
+  return true;
+}
+
+/** Buy the accessory if it is not owned yet, then wear it either way. */
+function selectAccessory(id) {
+  const def = accessoryById[id];
+  if (!def) return false;
+  if (!save.accessories.includes(id) && !save.buyAccessory(id)) return false; // can't afford it
+  save.setAccessory(id);
+  const look = currentLook();
+  skater.rebuild(look.palette, look.style);
+  hud.setPreviewLook(look.palette, look.style);
+  hud.renderAccessories(ACCESSORIES, save, look);
   return true;
 }
 hud.on.sound = () => {
@@ -442,8 +471,8 @@ hud.on.reset = () => {
   hud.setCoins(save.coins);
   board.build(boardById[save.boardId].palette, boardTypeById[boardById[save.boardId].type].shape);
   const look = currentLook();
-  skater.rebuild(look.palette, look.character.style);
-  hud.setPreviewLook(look.palette, look.character.style);
+  skater.rebuild(look.palette, look.style);
+  hud.setPreviewLook(look.palette, look.style);
   C.setTopSpeed(save.speed);
   C.setCamZoom(save.camZoom);
 };
@@ -956,6 +985,7 @@ window.__skate = {
   boards: BOARDS,
   boardTypes: BOARD_TYPES,
   outfits: OUTFITS,
+  accessories: ACCESSORIES,
   characters: CHARACTERS,
   grabs: GRABS,
   skater,
@@ -974,6 +1004,7 @@ window.__skate = {
   respawn,
   selectBoard,
   selectOutfit,
+  selectAccessory,
   selectCharacter,
   showStore,
   /** Step off the board, the way the on-screen button does. */

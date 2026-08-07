@@ -39,6 +39,10 @@ export const PALETTE = {
   shoe: 0xe8e6df,
   sole: 0xb8b4a8,
   band: 0x27282c,
+  // A bought pair of shades (accessories.js): the frame bar and the lens
+  // colour, used by headParts() the same way `cap`/`band` drive the hats.
+  shades: 0x141416,
+  lens: 0x0f1420,
 };
 
 // --- scratch --------------------------------------------------------------
@@ -196,36 +200,81 @@ function segment(color, w, len, d, taper = 1) {
  * they cost nothing — the head is one merged geometry either way.
  */
 function headParts(p, style) {
+  const s = style?.head || 'cap';
   const parts = [
     box(p.skin, 0.165, 0.2, 0.185, 0, 0, 0),
     box(p.skin, 0.09, 0.075, 0.03, 0, -0.055, 0.1),         // jaw
     box(0x1a1a1c, 0.026, 0.02, 0.02, 0.042, 0.015, 0.095),  // eyes
     box(0x1a1a1c, 0.026, 0.02, 0.02, -0.042, 0.015, 0.095),
   ];
-  if (style === 'beanie') {
+  if (s === 'beanie') {
     // Pulled down over the ears, so the hair only shows at the back.
     parts.push(box(p.hair, 0.168, 0.05, 0.188, 0, 0.055, -0.012));
     parts.push(box(p.cap, 0.182, 0.115, 0.202, 0, 0.1, 0));
     parts.push(box(p.cap, 0.188, 0.038, 0.208, 0, 0.048, 0)); // the turned-up brim
-  } else if (style === 'hair') {
+  } else if (s === 'hair') {
     // No hat: a slab on top, panels down past the jaw, and a tail out the back.
     parts.push(box(p.hair, 0.175, 0.075, 0.195, 0, 0.085, -0.004));
     parts.push(box(p.hair, 0.028, 0.19, 0.15, 0.087, -0.03, -0.015));
     parts.push(box(p.hair, 0.028, 0.19, 0.15, -0.087, -0.03, -0.015));
     parts.push(box(p.hair, 0.075, 0.1, 0.05, 0, 0.03, -0.115));   // the tie
     parts.push(box(p.hair, 0.06, 0.22, 0.06, 0, -0.09, -0.125));  // the tail
-  } else if (style === 'helmet') {
+  } else if (s === 'helmet') {
     // A skate lid: low at the back, a lip at the front, strap under the jaw.
     parts.push(box(p.cap, 0.19, 0.125, 0.205, 0, 0.095, -0.004));
     parts.push(box(p.cap, 0.196, 0.045, 0.06, 0, 0.045, -0.08));  // the back skirt
     parts.push(box(p.cap, 0.17, 0.028, 0.055, 0, 0.045, 0.1));    // the front lip
     parts.push(box(p.band, 0.026, 0.14, 0.026, 0.083, -0.04, 0.02));
     parts.push(box(p.band, 0.026, 0.14, 0.026, -0.083, -0.04, 0.02));
+  } else if (s === 'tiger') {
+    // Striped hair with ears: the stripes are dark slabs that sit proud of
+    // the top of the hair, so they read from the chase camera's height.
+    parts.push(box(p.hair, 0.175, 0.075, 0.195, 0, 0.085, -0.004));
+    parts.push(box(p.cap, 0.07, 0.06, 0.05, 0.065, 0.135, 0.02));   // ears
+    parts.push(box(p.cap, 0.07, 0.06, 0.05, -0.065, 0.135, 0.02));
+    parts.push(box(p.band, 0.034, 0.05, 0.2, 0.045, 0.105, -0.004)); // stripes
+    parts.push(box(p.band, 0.034, 0.05, 0.2, -0.045, 0.105, -0.004));
+    parts.push(box(p.band, 0.034, 0.05, 0.2, 0, 0.13, -0.004));
+  } else if (s === 'bunny') {
+    // Long ears up, with a paler inner — the one head that clears a cap
+    // entirely, so the ears are the whole silhouette.
+    parts.push(box(p.hair, 0.175, 0.075, 0.195, 0, 0.085, -0.004));
+    parts.push(box(p.hair, 0.085, 0.3, 0.06, 0.058, 0.2, -0.03));    // ears
+    parts.push(box(p.hair, 0.085, 0.3, 0.06, -0.058, 0.2, -0.03));
+    parts.push(box(p.band, 0.042, 0.17, 0.03, 0.058, 0.2, -0.035));  // inner
+    parts.push(box(p.band, 0.042, 0.17, 0.03, -0.058, 0.2, -0.035));
+  } else if (s === 'cone') {
+    // A pointed gnome hat: brim, then three slabs shrinking up to the tip.
+    parts.push(box(p.hair, 0.175, 0.06, 0.19, 0, 0.08, -0.004));
+    parts.push(box(p.cap, 0.2, 0.09, 0.2, 0, 0.11, 0));
+    parts.push(box(p.band, 0.205, 0.03, 0.205, 0, 0.16, 0));
+    parts.push(box(p.cap, 0.16, 0.18, 0.16, 0, 0.23, 0));
+    parts.push(box(p.cap, 0.11, 0.18, 0.11, 0, 0.36, 0));
+    parts.push(box(p.cap, 0.055, 0.22, 0.055, 0, 0.5, 0));
+  } else if (s === 'bucket') {
+    // A bucket hat: a short crown and a brim that is wider than the head.
+    parts.push(box(p.cap, 0.19, 0.085, 0.2, 0, 0.115, 0));
+    parts.push(box(p.cap, 0.17, 0.06, 0.18, 0, 0.08, 0));
+    parts.push(box(p.cap, 0.25, 0.022, 0.26, 0, 0.135, 0));   // the wide brim
+  } else if (s === 'tophat') {
+    // A straight-sided tube on a wide brim, with a band where the two meet.
+    parts.push(box(p.cap, 0.21, 0.05, 0.21, 0, 0.115, 0));
+    parts.push(box(p.cap, 0.12, 0.3, 0.12, 0, 0.27, 0));
+    parts.push(box(p.cap, 0.13, 0.04, 0.13, 0, 0.43, 0));
+    parts.push(box(p.band, 0.125, 0.05, 0.125, 0, 0.22, 0));
   } else {
     // 'cap' — the original: a slab of hair, a crown, and a peak.
     parts.push(box(p.hair, 0.17, 0.06, 0.19, 0, 0.08, -0.004));
     parts.push(box(p.cap, 0.176, 0.075, 0.196, 0, 0.115, 0));
     parts.push(box(p.cap, 0.15, 0.022, 0.075, 0, 0.088, 0.13));   // peak
+  }
+  // A bought pair of shades goes over the eyes, on top of any headwear. The
+  // frame is a bar across the bridge; the lenses are the two dark slabs that
+  // read as the actual glasses from head-on.
+  if (style?.shades) {
+    parts.push(box(p.shades, 0.2, 0.055, 0.04, 0, 0.02, 0.09));
+    parts.push(box(p.lens, 0.075, 0.045, 0.03, 0.045, 0.015, 0.11));
+    parts.push(box(p.lens, 0.075, 0.045, 0.03, -0.045, 0.015, 0.11));
   }
   return parts;
 }
@@ -258,7 +307,7 @@ function buildGeometries(p, style = {}) {
       ],
       6
     ),
-    head: merge(headParts(p, style.head), 6),
+    head: merge(headParts(p, style), 6),
     thigh: segment(p.pants, 0.15, C.THIGH, 0.16, 0.76),
     shin: segment(p.pantsDark, 0.12, C.SHIN, 0.13, 0.84),
     upperArm: segment(style.sleeves === 'long' ? p.sleeve : p.skin, 0.085, C.UPPER_ARM, 0.085, 0.86),

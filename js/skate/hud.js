@@ -317,6 +317,7 @@ export class Hud {
     this.parkGrid = document.getElementById('park-grid');
     this.boardGrid = document.getElementById('board-grid');
     this.outfitGrid = document.getElementById('outfit-grid');
+    this.accessoryGrid = document.getElementById('accessory-grid');
     this.charGrid = document.getElementById('char-grid');
 
     this.dismountBtn = document.getElementById('btn-dismount');
@@ -459,6 +460,10 @@ export class Hud {
     this.outfitGrid?.addEventListener('click', (e) => {
       const card = e.target.closest('[data-outfit]');
       if (card) this.on.outfit?.(card.dataset.outfit);
+    });
+    this.accessoryGrid?.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-accessory]');
+      if (card) this.on.accessory?.(card.dataset.accessory);
     });
     this.charGrid?.addEventListener('click', (e) => {
       const card = e.target.closest('[data-character]');
@@ -795,6 +800,64 @@ export class Hud {
         })
         .join('') +
       '</div>';
+  }
+
+  /**
+   * The haberdashery: one card per hat or pair of shades, carrying a portrait
+   * of the equipped rider wearing it — so a card reads as "this on you" rather
+   * than as a colour, which is what a row of hats and glasses needs.
+   *
+   * `look` is the equipped character's own palette and style; each card draws
+   * that figure with the accessory's hat or shades overlaid, so a bucket hat
+   * advertises what it would look like on the person currently in the shop.
+   */
+  renderAccessories(accessories, save, look) {
+    if (!this.accessoryGrid) return;
+    const owned = save.accessories;
+    const equipped = save.accessoryId;
+    this.setCoins(save.coins);
+    // An accessory is a character in all but name: the equipped rider, wearing
+    // this one thing. drawPortrait() only reads palette and style, so a
+    // synthesised two-key object is all it needs.
+    const wearing = (a) => {
+      const palette = { ...look.palette };
+      if (a.hat) {
+        palette.cap = a.hat.cap;
+        palette.band = a.hat.band;
+      }
+      if (a.shades) {
+        palette.shades = a.shades.frame;
+        palette.lens = a.shades.lens;
+      }
+      return {
+        palette,
+        style: {
+          ...look.style,
+          head: a.hat ? a.hat.style : look.style.head,
+          shades: !!a.shades,
+        },
+      };
+    };
+    this.accessoryGrid.innerHTML =
+      '<div class="board-type-grid">' +
+      accessories
+        .map((a) => {
+          const has = owned.includes(a.id);
+          const isEquipped = a.id === equipped;
+          const status = isEquipped ? 'Equipped' : has ? 'Owned — tap to equip' : `${a.price} coins`;
+          const locked = !has && save.coins < a.price;
+          return (
+            `<button type="button" class="board-card accessory-card${isEquipped ? ' current' : ''}${locked ? ' locked' : ''}" data-accessory="${a.id}">` +
+            `<canvas class="char-portrait" data-accessory-portrait="${a.id}"></canvas>` +
+            `<b>${a.name}</b><span class="board-status">${status}</span></button>`
+          );
+        })
+        .join('') +
+      '</div>';
+    for (const a of accessories) {
+      const canvas = this.accessoryGrid.querySelector(`[data-accessory-portrait="${a.id}"]`);
+      if (canvas) drawPortrait(canvas, wearing(a));
+    }
   }
 
   /**

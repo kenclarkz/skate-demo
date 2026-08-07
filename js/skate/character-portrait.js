@@ -29,7 +29,7 @@ function levels() {
     chest,
     shoulder: chest + C.SHOULDER_UP,
     head: chest + C.NECK,
-    top: chest + C.NECK + 0.22, // crown, with room for the tallest headwear
+    top: chest + C.NECK + 0.7, // crown, with room for the tallest headwear (Gnorbert's cone)
   };
 }
 
@@ -127,9 +127,44 @@ export function drawPortrait(canvas, character) {
     rect(p.cap, 0, L.head + 0.033, 0.19, 0.125);
     rect(p.cap, 0, L.head + 0.023, 0.196, 0.03); // front lip
     for (const side of [-1, 1]) rect(p.band, side * 0.083, L.head - 0.11, 0.026, 0.14);
+  } else if (style.head === 'tiger') {
+    rect(p.hair, 0, L.head + 0.05, 0.175, 0.075);
+    rect(p.band, 0, L.head + 0.12, 0.08, 0.02); // stripes, edge-on across the crown
+    rect(p.band, 0, L.head + 0.105, 0.05, 0.02);
+    for (const side of [-1, 1]) rect(p.cap, side * 0.085, L.head + 0.105, 0.05, 0.07); // ears
+  } else if (style.head === 'bunny') {
+    rect(p.hair, 0, L.head + 0.048, 0.175, 0.075);
+    for (const side of [-1, 1]) {
+      rect(p.hair, side * 0.06, L.head + 0.11, 0.09, 0.26); // ears up, past any cap
+      rect(p.band, side * 0.06, L.head + 0.14, 0.04, 0.18); // the paler inner
+    }
+  } else if (style.head === 'cone') {
+    rect(p.hair, 0, L.head + 0.05, 0.17, 0.06);
+    rect(p.cap, 0, L.head + 0.06, 0.21, 0.09);  // brim
+    rect(p.band, 0, L.head + 0.155, 0.215, 0.03);
+    rect(p.cap, 0, L.head + 0.185, 0.16, 0.18);
+    rect(p.cap, 0, L.head + 0.365, 0.11, 0.18);
+    rect(p.cap, 0, L.head + 0.545, 0.055, 0.12); // the tip
+  } else if (style.head === 'bucket') {
+    rect(p.cap, 0, L.head + 0.05, 0.17, 0.06);
+    rect(p.cap, 0, L.head + 0.07, 0.19, 0.085);
+    rect(p.cap, 0, L.head + 0.145, 0.25, 0.022); // the wide brim
+  } else if (style.head === 'tophat') {
+    rect(p.cap, 0, L.head + 0.09, 0.21, 0.05); // brim
+    rect(p.cap, 0, L.head + 0.14, 0.12, 0.3);  // the tube
+    rect(p.cap, 0, L.head + 0.44, 0.13, 0.04); // the top
+    rect(p.band, 0, L.head + 0.19, 0.125, 0.05);
   } else {
     rect(p.hair, 0, L.head + 0.05, 0.17, 0.06);
     rect(p.cap, 0, L.head + 0.078, 0.176, 0.075);
     rect(p.cap, 0, L.head + 0.077, 0.176, 0.022); // peak, seen edge-on from the front
+  }
+
+  // A bought pair of shades goes over the eyes, on top of whatever is on the
+  // head — the last pass, so the lenses read as being out in front of the face.
+  if (style.shades) {
+    rect(p.shades, 0, eyeY - 0.01, 0.2, 0.055); // the frame bar across the bridge
+    rect(p.lens, 0.05, eyeY - 0.005, 0.075, 0.045);
+    rect(p.lens, -0.05, eyeY - 0.005, 0.075, 0.045);
   }
 }

@@ -8,7 +8,7 @@ lateral acceleration); ollies are ballistic (`v = √(2gh)`); landings keep
 whatever part of the velocity lies in the surface plane and hand the rest to
 the legs to absorb.
 
-Play it at **[kenclarkz.github.io/skate](https://kenclarkz.github.io/skate/)**.
+Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-demo/)**.
 
 ## What's in it
 
@@ -39,9 +39,11 @@ Play it at **[kenclarkz.github.io/skate](https://kenclarkz.github.io/skate/)**.
   and carries on.
 - **Walking mode** — step off the board to explore a park on foot, board
   carried in hand, and hop back on wherever you are.
-- **Four skaters**, each with their own headwear and palette, picked from a
-  skater rack in the shop; a shop full of purchasable board skins and
-  shirts, paid for with coins earned from tricks and combos.
+- **Eight skaters**, each with their own headwear and palette, picked from a
+  skater rack in the shop — from the everyday four up to the legendaries
+  (a tiger, the not-quite-Birdman, a bunny, and a garden gnome); a shop full
+  of purchasable board skins, shirts, and headwear accessories (hats and
+  shades), paid for with coins earned from tricks and combos.
 - **Thirteen ambient AI skaters per park** — five tour the patrol loop the
   whole time, popping tricks with the exact same ride model the player
   rides; the rest spend most of their time on foot near a hangout spot,

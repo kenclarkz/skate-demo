@@ -1,12 +1,13 @@
 // Everything that outlives a session: the best combo, a lifetime trick count,
-// the sound setting, and the coins, boards and outfits the store spends and
-// sells.
+// the sound setting, and the coins, boards, outfits and accessories the store
+// spends and sells.
 //
 // localStorage throws outright in iOS private browsing, so every access is
 // wrapped. Losing a high score is bad; crashing the game over one is worse.
 
 import { byId, DEFAULT_BOARD_ID } from './boards.js';
 import { byId as outfitById, DEFAULT_OUTFIT_ID } from './outfits.js';
+import { byId as accessoryById, DEFAULT_ACCESSORY_ID } from './accessories.js';
 import { byId as charById, DEFAULT_CHARACTER_ID } from './characters.js';
 
 const KEY = 'skate.save';
@@ -21,6 +22,7 @@ const DEFAULTS = {
   coins: 0,
   boardId: DEFAULT_BOARD_ID,
   outfitId: DEFAULT_OUTFIT_ID,
+  accessoryId: DEFAULT_ACCESSORY_ID,
   // Characters are picked, not bought — there is no `characters` owned-list to
   // go with this the way boards and outfits have one.
   characterId: DEFAULT_CHARACTER_ID,
@@ -34,19 +36,26 @@ const DEFAULTS = {
   holdToPush: true, // holding the push key/thumb repeats pushes — see HOLD_TO_PUSH
 };
 
-// `boards` and `outfits` (which ones are owned) are arrays and so cannot
-// live in DEFAULTS itself — spreading DEFAULTS only copies the reference,
-// and the first purchase would then push onto (and permanently mutate) that
-// shared default.
+// `boards`, `outfits` and `accessories` (which ones are owned) are arrays and
+// so cannot live in DEFAULTS itself — spreading DEFAULTS only copies the
+// reference, and the first purchase would then push onto (and permanently
+// mutate) that shared default.
 const freshBoards = () => [DEFAULT_BOARD_ID];
 const freshOutfits = () => [DEFAULT_OUTFIT_ID];
+const freshAccessories = () => [DEFAULT_ACCESSORY_ID];
 
 function read() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS, boards: freshBoards(), outfits: freshOutfits() };
+    if (!raw) return { ...DEFAULTS, boards: freshBoards(), outfits: freshOutfits(), accessories: freshAccessories() };
     const parsed = JSON.parse(raw);
-    const s = { ...DEFAULTS, boards: freshBoards(), outfits: freshOutfits(), ...parsed };
+    const s = {
+      ...DEFAULTS,
+      boards: freshBoards(),
+      outfits: freshOutfits(),
+      accessories: freshAccessories(),
+      ...parsed,
+    };
     // A hand-edited or half-written record must not be able to break the game.
     for (const k of ['best', 'bestTrick', 'tricks', 'bails', 'logos', 'coins']) {
       s[k] = Math.max(0, Math.floor(Number(s[k]) || 0));
@@ -75,10 +84,17 @@ function read() {
       : freshOutfits();
     s.outfitId =
       typeof s.outfitId === 'string' && s.outfits.includes(s.outfitId) ? s.outfitId : DEFAULT_OUTFIT_ID;
+    s.accessories = Array.isArray(parsed.accessories)
+      ? [...new Set([DEFAULT_ACCESSORY_ID, ...parsed.accessories.filter((id) => accessoryById[id])])]
+      : freshAccessories();
+    s.accessoryId =
+      typeof s.accessoryId === 'string' && s.accessories.includes(s.accessoryId)
+        ? s.accessoryId
+        : DEFAULT_ACCESSORY_ID;
     s.characterId = typeof s.characterId === 'string' && charById[s.characterId] ? s.characterId : DEFAULT_CHARACTER_ID;
     return s;
   } catch {
-    return { ...DEFAULTS, boards: freshBoards(), outfits: freshOutfits() };
+    return { ...DEFAULTS, boards: freshBoards(), outfits: freshOutfits(), accessories: freshAccessories() };
   }
 }
 
@@ -125,6 +141,12 @@ export const save = {
   },
   get outfits() {
     return [...state.outfits];
+  },
+  get accessoryId() {
+    return state.accessoryId;
+  },
+  get accessories() {
+    return [...state.accessories];
   },
   get characterId() {
     return state.characterId;
@@ -227,6 +249,24 @@ export const save = {
     return true;
   },
 
+  /** @returns true if the purchase actually went through. */
+  buyAccessory(id) {
+    const accessory = accessoryById[id];
+    if (!accessory || state.accessories.includes(id) || state.coins < accessory.price) return false;
+    state.coins -= accessory.price;
+    state.accessories.push(id);
+    flush();
+    return true;
+  },
+
+  /** @returns true if the accessory is owned and is now equipped. */
+  setAccessory(id) {
+    if (!accessoryById[id] || !state.accessories.includes(id)) return false;
+    state.accessoryId = id;
+    flush();
+    return true;
+  },
+
   /** @returns true if that is a real character and it is now equipped. */
   setCharacter(id) {
     if (!charById[id]) return false;
@@ -278,7 +318,11 @@ export const save = {
   },
 
   reset() {
-    Object.assign(state, DEFAULTS, { boards: freshBoards(), outfits: freshOutfits() });
+    Object.assign(state, DEFAULTS, {
+      boards: freshBoards(),
+      outfits: freshOutfits(),
+      accessories: freshAccessories(),
+    });
     flush();
   },
 };
