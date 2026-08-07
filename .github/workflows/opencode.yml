@@ -4,6 +4,11 @@ on:
   issue_comment:
     types: [created]
   workflow_dispatch:
+    inputs:
+      prompt:
+        description: "What should OpenCode do?"
+        required: true
+        default: "Analyze this repository"
 
 permissions:
   contents: write
@@ -29,8 +34,8 @@ jobs:
         uses: anomalyco/opencode/github@latest
         with:
           model: anthropic/claude-sonnet-4-20250514
+          prompt: ${{ github.event.inputs.prompt || github.event.comment.body }}
           use_github_token: true
-          share: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
