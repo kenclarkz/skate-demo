@@ -6,7 +6,7 @@
 //
 // To ship an update: bump VERSION. That is the entire release process.
 
-const VERSION = 'v19';
+const VERSION = 'v20';
 const CACHE = `skate-${VERSION}`;
 
 // All relative — this worker's scope is the repo's own Pages root.
