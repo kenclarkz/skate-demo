@@ -18,20 +18,17 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-      actions: read
-      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          persist-credentials: false
 
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           model: anthropic/claude-sonnet-4-20250514
           github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
