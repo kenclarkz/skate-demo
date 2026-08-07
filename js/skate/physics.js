@@ -671,17 +671,21 @@ export class Ride {
     else if (rotErr > C.LAND_FLIP_OK) reason = 'primo';
     else if (Math.abs(airPitch) > C.LAND_PITCH_OK) reason = 'nose';
 
-    // A revert: the board came down pointed off the direction of travel —
-    // sideways or even backwards — so instead of snapping it round in one step
-    // or sliding out, it is caught and pivoted back onto the direction of
-    // travel, after a beat's delay so the save reads as a recovery rather than
-    // a magnet. landOn is told not to snap the heading, leaving the
-    // misalignment in speed and side for stepRevert() to turn back along the
-    // board.
+    // A revert is only earned by landing backwards — the board pointed back the
+    // way it came. Sideways landings are not saved: they wobble sketchy or,
+    // far enough off, slide out. The saved board holds its line for
+    // REVERT_DELAY, then the wheels pivot it back round to face the direction
+    // of travel, so the save reads as a recovery rather than a magnet. landOn
+    // is told not to snap the heading, leaving the misalignment in speed and
+    // side for stepRevert() to turn back along the board.
+    const back = Math.abs(C.angleDelta(this.yaw, velYaw)) > Math.PI / 2;
     const wantRevert =
+      back &&
       !this.sliding &&
       speed > C.REVERT_MIN_SPEED &&
       slip > C.REVERT_TRIGGER;
+
+    if (!wantRevert && !back && slip > C.LAND_SLIP_SKETCH && speed > 1.4) reason = 'slide-out';
 
     this.landOn(_n, velYaw, speed, !wantRevert);
     if (wantRevert) {

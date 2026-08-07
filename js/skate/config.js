@@ -132,6 +132,7 @@ export const GRAB_HOLD_BONUS = 220;  // points per second held, up to the max
 export const LAND_ROLL_CLEAN = 0.30; // radians of board roll off the surface
 export const LAND_PITCH_OK = 0.55;   // nose- or tail-first beyond this digs in
 export const LAND_SLIP_CLEAN = 0.45; // radians between heading and velocity
+export const LAND_SLIP_SKETCH = 1.0;
 export const LAND_FLIP_OK = 0.55;    // radians short of finishing a flip
 export const LAND_VY_BAIL = 9.4;     // ~4.5 m drop; the legs stop absorbing
 export const LAND_COMPRESS = 0.055;  // metres of knee dip per m/s of impact
@@ -140,16 +141,15 @@ export const SKETCH_SPEED_LOSS = 0.68;
 export const SKETCH_TIME = 0.55;     // how long the wobble lasts
 
 // --- revert ---------------------------------------------------------------
-// A landing that comes down off the direction of travel — sideways, or even
-// backwards — is normally a slam. A revert catches the board instead: the
-// rider holds the line for REVERT_DELAY seconds, then the wheels pivot the
-// board round under the rider to face the direction of travel, so the run
-// keeps going — at the cost of a little speed scrubbed by the pivot. The
-// trigger sits right where LAND_SLIP_CLEAN does, so a clean landing stays
-// clean and the sketchy band becomes a pivot rather than a wobble.
+// A backwards landing — the board comes down pointed back the way it came —
+// is normally a slam. A revert catches it instead: the rider holds the line
+// for REVERT_DELAY seconds, then the wheels pivot the board round under the
+// rider to face the direction of travel, so the run keeps going — at the cost
+// of a little speed scrubbed by the pivot. Sideways landings are not saved:
+// they wobble sketchy or slide out as before.
 export const REVERT_TRIGGER = 0.35;   // rad of board-vs-travel mismatch that earns a revert
 export const REVERT_MIN_SPEED = 1.6;  // below this the wheels just grip and stop
-export const REVERT_DELAY = 2.0;      // seconds the board holds its line before the save
+export const REVERT_DELAY = 0.5;      // seconds the board holds its line before the save
 export const REVERT_DONE = 0.035;     // rad left at which the pivot is finished
 export const REVERT_RATE = 6.2;       // rad/s of pivot at full rate
 export const REVERT_EASE_IN = 0.05;   // s to build up to full rate — no snap

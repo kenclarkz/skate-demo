@@ -443,21 +443,19 @@ section('Spins and stance');
 // --------------------------------------------------------------------------
 section('Reverts');
 {
-  // Landing with the board not pointing where it is going normally wobbles
-  // sketchy (or, past LAND_SLIP_SKETCH, slid out). A revert catches it: the
-  // heading holds its line for REVERT_DELAY, then pivots back onto the
-  // velocity over a couple of tenths of a second, costs a little speed for
-  // the pivot, and never bails.
+  // Only a backwards landing earns the save: the board comes down pointed back
+  // the way it came, holds its line for REVERT_DELAY, then pivots round to
+  // face the direction of travel. It costs a little speed for the pivot, and
+  // never bails. Sideways landings are not saved — they wobble sketchy or,
+  // far enough off, slide out.
   const reverted = await run(() => {
     const g = window.__skate;
     g.place(-10, -20, 0, 7);
     g.drive(1 / 120, { trick: 'ollie', trickCharge: 1 });
-    // A short stick-over as the board leaves the ground: ~0.45 rad of air spin,
-    // so it comes down pointed well off its own velocity.
-    for (let i = 0; i < 7; i++) g.drive(1 / 120, { steer: -1 });
     const events = [];
     for (let i = 0; i < 400 && g.ride.mode === 1; i++) {
-      g.drive(1 / 120, { steer: 0, charge: false, slide: false, push: false });
+      const steer = Math.abs(g.ride.airYaw) < 2.1 ? -1 : 0; // ~120° round: backwards
+      g.drive(1 / 120, { steer, charge: false, slide: false, push: false });
       for (const e of g.ride.events) events.push(e);
     }
     const land = events.find((e) => e.name === 'land');
@@ -467,13 +465,13 @@ section('Reverts');
     const yawAtLand = g.ride.yaw;
     // The delay: the board must hold its line for the full REVERT_DELAY.
     let earlyMoves = 0;
-    for (let i = 0; i < 230 && g.ride.revert; i++) {
+    for (let i = 0; i < 50 && g.ride.revert; i++) {
       g.drive(1 / 120, {});
       if (Math.abs(g.ride.yaw - yawAtLand) > 1e-4) earlyMoves++;
     }
     const yawAfterWait = g.ride.yaw;
-    // Ride out the pivot (up to a second) and read where the heading ends.
-    for (let i = 0; i < 120 && g.ride.revert; i++) g.drive(1 / 120, {});
+    // Ride out the ~120° pivot and read where the heading ends.
+    for (let i = 0; i < 240 && g.ride.revert; i++) g.drive(1 / 120, {});
     const dv = Math.abs(g.ride.yaw - velYaw) % (2 * Math.PI);
     return {
       reverted: !!start,
@@ -489,13 +487,13 @@ section('Reverts');
       speed: g.ride.groundSpeed,
     };
   });
-  ok(reverted.reverted, 'an off-direction landing starts a revert');
+  ok(reverted.reverted, 'a backwards landing starts a revert');
   ok(reverted.slip > 0.35, `with real misalignment to fix (${reverted.slip.toFixed(2)} rad)`);
   ok(reverted.clean, 'and it lands clean — the wobble is replaced by a pivot');
   ok(reverted.mode === 0, 'and does not bail');
   ok(
     reverted.earlyMoves === 0 && Math.abs(reverted.yawAfterWait - reverted.yawAtLand) < 1e-4,
-    'and the board holds its line through the full 2s delay'
+    'and the board holds its line through the 0.5s delay'
   );
   ok(
     Math.abs(reverted.yawAfterWait - reverted.yaw) > 0.2,
@@ -522,7 +520,29 @@ section('Reverts');
   });
   ok(!clean.reverted, 'and a straight landing does not');
 
-  // The full sideways slam that used to slide out is caught by the revert now.
+  // A sideways landing is not saved: it wobbles sketchy but keeps rolling.
+  const side = await run(() => {
+    const g = window.__skate;
+    g.place(-10, -20, 0, 7);
+    g.drive(1 / 120, { trick: 'ollie', trickCharge: 1 });
+    for (let i = 0; i < 8; i++) g.drive(1 / 120, { steer: -1 }); // ~0.49 rad off
+    const events = [];
+    for (let i = 0; i < 400 && g.ride.mode === 1; i++) {
+      g.drive(1 / 120, { steer: 0, charge: false, slide: false, push: false });
+      for (const e of g.ride.events) events.push(e);
+    }
+    const land = events.find((e) => e.name === 'land');
+    return {
+      mode: g.ride.mode,
+      reverted: events.some((e) => e.name === 'revertStart'),
+      sketchy: land?.sketchy === true,
+    };
+  });
+  ok(side.mode === 0, 'and a sideways landing is not saved');
+  ok(!side.reverted, 'it gets no revert');
+  ok(side.sketchy, 'and wobbles sketchy instead');
+
+  // Far sideways still slides out — no revert for it.
   const far = await run(() => {
     const g = window.__skate;
     g.place(-10, -20, 0, 7);
@@ -533,39 +553,17 @@ section('Reverts');
       g.drive(1 / 120, { steer: 0, charge: false, slide: false, push: false });
       for (const e of g.ride.events) events.push(e);
     }
-    return { mode: g.ride.mode, reverted: events.some((e) => e.name === 'revertStart') };
-  });
-  ok(far.mode === 0, 'and a landing far too sideways no longer slides out');
-  ok(far.reverted, 'it is caught by a revert instead');
-
-  // A backwards landing — the board comes down pointed back the way it came —
-  // gets the same save, and is turned the whole way round to face the
-  // direction of travel rather than left rolling fakie.
-  const back = await run(() => {
-    const g = window.__skate;
-    g.place(-10, -20, 0, 7);
-    g.drive(1 / 120, { trick: 'ollie', trickCharge: 1 });
-    const events = [];
-    for (let i = 0; i < 400 && g.ride.mode === 1; i++) {
-      const steer = Math.abs(g.ride.airYaw) < 2.1 ? -1 : 0; // ~120° round
-      g.drive(1 / 120, { steer, charge: false, slide: false, push: false });
-      for (const e of g.ride.events) events.push(e);
-    }
-    const start = events.find((e) => e.name === 'revertStart');
-    const velYaw = Math.atan2(g.ride.vel.x, g.ride.vel.z);
-    // Drive the full wait (REVERT_DELAY) plus the ~120° pivot, then a little
-    // longer so the board has time to settle on the direction of travel.
-    for (let i = 0; i < 400 && g.ride.revert; i++) g.drive(1 / 120, {});
-    const dv = Math.abs(g.ride.yaw - velYaw) % (2 * Math.PI);
     return {
-      reverted: !!start,
       mode: g.ride.mode,
-      off: dv > Math.PI ? 2 * Math.PI - dv : dv,
+      reason: g.ride.bailReason,
+      reverted: events.some((e) => e.name === 'revertStart'),
     };
   });
-  ok(back.reverted, 'a backwards landing also starts a revert');
-  ok(back.mode === 0, 'and saves the run instead of sliding out');
-  ok(back.off < 0.12, `and autofaces the board forward (off by ${back.off.toFixed(3)} rad)`);
+  ok(
+    far.mode === 3 && far.reason === 'slide-out',
+    'and landing far too sideways still slides out'
+  );
+  ok(!far.reverted, 'with no revert for it');
 }
 
 // --------------------------------------------------------------------------
