@@ -44,6 +44,14 @@ export const TUTORIAL = [
     demo: 'push',
   },
   {
+    title: 'Brake',
+    body: 'Drag your back foot to scrub speed, and hold it and the board stops dead without you getting off — let go and you can roll again.',
+    keys: 'Hold S',
+    touch: 'Left half — hold pulled up',
+    pad: 'Left stick — hold pulled up',
+    demo: 'brake',
+  },
+  {
     title: 'Charge & ollie',
     body: 'Pull back to load your legs, then let go straight up. How far you pulled is how much pop you get.',
     keys: 'Space — hold, then release',

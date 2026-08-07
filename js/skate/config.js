@@ -103,6 +103,13 @@ export const SLIDE_FRICTION = 7.2;   // m/s² of scrub while sideways
 export const SLIDE_YAW_RATE = 5.0;   // how fast the board swings out
 export const SLIDE_MIN_SPEED = 2.4;  // below this it just grips and stops
 
+// --- braking --------------------------------------------------------------
+// Dragging the back foot: scrubs speed fast without the scrape of a slide, so
+// it reads the instant the key goes down. Sized under the push impulse so a
+// slope can still carry you once you let go.
+export const BRAKE_DECEL = 9.0;      // m/s² while held, opposing travel
+export const BRAKE_STOP = 0.35;      // m/s below which braking stops the board dead
+
 // --- ollies and pops ------------------------------------------------------
 // Pop height is set by how deep the crouch was, and the launch speed follows
 // from it exactly: v = sqrt(2·g·h). A 0.60 m ollie is 3.43 m/s and 0.70 s of

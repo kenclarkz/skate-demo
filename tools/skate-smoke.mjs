@@ -205,6 +205,58 @@ section('Rolling');
 }
 
 // --------------------------------------------------------------------------
+section('Braking');
+{
+  // Dragging the back foot scrubs the run down and stops the board dead,
+  // without the sideways scrape of a slide.
+  const stopped = await run(() => {
+    const g = window.__skate;
+    g.place(-10, -18, 0, 10);
+    g.hold(0.2);
+    const before = g.ride.speed;
+    for (let i = 0; i < 240; i++) g.drive(1 / 120, { brake: true });
+    return { before, after: g.ride.speed };
+  });
+  ok(stopped.before > 9, `rolling at speed (${stopped.before.toFixed(2)} m/s)`);
+  ok(stopped.after === 0, `and braking stops the board dead (${stopped.before.toFixed(2)} → ${stopped.after.toFixed(2)})`);
+
+  // The brake is signed off travel, so riding fakie it bites the same way.
+  const back = await run(() => {
+    const g = window.__skate;
+    g.place(-10, -16, 0, -6);
+    g.hold(0.2);
+    const before = g.ride.speed;
+    for (let i = 0; i < 240; i++) g.drive(1 / 120, { brake: true });
+    return { before, after: g.ride.speed };
+  });
+  ok(back.before < -5, `rolling fakie (${back.before.toFixed(2)} m/s)`);
+  ok(back.after === 0, `and braking stops it the same way (${back.before.toFixed(2)} → ${back.after.toFixed(2)})`);
+
+  // A brake that also tries to push cannot win — the push is refused while
+  // the back foot is dragging.
+  const noPush = await run(() => {
+    const g = window.__skate;
+    g.place(-10, -18, 0, 2);
+    const before = g.ride.speed;
+    for (let i = 0; i < 40; i++) g.drive(1 / 120, { brake: true, push: true });
+    return { before, after: g.ride.speed };
+  });
+  ok(noPush.after < noPush.before, `and pushing while braking does not help (${noPush.before.toFixed(2)} → ${noPush.after.toFixed(2)})`);
+
+  // Releasing the brake lets the run roll away again — a stop is not a lock.
+  const rollAgain = await run(() => {
+    const g = window.__skate;
+    g.place(-10, -18, 0, 8);
+    for (let i = 0; i < 240; i++) g.drive(1 / 120, { brake: true });
+    const stopped = g.ride.speed;
+    for (let i = 0; i < 60; i++) g.drive(1 / 120, { push: true });
+    return { stopped, after: g.ride.speed };
+  });
+  ok(rollAgain.stopped === 0, 'the board comes to a dead stop');
+  ok(rollAgain.after > 0.5, `and rolls away again once the brake lets go (${rollAgain.after.toFixed(2)} m/s)`);
+}
+
+// --------------------------------------------------------------------------
 section('Carving');
 {
   // The claim being tested: a lean of θ commits the rider to a lateral

@@ -681,6 +681,7 @@ const IDLE_INPUT = Object.freeze({
   charge: false,
   slide: false,
   push: false,
+  brake: false,
   trick: null,
   trickCharge: undefined,
   grab: null,

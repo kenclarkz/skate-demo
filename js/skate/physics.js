@@ -251,6 +251,7 @@ export class Ride {
   readInput(dt, input) {
     this.steer += (input.steer - this.steer) * (1 - Math.exp(-14 * dt));
     this.sliding = !!input.slide && this.mode === GROUND;
+    this.braking = !!input.brake && this.mode === GROUND;
 
     // --- tricks -----------------------------------------------------------
     // Read before the charge is touched, because a flick arrives on the same
@@ -295,6 +296,7 @@ export class Ride {
       this.push < 0 &&
       this.mode === GROUND &&
       !this.manual &&
+      !this.braking &&
       this.pushCool <= 0 &&
       this.speed > -0.5
     ) {
@@ -399,6 +401,11 @@ export class Ride {
     if (this.pushDriving()) {
       a += C.PUSH_IMPULSE * speedSetting * Math.max(0, 1 - sp / C.TOP_SPEED);
     }
+    // Dragging the back foot scrubs speed against the roll and the slope alike —
+    // signed off travel, so it bites rolling forward or back the same way.
+    if (this.braking) {
+      a -= sgn * C.BRAKE_DECEL;
+    }
 
     // --- steering ----------------------------------------------------------
     if (this.revert) {
@@ -429,6 +436,13 @@ export class Ride {
       // Tyre scrub: a carve costs speed in proportion to how hard it is.
       a -= sgn * C.CARVE_SCRUB * Math.abs(aLat);
       this.speed += a * dt;
+
+      // Braking below a crawl is a dead stop, wheels gripping — the board does
+      // not creep for ever under a brake that only just outweighs the slope.
+      if (this.braking && Math.abs(this.speed) < C.BRAKE_STOP) {
+        this.speed = 0;
+        this.side = 0;
+      }
 
       // --- sideways ----------------------------------------------------------
       if (this.sliding && sp > C.SLIDE_MIN_SPEED) {

@@ -30,6 +30,9 @@ const PROGRAMS = {
   // Held for the whole loop now, matching what holding the real key does —
   // physics.js's own cooldown is what paces the repeats, not this.
   push: { loop: 2.4, close: [-2.4, 1.4, 1.0, 0.5], speed: 2.0, pushHeld: true },
+  // Rolling in, then holding the brake scrubs the run down to a standstill and
+  // holds it there — a brake is a hold, not a tap, exactly like the push above.
+  brake: { loop: 2.6, close: [2.6, 1.2, 1.6, 0.85], speed: 6.0, brakeFrom: 0.15, brakeTo: 1.9 },
   slide: { loop: 2.6, close: [2.2, 1.1, 1.4, 0.7], speed: 6.0, slideFrom: 0.6, slideTo: 1.3 },
   manual: { loop: 2.8, close: [2.2, 1.0, 1.2, 0.8], speed: 4.0, chargeUntil: 1.9 },
   ollie: { loop: 2.4, close: [2.2, 1.1, 1.2, 0.85], speed: 4.5, chargeUntil: 0.4, trickAt: 0.4, trickId: 'ollie' },
@@ -183,6 +186,7 @@ export class TrickPreview {
       charge: false,
       slide: false,
       push: false,
+      brake: false,
       trick: null,
       trickCharge: undefined,
       grab: null,
@@ -190,6 +194,7 @@ export class TrickPreview {
     if (p.steerFn) input.steer = p.steerFn(this.t);
     if (p.chargeUntil != null && this.t < p.chargeUntil) input.charge = true;
     if (p.pushHeld) input.push = true;
+    if (p.brakeFrom != null && this.t >= p.brakeFrom && this.t < p.brakeTo) input.brake = true;
     if (p.slideFrom != null && this.t >= p.slideFrom && this.t <= p.slideTo) input.slide = true;
     if (p.trickAt != null && !this.fired && this.t >= p.trickAt) {
       input.trick = p.trickId;

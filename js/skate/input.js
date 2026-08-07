@@ -148,6 +148,9 @@ export class Input {
     // what paces the repeats — this only has to report whether the player is
     // still asking to push right now.
     this.pushHeld = false;
+    // The mirror image on the same thumb: pulled up past the threshold it is a
+    // brake, held, the same way holding a key is — read() ORs the two together.
+    this.brakeHeld = false;
     // The previous frame's held-push signal, so read() can tell a rising edge
     // from a key still being held down when C.HOLD_TO_PUSH is off.
     this.wasPushHeld = false;
@@ -270,6 +273,11 @@ export class Input {
       const down = dy;
       if (down > PUSH_SLIDE) this.pushHeld = true;
       else if (down < PUSH_SLIDE * 0.4) this.pushHeld = false;
+      // And the pull the other way is a brake — holding the thumb up keeps
+      // scrubbing, with the same hysteresis so it cannot chatter on the line.
+      const up = -dy;
+      if (up > PUSH_SLIDE) this.brakeHeld = true;
+      else if (up < PUSH_SLIDE * 0.4) this.brakeHeld = false;
       return;
     }
     // The pull: how far below the deepest point we have been, and how far the
@@ -306,6 +314,7 @@ export class Input {
       this.steerTouch = 0;
       this.stickY = 0;
       this.pushHeld = false;
+      this.brakeHeld = false;
       this.hideJoystick();
       return;
     }
@@ -345,6 +354,7 @@ export class Input {
       this.steerTouch = 0;
       this.stickY = 0;
       this.pushHeld = false;
+      this.brakeHeld = false;
       this.hideJoystick();
     } else {
       this.stashTrail(p);
@@ -407,7 +417,7 @@ export class Input {
       this.keys.delete(code);
       // Releasing the charge with nothing else asked for is an ollie, exactly as
       // letting the stick spring back up is.
-      if ((code === 'Space' || code === 'ArrowDown' || code === 'KeyS') && !this.charging()) {
+      if (code === 'Space' && !this.charging()) {
         if (this.enabled && this.chargedFor > 0.05) this.queue.push({ trick: 'ollie' });
       }
       // Only clear it if this was the key that started it — letting go of a
@@ -417,7 +427,7 @@ export class Input {
   }
 
   charging() {
-    return this.keys.has('Space') || this.keys.has('ArrowDown') || this.keys.has('KeyS');
+    return this.keys.has('Space');
   }
 
   // --- gamepad -----------------------------------------------------------
@@ -434,6 +444,10 @@ export class Input {
 
     const lx = pad.axes[0] || 0;
     if (Math.abs(lx) > 0.14) out.steer = C.clamp(lx, -1, 1);
+    const ly = pad.axes[1] || 0;
+    // Pulling the left stick up is the brake, the mirror of the on-screen
+    // joystick's own up-drag and the S key.
+    if (ly < -0.45) out.brake = true;
     const rx = pad.axes[2] || 0;
     const ry = pad.axes[3] || 0;
 
@@ -484,6 +498,7 @@ export class Input {
       charge: false,
       slide: false,
       push: false,
+      brake: false,
       trick: null,
       trickCharge: undefined,
       grab: null,
@@ -502,6 +517,7 @@ export class Input {
     // flag rather than tracking one separately.
     out.push =
       this.pushHeld || this.keys.has('KeyW') || this.keys.has('KeyC') || this.keys.has('ArrowUp');
+    out.brake = this.brakeHeld || this.keys.has('KeyS') || this.keys.has('ArrowDown');
     // Keyboard wins over touch if somehow both are held at once — an arbitrary
     // but harmless tie-break, since physics.js only ever looks at the one
     // string this collapses to.
@@ -568,6 +584,7 @@ export class Input {
     this.flickCharge = 0;
     this.queue.length = 0;
     this.pushHeld = false;
+    this.brakeHeld = false;
     this.wasPushHeld = false;
     this.padPulled = false;
     this.padCharge = 0;
