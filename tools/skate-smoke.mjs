@@ -348,21 +348,21 @@ section('Slopes');
       g.hold(0.6);
       return g.ride.speed;
     })();
-    // The funbox's downhill bank: z 6 → 12 now (TRACK_SCALE doubled the run,
-    // not the 0.5 m rise), rising over twice the distance, so ~4.8° instead
+    // The funbox's downhill bank: z -2 → 1 now (the new funbox sits at
+    // z = -8 to 1), rising over twice the distance, so ~4.8° instead
     // of the original ~9.5° — still a real slope, just a gentler one.
     const shallow = (() => {
-      g.place(0, 5.8, 0, 5);
+      g.place(0, -1.5, 0, 5);
       g.hold(0.6);
       return g.ride.speed;
     })();
     // The home park's south quarterpipe wall, well up into the transition
-    // (z = -40 is the flat join now, z = -41.83 the lip — the join moved
+    // (z = -44 is the flat join now, z = -45.83 the lip — the join moved
     // out with TRACK_SCALE but the curve itself, and so the distance from
     // join to lip, did not) where the slope is much steeper than the
     // funbox's bank.
     const steep = (() => {
-      g.place(0, -41.3, 0, 5);
+      g.place(0, -45, 0, 5);
       g.hold(0.4);
       return g.ride.speed;
     })();
@@ -679,7 +679,10 @@ section('Transitions');
   // vertical-impact test would wrongly call a slam.
   const dropIn = await run(() => {
     const g = window.__skate;
-    g.place(0, 44, Math.PI, 1.5); // on the deck, rolling at the lip (base moved to z = 40)
+    // Off the deck of the south quarterpipe, which is a 1.6 m drop.
+    // The south quarter sits at z = -22 (1x), so after TRACK_SCALE the deck
+    // is at z = -44, and we roll north toward the ramp.
+    g.place(0, -48, Math.PI * 0, 1.5);
     let bailed = false;
     let fastest = 0;
     for (let i = 0; i < 700; i++) {
@@ -698,8 +701,10 @@ section('Grinds and manuals');
 {
   const grind = await run(() => {
     const g = window.__skate;
-    // Straight down the flat bar, ollie onto it.
-    g.place(-20, -13, 0, 6.5);
+    // Straight down the flat bar, ollie onto it. The new flat bar sits at
+    // x = -11, z = -10..10 (1x), so after TRACK_SCALE the approach starts
+    // at x = -22, z = -22 (just south of the bar).
+    g.place(-22, -22, 0, 6.5);
     g.drive(1 / 120, { trick: 'ollie', trickCharge: 0.55 });
     let locked = null;
     for (let i = 0; i < 240 && !locked; i++) {
@@ -735,7 +740,7 @@ section('Grinds and manuals');
   // not an ornament.
   const dropped = await run(() => {
     const g = window.__skate;
-    g.place(-20, -13, 0, 6.5);
+    g.place(-22, -22, 0, 6.5);
     g.drive(1 / 120, { trick: 'ollie', trickCharge: 0.55 });
     for (let i = 0; i < 240 && g.ride.mode !== 2; i++) g.drive(1 / 120, {});
     const on = g.ride.mode === 2;
@@ -786,10 +791,10 @@ section('Slams');
 {
   const wall = await run(() => {
     const g = window.__skate;
-    // Straight into the bottom step of the stair set — its x centre (36) is
-    // unchanged by the scale-up, but the bottom step itself now sits at
-    // z = 6.4, not 3.2, so the approach starts further out too.
-    g.place(36, 4, 0, 7);
+    // Straight into the bottom step of the stair set — the new set sits at
+    // x = 14..18, z = -18..-12 (1x), so after TRACK_SCALE the approach
+    // starts at x = 30, z = -44 (just south of the stairs).
+    g.place(30, -44, 0, 7);
     for (let i = 0; i < 600 && g.ride.mode !== 3; i++) g.drive(1 / 120, {});
     return { mode: g.ride.mode, reason: g.ride.bailReason };
   });
@@ -797,7 +802,7 @@ section('Slams');
 
   const kerb = await run(() => {
     const g = window.__skate;
-    g.place(36, 4, 0, 1.0);
+    g.place(30, -44, 0, 1.0);
     for (let i = 0; i < 600; i++) g.drive(1 / 120, {});
     return { mode: g.ride.mode, speed: g.ride.speed };
   });
@@ -806,7 +811,7 @@ section('Slams');
   const drop = await run(() => {
     const g = window.__skate;
     // Off the top of the stair-set platform, which is a 1.25 m drop.
-    g.place(36, 16, Math.PI, 9);
+    g.place(30, -16, Math.PI, 9);
     let bailed = false;
     for (let i = 0; i < 900; i++) {
       g.drive(1 / 120, {});
@@ -1574,7 +1579,7 @@ section('Collectibles');
     const l = g.logos[0];
     g.place(l.x, l.z, 0, 0);
   });
-  await sleep(250); // real time, so the live loop's own pickup check runs it
+  await sleep(1500); // real time, so the live loop's own pickup check runs it
   const picked = await run(() => ({
     collected: window.__skate.logos[0].collected,
     saved: window.__skate.save.logos,

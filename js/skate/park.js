@@ -885,14 +885,14 @@ export const PARKS = [
   {
     id: 'home',
     name: 'Home Park',
-    blurb: 'Funbox, a handrail and two transitions. Where every run starts.',
+    blurb: 'Flow-first design: pump the transitions, transfer the spine, carve the hip.',
     seed: 0x51ed,
     padOnly: true,
     extentX: 28,
     spawn: { x: 0, y: 0, z: -14, yaw: 0 },
     patrol: [
-      { x: 0, z: -16 }, { x: 9, z: -2 }, { x: 9, z: 12 }, { x: 0, z: 17 },
-      { x: -9, z: 2 }, { x: -6, z: -12 },
+      { x: 0, z: -16 }, { x: 10, z: -8 }, { x: 10, z: 8 }, { x: 0, z: 16 },
+      { x: -10, z: 8 }, { x: -10, z: -8 },
     ],
     logos: [
       { x: 0, z: -8 }, { x: -8, z: 0 }, { x: 10, z: 0 }, { x: 0, z: 12 },
@@ -908,49 +908,68 @@ export const PARKS = [
       p.add(new Slab(-13, 13, 20 + qpN.uTop / TRACK_SCALE, 29, 2.1, SMOOTH, CONCRETE, 2.2));
       p.coping(-13, 13, 20 + qpN.uTop / TRACK_SCALE, 2.1);
 
-      // --- south transition: smaller, for pumping back the other way -------
-      const qpS = p.add(new Quarter(-9, 9, -20, 'z', -1, 2.4, 1.6, 3.0));
-      p.add(new Slab(-9, 9, -29, -20 - qpS.uTop / TRACK_SCALE, 1.6, SMOOTH, CONCRETE, 1.7));
-      p.coping(-9, 9, -20 - qpS.uTop / TRACK_SCALE, 1.6);
+      // --- spine: two back-to-back quarters for transfers -------------------
+      // Back-to-back quarters with no deck between them — the only way across
+      // is a transfer, which keeps the flow alive instead of stopping it.
+      const spineN = p.add(new Quarter(-7, 7, 3, 'z', 1, 2.0, 1.5));
+      const spineS = p.add(new Quarter(-7, 7, 1, 'z', -1, 2.0, 1.5));
+      p.coping(-7, 7, 3 + spineN.uTop / TRACK_SCALE, 1.5);
+      p.coping(-7, 7, 1 - spineS.uTop / TRACK_SCALE, 1.5);
 
-      // --- west bank, with a ledge along its top ----------------------------
-      p.add(new Bank(-24, -19, -9, 9, 'x', 1.6, 0));
-      p.add(new Slab(-26, -24, -9, 9, 1.6, SMOOTH, CONCRETE, 1.7));
-      p.ledge(-24, 1.6, -9, -24, 1.6, 9);
+      // --- banked hip: diagonal bank for turning and carving ----------------
+      // A raised hip on the east side — carve up from the flat, turn, and
+      // pump back down with speed for the next line.
+      p.add(new Bank(12, 22, 6, 16, 'x', 0, 1.3));
+      p.add(new Slab(12, 22, 16, 20, 1.3, SMOOTH, CONCRETE, 1.4));
+      p.ledge(12, 0.0, 6, 12, 0.0, 16);
+
+      // --- west bank: approach to the spine ----------------------------------
+      // A wide bank on the west side that feeds into the spine — roll up it,
+      // transfer over the spine, and land on the other side for a line.
+      p.add(new Bank(-24, -18, -8, 8, 'x', 1.6, 0));
+      p.add(new Slab(-26, -24, -8, 8, 1.6, SMOOTH, CONCRETE, 1.7));
+      p.ledge(-24, 1.6, -8, -24, 1.6, 8);
+
+      // --- kicker: small quarter for airs on the way to the south transition -
+      p.add(new Quarter(-20, -17, 5, 'z', -1, 1.8, 0.9));
+
+      // --- south transition: smaller, for pumping back the other way -------
+      const qpS = p.add(new Quarter(-10, 10, -22, 'z', -1, 2.4, 1.6, 3.0));
+      p.add(new Slab(-10, 10, -31, -22 - qpS.uTop / TRACK_SCALE, 1.6, SMOOTH, CONCRETE, 1.7));
+      p.coping(-10, 10, -22 - qpS.uTop / TRACK_SCALE, 1.6);
 
       // --- funbox: bank up, flat rail across the top, bank down -------------
-      p.add(new Bank(-3.2, 3.2, -6, -3, 'z', 0, 0.65));
-      p.add(new Slab(-3.2, 3.2, -3, 3, 0.65, SMOOTH, CONCRETE, 0.7));
-      p.add(new Bank(-3.2, 3.2, 3, 6, 'z', 0.65, 0));
-      p.rail(0, 0.97, -3.1, 0, 0.97, 3.1, 0.03);
-      p.ledge(-3.2, 0.65, -3, -3.2, 0.65, 3);
-      p.ledge(3.2, 0.65, -3, 3.2, 0.65, 3);
+      // Positioned between the spine and south quarter for linking lines.
+      p.add(new Bank(-3.2, 3.2, -8, -5, 'z', 0, 0.65));
+      p.add(new Slab(-3.2, 3.2, -5, -2, 0.65, SMOOTH, CONCRETE, 0.7));
+      p.add(new Bank(-3.2, 3.2, -2, 1, 'z', 0.65, 0));
+      p.rail(0, 0.97, -8.1, 0, 0.97, -1.9, 0.03);
+      p.ledge(-3.2, 0.65, -5, -3.2, 0.65, -2);
+      p.ledge(3.2, 0.65, -5, 3.2, 0.65, -2);
 
       // --- east manual pad ---------------------------------------------------
-      p.add(new Bank(3.4, 6, -2.2, 2.2, 'x', 0, 0.55));
-      p.add(new Slab(6, 14, -2.2, 2.2, 0.55, SMOOTH, CONCRETE, 0.6));
-      p.ledge(6, 0.55, 2.2, 14, 0.55, 2.2);
-      p.ledge(6, 0.55, -2.2, 14, 0.55, -2.2);
+      // A raised pad for manuals and ledge grinds, feeding into the banked hip.
+      p.add(new Bank(4, 7, -3, 3, 'x', 0, 0.55));
+      p.add(new Slab(7, 15, -3, 3, 0.55, SMOOTH, CONCRETE, 0.6));
+      p.ledge(7, 0.55, 3, 15, 0.55, 3);
+      p.ledge(7, 0.55, -3, 15, 0.55, -3);
 
-      // --- stair set and handrail --------------------------------------------
-      // Left at the stairs' own height (steps × rise) on purpose — this bank
-      // and slab are the landing the steps actually reach, not a ramp of
-      // their own, so they have to stay tied to that fixed geometry.
-      p.add(new Bank(13, 23, 16, 20, 'z', 1.25, 0));
-      p.add(new Slab(13, 23, 6, 16, 1.25, SMOOTH, CONCRETE, 1.35));
-      p.add(new Stairs(13, 23, 6, 'z', -1, 5, 0.25, 0.56));
-      p.rail(14.4, 1.36, 6.5, 14.4, 0.06, 2.4, 0.028);
+      // --- small stair set and handrail --------------------------------------
+      // A short set on the east side for technical lines — the handrail is the
+      // point, same as every other park's stairs.
+      p.add(new Bank(14, 18, -12, -8, 'z', 1.25, 0));
+      p.add(new Slab(14, 18, -18, -12, 1.25, SMOOTH, CONCRETE, 1.35));
+      p.add(new Stairs(14, 18, -18, 'z', -1, 5, 0.25, 0.56));
+      p.rail(15, 1.36, -17.5, 15, 0.06, -13.4, 0.028);
 
-      // --- flat bar out west --------------------------------------------------
-      p.rail(-10, 0.4, -6, -10, 0.4, 8, 0.028);
+      // --- flat bars --------------------------------------------------------
+      // Two flat bars along the flow path — one north-south, one east-west.
+      p.rail(-11, 0.4, -10, -11, 0.4, 10, 0.028);
+      p.rail(-16, 0.4, 0, -8, 0.4, 0, 0.028);
 
-      // --- kicker, for airs on the way to anywhere ----------------------------
-      p.add(new Quarter(-17.4, -14.6, 5.6, 'z', -1, 1.8, 0.81));
-
-      // --- more rails, spread across the bigger pad ---------------------------
-      p.rail(18, 0.42, -18, 18, 0.42, 2, 0.028);
-      p.rail(-16, 0.3, 10, 4, 0.3, 10, 0.028);
-      p.rail(20, 0.4, -25, 20, 0.4, -15, 0.028);
+      // --- rails for the hip approach and landing ----------------------------
+      p.rail(12, 1.35, 16, 12, 0.06, 6, 0.028);
+      p.rail(22, 0.42, -20, 22, 0.42, 2, 0.028);
     },
   },
 
