@@ -1,31 +1,43 @@
 name: opencode
+
 on:
   issue_comment:
     types: [created]
+
   workflow_dispatch:
     inputs:
       prompt:
         description: "What should OpenCode do?"
         required: true
         default: "Analyze this repository"
+
 permissions:
   contents: write
   issues: write
   pull-requests: write
   id-token: write
+
 jobs:
   opencode:
     if: |
       github.event_name == 'workflow_dispatch' ||
-      contains(github.event.comment.body, '/opencode') ||
-      contains(github.event.comment.body, '/oc')
+      (
+        github.event_name == 'issue_comment' &&
+        (
+          contains(github.event.comment.body, '/opencode') ||
+          contains(github.event.comment.body, '/oc')
+        )
+      )
+
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
           persist-credentials: false
+
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         with:
