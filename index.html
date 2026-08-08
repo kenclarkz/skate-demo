@@ -94,6 +94,31 @@
         </div>
 
         <pre id="debug" hidden></pre>
+
+        <!-- The radio: one button that opens the station panel, plus a
+             now-playing toast that slides in whenever the track changes.
+             Built by js/skate/radio.js, which only labels and binds this —
+             the markup itself lives here so the module has no HTML of its
+             own to manage. -->
+        <div id="radio" hidden>
+          <button id="radio-open" type="button" aria-haspopup="dialog" aria-label="Open the radio">
+            <span class="radio-dot" aria-hidden="true"></span><b>Radio</b>
+          </button>
+          <div id="radio-panel" role="dialog" aria-label="Radio stations" hidden>
+            <div class="radio-panel-head">
+              <h2>Radio</h2>
+              <button id="radio-logout" type="button" hidden>Sign out</button>
+            </div>
+            <p id="radio-status"></p>
+            <div id="radio-stations"></div>
+            <button id="radio-login" type="button">Connect Spotify</button>
+          </div>
+          <button id="radio-now" type="button" aria-label="What is playing" hidden>
+            <span class="radio-eq" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span id="radio-now-track"></span>
+            <span id="radio-now-station"></span>
+          </button>
+        </div>
       </div>
 
       <div id="overlay" hidden>
