@@ -52,6 +52,7 @@ export class Audio {
     this.wasSliding = false;
     this.wasReverting = false;
     this.musicVolume = 0.5;
+    this.ducked = false; // a real (Spotify) station is the radio — see setMusicDucked
   }
 
   /**
@@ -200,7 +201,7 @@ export class Audio {
   async startMusic() {
     const ctx = this.ctx;
     this.musicGain = ctx.createGain();
-    this.musicGain.gain.value = this.musicVolume;
+    this.musicGain.gain.value = this.ducked ? 0 : this.musicVolume;
     this.musicGain.connect(this.master);
     try {
       const res = await fetch('audio/theme.mp3');
@@ -230,6 +231,18 @@ export class Audio {
   setMusicVolume(v) {
     this.musicVolume = clamp(v, 0, 1);
     if (this.musicGain) this.musicGain.gain.setTargetAtTime(this.musicVolume, this.ctx.currentTime, 0.05);
+  }
+
+  /**
+   * While a real (Spotify) station is the radio, the park's own speakers duck
+   * out of the way so the two never stack. The saved music volume still
+   * applies to the theme the moment it is actually audible again.
+   */
+  setMusicDucked(duck) {
+    this.ducked = !!duck;
+    if (this.musicGain) {
+      this.musicGain.gain.setTargetAtTime(this.ducked ? 0 : this.musicVolume, this.ctx.currentTime, 0.05);
+    }
   }
 
   get ready() {

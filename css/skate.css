@@ -434,6 +434,275 @@ body {
   white-space: pre;
 }
 
+/* --- the radio ------------------------------------------------------------- */
+/* The in-game half: a corner readout, not a control. The skip buttons sit
+   under the label and nothing here ever blocks the run's own touches. */
+#radio {
+  /* Unpositioned on purpose — its pieces anchor to #hud, not to each other. */
+  pointer-events: none;
+}
+
+.radio-mini {
+  position: absolute;
+  top: calc(72px + var(--pad-t));
+  left: calc(14px + var(--pad-l));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(44vw, 230px);
+  padding: 7px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.radio-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hot);
+  box-shadow: 0 0 8px rgba(255, 201, 63, 0.7);
+}
+
+.radio-scroll {
+  overflow: hidden;
+  min-width: 26px;
+  max-width: 100%;
+}
+
+.radio-track {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  will-change: transform;
+}
+
+/* The ticker only runs for names too long to fit — a short name sitting
+   still is the readable default, and radio.js adds .scroll only on overflow. */
+.radio-track.scroll {
+  animation: radio-ticker 9s linear infinite;
+}
+
+@keyframes radio-ticker {
+  from { transform: translateX(100%); }
+  to { transform: translateX(-100%); }
+}
+
+.radio-controls {
+  position: absolute;
+  top: calc(106px + var(--pad-t));
+  left: calc(14px + var(--pad-l));
+  display: flex;
+  gap: 6px;
+}
+
+.radio-controls button {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 30px;
+  padding: 0;
+  min-height: 0;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.radio-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* The now-playing toast: a headline that slides in from the right when the
+   track changes and gets out again. A clone on every announce, so its
+   entrance animation restarts from a fresh node. */
+#radio-now {
+  position: absolute;
+  top: calc(104px + var(--pad-t));
+  right: calc(14px + var(--pad-r));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(64vw, 320px);
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  text-align: left;
+  animation: radio-toast-in 0.35s ease-out;
+}
+
+#radio-now.out {
+  animation: radio-toast-out 0.35s ease-in forwards;
+}
+
+@keyframes radio-toast-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes radio-toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(28px); }
+}
+
+#radio-now-track,
+#radio-now-station {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#radio-now-track {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#radio-now-station {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* Three little bars that bob like an equalizer while anything is playing. */
+.radio-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  flex: none;
+}
+
+.radio-eq i {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--hot);
+  animation: radio-eq 0.8s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.radio-eq i:nth-child(2) {
+  animation-delay: 0.15s;
+  height: 70%;
+}
+
+.radio-eq i:nth-child(3) {
+  animation-delay: 0.3s;
+  height: 45%;
+}
+
+@keyframes radio-eq {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+/* --- the radio settings ---------------------------------------------------- */
+/* The station picker inside Settings: a row of cards, one per playlist or
+   search hit, plus the connect/disconnect split and the song search box. */
+.radio-stations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.radio-station {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.radio-station.active {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+.radio-art {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: rgba(10, 14, 18, 0.7);
+  font-size: 18px;
+  color: var(--dim);
+  overflow: hidden;
+  background-position: center;
+  background-size: cover;
+}
+
+.radio-art.photo {
+  font-size: 0;
+}
+
+.radio-station-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.radio-station-text b {
+  font-size: 13px;
+}
+
+.radio-station-text i {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radio-live {
+  display: none;
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--good);
+}
+
+.radio-station.active .radio-live {
+  display: inline;
+}
+
+.radio-search-input {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  min-height: 46px;
+  padding: 10px 14px;
+  color: var(--ink);
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.radio-search-input:focus {
+  border-color: var(--hot);
+}
+
+.radio-search-input::placeholder {
+  color: var(--dim);
+}
+
 /* --- screens ------------------------------------------------------------- */
 #overlay {
   position: absolute;

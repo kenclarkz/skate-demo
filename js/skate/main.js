@@ -25,6 +25,7 @@ import { makeBirds } from './bird.js';
 import { makeLogos, checkPickup } from './collectible.js';
 import { registerServiceWorker, setupInstall } from '../game/pwa.js';
 import { LightingManager, DAY, NIGHT } from './lighting.js';
+import { boot as bootRadio } from './radio.js';
 
 const START = 'start';
 const PLAYING = 'playing';
@@ -229,6 +230,10 @@ function updateShadow() {
 const hud = new Hud();
 if (DEBUG) hud.enableDebug();
 const audio = new Audio(save.sound);
+// The radio is an optional extra: it needs Spotify's provider, and a broken
+// login must never take the game down, so a null back from bootRadio just
+// means the in-game radio stays hidden.
+const radio = bootRadio(save, audio);
 const input = new Input(document.getElementById('app'));
 const gestureTrail = new GestureTrail(document.getElementById('gesture-trail'));
 
@@ -373,6 +378,16 @@ hud.on.mount = () => mount();
 hud.on.sit = () => walker.toggleSit();
 hud.on.grabStart = (id) => input.beginGrab(id);
 hud.on.grabEnd = (id) => input.endGrab(id);
+// The radio's corner bar only exists mid-run: a menu name hides it, null
+// (the overlay coming down) shows it. Opening Settings also refreshes the
+// playlist list, since that is where a logged-in player goes to pick one.
+if (radio) hud.on.screenChanged = (name) => radio.onScreen(name);
+// A Spotify login redirect lands back on the start screen; the radio asks for
+// the settings screen again so the freshly-loaded playlists are in front of
+// the player instead of hidden behind a tap.
+document.addEventListener('radio:open-settings', () => {
+  if (state === START || state === SETTINGSMENU) showSettings();
+});
 
 /** Buy the board if it is not owned yet, then equip it either way. */
 function selectBoard(id) {
@@ -475,6 +490,7 @@ hud.on.reset = () => {
   hud.setPreviewLook(look.palette, look.style);
   C.setTopSpeed(save.speed);
   C.setCamZoom(save.camZoom);
+  radio?.resetSettings();
 };
 input.onPause = () => {
   if (state === PLAYING || state === WALKING || state === PAUSED) togglePause();
@@ -994,6 +1010,7 @@ window.__skate = {
   input,
   hud,
   audio,
+  radio,
   save,
   chase,
   scene,

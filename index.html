@@ -95,23 +95,21 @@
 
         <pre id="debug" hidden></pre>
 
-        <!-- The radio: one button that opens the station panel, plus a
-             now-playing toast that slides in whenever the track changes.
-             Built by js/skate/radio.js, which only labels and binds this —
-             the markup itself lives here so the module has no HTML of its
-             own to manage. -->
+        <!-- The radio, while you're skating: a tiny station card tucked in the
+             corner with the track name ticking across it, skip buttons under
+             it, and a now-playing toast that slides in whenever the track
+             changes. The station picker itself — Spotify sign-in, playlists,
+             song search — lives in Settings. Built by js/skate/radio.js, which
+             only labels and binds this; the markup lives here so the module
+             has no HTML of its own to manage. -->
         <div id="radio" hidden>
-          <button id="radio-open" type="button" aria-haspopup="dialog" aria-label="Open the radio">
-            <span class="radio-dot" aria-hidden="true"></span><b>Radio</b>
-          </button>
-          <div id="radio-panel" role="dialog" aria-label="Radio stations" hidden>
-            <div class="radio-panel-head">
-              <h2>Radio</h2>
-              <button id="radio-logout" type="button" hidden>Sign out</button>
-            </div>
-            <p id="radio-status"></p>
-            <div id="radio-stations"></div>
-            <button id="radio-login" type="button">Connect Spotify</button>
+          <div class="radio-mini">
+            <span class="radio-dot" aria-hidden="true"></span>
+            <span class="radio-scroll"><span id="radio-track" class="radio-track"></span></span>
+          </div>
+          <div class="radio-controls">
+            <button id="radio-prev" type="button" aria-label="Previous track" disabled>&#8249;</button>
+            <button id="radio-next" type="button" aria-label="Next track" disabled>&#8250;</button>
           </div>
           <button id="radio-now" type="button" aria-label="What is playing" hidden>
             <span class="radio-eq" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -158,6 +156,22 @@
             </div>
             <button id="opt-sound" type="button">Sound: On</button>
             <button id="opt-holdpush" type="button">Hold to push: On</button>
+
+            <!-- The radio settings: sign in to Spotify here, pick a playlist
+                 (or search a song), and it plays over the park. The little
+                 radio that shows the track in the corner of a run is driven
+                 by js/skate/radio.js, which binds these elements and the
+                 HUD half from index.html. -->
+            <h2 class="store-section-title">Radio</h2>
+            <p id="radio-settings-status" class="tag"></p>
+            <button id="radio-settings-login" type="button">Connect Spotify</button>
+            <button id="radio-settings-logout" type="button" hidden>Disconnect</button>
+            <h2 class="store-section-title">Your playlists</h2>
+            <div id="radio-settings-stations" class="radio-stations"></div>
+            <h2 class="store-section-title">Search a song</h2>
+            <input type="search" id="radio-search" class="radio-search-input" placeholder="Search songs or artists…" autocomplete="off" aria-label="Search songs on Spotify">
+            <div id="radio-search-results" class="radio-stations" hidden></div>
+            <button id="opt-radio-visible" type="button">Radio in game: On</button>
           </nav>
           <button id="btn-settings-back" class="primary" type="button">Back</button>
         </section>
