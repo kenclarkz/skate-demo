@@ -26,8 +26,13 @@
 
 /** The redirect URIs the Spotify app must list. Production is always the
  *  GitHub Pages URL; development is the loopback IP Spotify now insists on
- *  (localhost aliases are rejected by the current redirect rules). */
-const PROD_REDIRECT = 'https://kenclarkz.github.io/skate/';
+ *  (localhost aliases are rejected by the current redirect rules).
+ *
+ *  IMPORTANT: this repo (skate-demo) is served by GitHub Pages at
+ *  /skate-demo/ — not /skate/. The redirect must match the live URL exactly,
+ *  because Spotify bounces the player back there and any path that is not a
+ *  real Pages site answers with "There isn't a GitHub Pages site here." */
+const PROD_REDIRECT = 'https://kenclarkz.github.io/skate-demo/';
 const DEV_REDIRECT = 'http://127.0.0.1:8080/';
 
 // The station that is always there, whether or not anyone is signed in. When
@@ -507,11 +512,19 @@ class SpotifyProvider {
     if (!station.uris || !station.uris.length) throw new Error('That station has nothing in it.');
     await this.ensureConnected();
     const state = await this.player.getCurrentState();
-    if (!state) {
-      // The device exists but has no session yet; play() activates it.
+    // A playlist is a context, not a track: the SDK's play() only starts it via
+    // context_uri, while search results (single tracks) go through the uris
+    // path. Passing a spotify:playlist: URI in uris simply refuses to play.
+    const isContext = station.uris[0].startsWith('spotify:playlist:');
+    // The SDK device is only "the" player once it is the active device. If the
+    // account is mid-session elsewhere (a phone, a desktop client), activateElement()
+    // is the transfer — do it whenever the current state is not already this device.
+    if (!state?.device?.id || state.device.id !== this.deviceId) {
       await this.player.activateElement();
     }
-    await this.player.play({ uris: station.uris, offset: 0 });
+    await this.player.play(
+      isContext ? { context_uri: station.uris[0] } : { uris: station.uris, offset: 0 }
+    );
     this.startPolling();
   }
 
