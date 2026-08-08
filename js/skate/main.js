@@ -382,11 +382,12 @@ hud.on.grabEnd = (id) => input.endGrab(id);
 // (the overlay coming down) shows it. Opening Settings also refreshes the
 // playlist list, since that is where a logged-in player goes to pick one.
 if (radio) hud.on.screenChanged = (name) => radio.onScreen(name);
-// A Spotify login redirect lands back on the start screen; the radio asks for
+// A Spotify login redirect lands back on a fresh page load; the radio asks for
 // the settings screen again so the freshly-loaded playlists are in front of
-// the player instead of hidden behind a tap.
+// the player instead of hidden behind a tap. Whatever screen the reload landed
+// on — start, the guide, a menu — settings is where those playlists live.
 document.addEventListener('radio:open-settings', () => {
-  if (state === START || state === SETTINGSMENU) showSettings();
+  showSettings();
 });
 
 /** Buy the board if it is not owned yet, then equip it either way. */
