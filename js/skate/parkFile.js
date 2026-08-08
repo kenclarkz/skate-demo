@@ -26,7 +26,7 @@ export function newFile() {
     blurb: 'Built by you.',
     extent: DEFAULT_EXTENT,
     ground: 'concrete',
-    spawn: { x: 0, z: -(DEFAULT_EXTENT - 3) },
+    spawn: { x: 0, z: -(DEFAULT_EXTENT - 3), yaw: 0 },
     objects: [],
   };
 }
@@ -65,6 +65,7 @@ export function validate(raw) {
     file.spawn = {
       x: clampNum(raw.spawn.x, -m, m, 0),
       z: clampNum(raw.spawn.z, -m, m, -(file.extent - 3)),
+      yaw: clampNum(raw.spawn.yaw, -Math.PI * 4, Math.PI * 4, 0),
     };
   }
   if (Array.isArray(raw.objects)) {
@@ -118,21 +119,24 @@ export function buildDef(file) {
 }
 
 /** The player's spawn: the file's choice if it is clear of objects and on the
- * pad, otherwise the nearest clear point in an expanding spiral around it. */
+ * pad, otherwise the nearest clear point in an expanding spiral around it.
+ * Always carries a yaw — the ride model reads it straight off the spawn, and
+ * `undefined` would corrupt the heading the first step it is used. */
 export function spawnFor(file) {
   const want = file.spawn || { x: 0, z: -(file.extent - 3) };
+  const yaw = Number.isFinite(want.yaw) ? want.yaw : 0;
   const m = file.extent - 1.5;
-  if (clearAt(file.objects, want.x, want.z)) return { x: want.x, z: want.z };
+  if (clearAt(file.objects, want.x, want.z)) return { x: want.x, z: want.z, yaw };
   for (let ring = 1; ring < 20; ring++) {
     for (let i = 0; i < ring * 8; i++) {
       const a = (i / (ring * 8)) * Math.PI * 2;
       const x = want.x + Math.cos(a) * ring * 0.75;
       const z = want.z + Math.sin(a) * ring * 0.75;
       if (x < -m || x > m || z < -m || z > m) continue;
-      if (clearAt(file.objects, x, z)) return { x: Math.round(x * 20) / 20, z: Math.round(z * 20) / 20 };
+      if (clearAt(file.objects, x, z)) return { x: Math.round(x * 20) / 20, z: Math.round(z * 20) / 20, yaw };
     }
   }
-  return { x: want.x, z: want.z };
+  return { x: want.x, z: want.z, yaw };
 }
 
 /**

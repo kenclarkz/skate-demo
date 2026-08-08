@@ -440,6 +440,9 @@ export class Park {
     // at the exact world positions they should be ridden at.
     const SCALE = def.scale || TRACK_SCALE;
     this.spawn = { ...def.spawn, x: def.spawn.x * SCALE, z: def.spawn.z * SCALE };
+    // A spawn that forgot its yaw would hand the ride model `undefined` the
+    // first time it resets — default it here so no def can corrupt the run.
+    if (!Number.isFinite(this.spawn.yaw)) this.spawn.yaw = 0;
     this.patrol = def.patrol.map((pt) => ({ x: pt.x * SCALE, z: pt.z * SCALE }));
     this.logos = def.logos.map((pt) => ({ x: pt.x * SCALE, z: pt.z * SCALE }));
     // Every map shares this footprint by default; a def can ask for its own
