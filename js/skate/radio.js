@@ -65,12 +65,13 @@ const SCOPES = [
 ];
 
 /** The redirect URL the Spotify app must list. GitHub Pages is the prod host;
- *  a local http server on 8080 swaps in automatically. */
+ *  a local http server on 8080 swaps in automatically — whichever of localhost
+ *  or 127.0.0.1 the dev reached, the URI is normalised to the one to register. */
 function redirectUri() {
-  const dev = new URL(DEV_HOST, 'http://localhost');
-  if (location.host === dev.host || location.host === dev.host.replace('localhost', '127.0.0.1')) {
-    return new URL(location.pathname, `http://${dev.host}`).href;
-  }
+  const dev =
+    location.port === '8080' &&
+    (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+  if (dev) return new URL(location.pathname, `http://${DEV_HOST}`).href;
   return location.origin + location.pathname;
 }
 
