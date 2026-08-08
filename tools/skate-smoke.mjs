@@ -3508,6 +3508,11 @@ section('The park editor');
   const tested = await run(() => {
     const g = window.__skate;
     g.designer.on.test();
+    // Ride it like a real park: a user park's spawn must be a spawn the model
+    // can start from (a missing yaw turns the heading to NaN on the first
+    // step and throws the camera — and with it the whole visible environment —
+    // out of the scene). Push for a second and check the rider survives.
+    for (let i = 0; i < 120; i++) g.drive(1 / 120, { push: true });
     return {
       state: g.state,
       park: g.park.id,
@@ -3515,11 +3520,33 @@ section('The park editor');
       chromeShown: !document.getElementById('designer').hidden,
       spawnX: g.park.spawn.x,
       spawnZ: g.park.spawn.z,
+      spawnYaw: g.park.spawn.yaw,
+      rideFinite: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z, g.ride.yaw].every(Number.isFinite),
+      rideYaw: g.ride.yaw,
+      fenceLamps: (g.park.lampPositions || []).length,
+      botsOnPark: g.bots.every((b) => b.ride?.park?.id === 'user-smoke'),
     };
   });
   ok(tested.state === 'playing' && !tested.active && !tested.chromeShown, 'Save & Test leaves the editor and starts the run');
   ok(tested.park === 'user-smoke', `on the park just built (${tested.park})`);
   ok(tested.spawnX === 0 && tested.spawnZ === -17, 'from the file\'s own clear spawn');
+  ok(tested.spawnYaw === 0, 'with a real heading on the spawn');
+  ok(tested.rideFinite, `and the rider stays a finite, rideable point (yaw ${tested.rideYaw})`);
+  ok(tested.fenceLamps > 0, 'with the fence and its lamps around the pad');
+  ok(tested.botsOnPark, 'and the AI skaters moved onto the new park');
+
+  // Re-testing an already-loaded park must still rebuild it: an edit made
+  // between tests has to show up on the ride, not be masked by the old copy.
+  const retested = await run(() => {
+    const g = window.__skate;
+    g.freeze();
+    g.openDesigner(JSON.parse(JSON.stringify(g.designer.file)));
+    const before = g.designer.file.objects.length;
+    g.designer.addObject('slab');
+    g.designer.on.test();
+    return { before, features: g.park.features.length };
+  });
+  ok(retested.features >= retested.before + 3, `re-testing rebuilds the park with the new edit (${retested.before} objects → ${retested.features} surfaces)`);
 
   // The My Parks screen lists the saved park, and Delete removes it.
   await run(() => {

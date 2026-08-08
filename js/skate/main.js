@@ -442,7 +442,10 @@ designer.on.test = () => {
   designer.save();
   const def = buildDef(designer.file);
   leaveDesigner();
-  if (park.id !== def.id) loadPark(def);
+  // Always rebuild: testing a park that is already loaded must still pick up
+  // the edits made since it was last built — `park.id === def.id` alone is no
+  // reason to keep the stale geometry up.
+  loadPark(def);
   respawn();
   startGame();
 };
