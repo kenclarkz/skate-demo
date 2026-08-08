@@ -43,23 +43,10 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Find obsolete OpenCode model
+      - name: Configure Git identity
         run: |
-          echo "=== Searching repository ==="
-          if grep -R "claude-sonnet-4-20250514" . \
-            --exclude-dir=.git \
-            --exclude-dir=node_modules; then
-            echo ""
-            echo "WARNING: OLD MODEL FOUND IN REPOSITORY"
-          else
-            echo "Old model was NOT found in repository."
-          fi
-
-          echo ""
-          echo "=== OpenCode config files ==="
-          find . -maxdepth 4 \
-            \( -name "opencode.json" -o -name "opencode.jsonc" \) \
-            -print
+          git config --global user.name "OpenCode"
+          git config --global user.email "opencode@users.noreply.github.com"
 
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
