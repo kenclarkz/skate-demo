@@ -1278,7 +1278,7 @@ section('Parks');
     const g = window.__skate;
     return { count: g.parks.length, ids: g.parks.map((p) => p.id), current: g.park.id };
   });
-  ok(info.count === 13, `there are thirteen parks (${info.count})`);
+  ok(info.count === 14, `there are fourteen parks (${info.count})`);
   ok(new Set(info.ids).size === info.count, 'each with a distinct id');
   ok(info.current === 'home', 'and the game boots into Home Park');
 
@@ -2579,7 +2579,7 @@ section('Accessory shop');
 section('Menu scrolling and back buttons, on a short screen');
 {
   // A phone-shaped viewport, short enough that the shop's four board types
-  // and the park picker's thirteen cards cannot possibly fit without
+  // and the park picker's fourteen cards cannot possibly fit without
   // scrolling — the exact case a laptop-sized test window never exercises.
   await page.setViewportSize({ width: 380, height: 640 });
 
@@ -2631,7 +2631,7 @@ section('Menu scrolling and back buttons, on a short screen');
   ok(scrolled.scrollTop > 0, `scrolling the shop actually moves it (scrollTop ${scrolled.scrollTop})`);
   ok(scrolled.backOnScreen, 'and the back button scrolls into view rather than staying stranded below the fold');
 
-  // The park picker gets the same treatment — thirteen cards is a lot more
+  // The park picker gets the same treatment — fourteen cards is a lot more
   // than the seven this screen was designed around.
   const parks = await run(() => {
     const g = window.__skate;
@@ -2642,7 +2642,7 @@ section('Menu scrolling and back buttons, on a short screen');
     el.scrollTop = el.scrollHeight;
     return { overflows, hasBack: !!document.getElementById('btn-parks-back'), scrollTop: el.scrollTop };
   });
-  ok(parks.overflows, 'the park picker is also taller than a phone screen with thirteen maps in it');
+  ok(parks.overflows, 'the park picker is also taller than a phone screen with fourteen maps in it');
   ok(parks.hasBack, 'and it has a back button too');
   ok(parks.scrollTop > 0, `and it scrolls the same way (scrollTop ${parks.scrollTop})`);
 
@@ -3188,7 +3188,7 @@ section('Tutorial and menus');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
     return { count: cards.length, ids: cards.map((c) => c.dataset.park) };
   });
-  ok(picker.count === 13, `the park picker lists all thirteen maps (${picker.count})`);
+  ok(picker.count === 14, `the park picker lists all fourteen maps (${picker.count})`);
   const known = await run(() => window.__skate.parks.map((p) => p.id));
   ok(
     picker.ids.every((id) => known.includes(id)),

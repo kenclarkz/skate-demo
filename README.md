@@ -12,7 +12,7 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
 
 ## What's in it
 
-- **Thirteen parks**, built from the same height-field primitives, so the
+- **Fourteen parks**, built from the same height-field primitives, so the
   physics is identical everywhere the geometry differs. Every one of them
   but Open World — deliberately built with no fence, to be roamed past its
   own pad — keeps every wheel, yours and the AI's, on the concrete itself.
