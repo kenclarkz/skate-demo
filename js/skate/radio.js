@@ -71,7 +71,7 @@ const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const API_URL = 'https://api.spotify.com/v1';
 const SCRIPT_URL = 'https://sdk.scdn.co/spotify-player.js'; // the Web Playback SDK
-const DEVICE_MARGIN_MS = 1200;  // a brand-new SDK device takes a beat to wake up
+const DEVICE_MARGIN_MS = 3000;  // a brand-new SDK device takes a beat to wake up
 const POLL_MS = 4000;           // SDK events go quiet when the tab idles; nudge it
 const HIDE_TOAST_MS = 5000;     // a now-playing toast is a headline, not a sticker
 const SCOPES = [
@@ -111,18 +111,33 @@ function trackFromSpotify(t) {
 // the handler has to be installed before the script tag goes in.
 let sdkLoaded = null;
 function loadSdk() {
+  // Already here (a previous load, or the SDK finished arriving late).
+  if (window.Spotify?.Player) return Promise.resolve();
   if (!sdkLoaded) {
     sdkLoaded = new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = SCRIPT_URL;
       s.async = true;
-      window.onSpotifyWebPlaybackSDKReady = () => resolve();
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        console.log('[Spotify] Web Playback SDK script loaded.');
+        resolve();
+      };
       s.onerror = () => {
         window.onSpotifyWebPlaybackSDKReady = null;
         sdkLoaded = null;
         reject(new Error('Could not load the Spotify player SDK.'));
       };
       document.head.appendChild(s);
+      // A loaded-but-silent SDK script (blocked by an extension, an offline
+      // page, a broken CDN response) must fail loudly instead of hanging the
+      // playlist click forever.
+      setTimeout(() => {
+        if (!window.Spotify) {
+          window.onSpotifyWebPlaybackSDKReady = null;
+          sdkLoaded = null;
+          reject(new Error('The Spotify player SDK script loaded but never became ready.'));
+        }
+      }, 10_000);
     });
   }
   return sdkLoaded;
@@ -173,6 +188,7 @@ class SpotifyProvider {
     this.onSignOut = null;       // () => void — auth died mid-session
     this._poll = null;
     this._tokenTimer = null;
+    this._lastLogKey = null;     // last onState() signature we logged — de-dupe the console
   }
 
   get connected() {
@@ -197,14 +213,25 @@ class SpotifyProvider {
         const tick = async () => {
           // The 'ready' listener above may have fired while we waited.
           if (this.deviceId) return resolve(this.deviceId);
-          const st = await player.getCurrentState();
+          const st = await player.getCurrentState().catch(() => null);
           if (st?.device?.id) return resolve(st.device.id);
-          if (performance.now() - t0 > DEVICE_MARGIN_MS) return resolve(null);
+          if (performance.now() - t0 > DEVICE_MARGIN_MS) {
+            console.warn(
+              '[Spotify] No device id within', DEVICE_MARGIN_MS, 'ms — the SDK player never reported ready.'
+            );
+            return resolve(null);
+          }
           setTimeout(tick, 250);
         };
         tick();
       });
     }
+    if (!this.deviceId) return false;
+    // Make this page's SDK device the device Spotify plays through. A play
+    // request aimed at a device Spotify has never activated is accepted with a
+    // 204 but never reaches the browser — that silent miss is exactly what the
+    // explicit transfer exists to prevent (issue step 5).
+    await this.ensureActiveDevice();
     return this.connected;
   }
 
@@ -383,22 +410,23 @@ class SpotifyProvider {
 
   /**
    * One authenticated round-trip against the Spotify Web API. Playback control
-   * (play/pause/skip) lives here, not on the SDK player — the Web Playback SDK
-   * only provides the device and its state events. A 2xx means success (the
-   * play endpoint answers 204 and no body); anything else is read as text so
-   * Spotify's own error message makes it into the console instead of vanishing.
+   * (play/pause/skip/transfer) lives here, not on the SDK player — the Web
+   * Playback SDK only provides the device and its state events. Every request
+   * logs its status and response body, so the exact point a playback pipeline
+   * dies is visible in the console instead of swallowed (issue step 10).
    */
   async api(method, path, body) {
     await this.ensureToken();
+    const payload = body === undefined ? undefined : JSON.stringify(body);
+    console.log(`[Spotify] ${method} ${path}${payload ? ` body=${payload}` : ''}`);
     const res = await fetch(`${API_URL}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.token.access}`,
         'Content-Type': 'application/json',
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: payload,
     });
-    if (res.ok) return res;
     const text = await res.text().catch(() => '');
     let detail = text;
     try {
@@ -406,9 +434,13 @@ class SpotifyProvider {
     } catch {
       /* not JSON — keep the raw response text */
     }
+    console.log(`[Spotify] ${method} ${path} -> ${res.status}${detail ? ` ${detail}` : ''}`);
+    if (res.ok) return res;
     console.error(`[Spotify] ${method} ${path} failed:`, res.status, detail);
     if (res.status === 401) this.onAuthError();
-    throw new Error(`Spotify playback failed (${res.status}${detail ? ` — ${detail}` : ''}).`);
+    const err = new Error(`Spotify playback failed (${res.status}${detail ? ` — ${detail}` : ''}).`);
+    err.status = res.status;
+    throw err;
   }
 
   // --- the SDK player -----------------------------------------------------
@@ -416,24 +448,57 @@ class SpotifyProvider {
     if (this.player) return this.player;
     const P = window.Spotify?.Player;
     if (!P) throw new Error('The Spotify player SDK is unavailable.');
+    console.log('[Spotify] Creating the Web Playback SDK player…');
     const player = new P({
       name: 'Skate radio',
       getOAuthToken: (cb) => cb(this.token?.access),
       volume: 1.0,
     });
     player.addListener('ready', ({ device_id }) => {
+      // The device id the SDK hands over is what the Web API needs to aim
+      // playback at this page. Logged explicitly (issue step 4).
+      console.log('[Spotify] player ready — device id:', device_id);
       this.deviceId = device_id;
+      // The constructor's volume applies at connect time, but re-asserting it
+      // from the ready event keeps the SDK device from ever sitting at zero
+      // after a reconnect (issue step 12).
+      player.setVolume(1.0).then(
+        () => console.log('[Spotify] SDK player volume confirmed at 1.0'),
+        (e) => console.warn('[Spotify] setVolume(1.0) failed:', e)
+      );
     });
     player.addListener('player_state_changed', (st) => this.onState(st));
-    player.addListener('not_ready', () => {
+    player.addListener('not_ready', ({ device_id }) => {
       // Spotify dropped the device (usually after a long pause). The next play
       // attempt just builds the player again; the radio stays put.
+      console.warn('[Spotify] player not_ready — device dropped:', device_id);
       this.player = null;
       this.deviceId = null;
     });
-    player.addListener('authentication_error', () => this.onAuthError());
-    player.addListener('account_error', () => this.onAuthError());
+    // Every failure the SDK can report gets a listener (issue step 3), so a
+    // dead token or a blocked device shows up in the console instead of as a
+    // mysteriously quiet radio.
+    player.addListener('initialization_error', ({ message }) => {
+      console.error('[Spotify] initialization_error:', message);
+      // The SDK could not spin up its device. The session itself may be fine,
+      // so keep the token but tear the player down — the next play attempt
+      // builds a fresh one and will log whatever happens again.
+      this.player = null;
+      this.deviceId = null;
+    });
+    player.addListener('authentication_error', ({ message }) => {
+      console.error('[Spotify] authentication_error:', message);
+      this.onAuthError();
+    });
+    player.addListener('account_error', ({ message }) => {
+      console.error('[Spotify] account_error:', message);
+      this.onAuthError();
+    });
+    player.addListener('playback_error', ({ message }) => {
+      console.error('[Spotify] playback_error:', message);
+    });
     const ok = await player.connect();
+    console.log('[Spotify] player.connect() ->', ok);
     if (!ok) {
       throw new Error('Spotify refused to start a player (is the account on Premium?).');
     }
@@ -455,6 +520,20 @@ class SpotifyProvider {
     this.onPlay?.(!st.paused);
     const t = trackFromSpotify(st.track_window?.current_track);
     if (t) this.onTrack?.(t);
+    // Log state only when something meaningful actually changed — the polling
+    // loop calls this every few seconds, and a wall of identical lines would
+    // bury the one that matters.
+    const key = `${!!st.paused}|${t?.id || ''}|${st.device?.is_active}|${st.device?.volume_percent ?? -1}`;
+    if (key !== this._lastLogKey) {
+      this._lastLogKey = key;
+      console.log('[Spotify] state:', {
+        playing: !st.paused,
+        track: t ? `${t.name} — ${t.artists.join(', ')}` : '(none)',
+        device_id: st.device?.id,
+        is_active: st.device?.is_active,
+        volume_percent: st.device?.volume_percent,
+      });
+    }
   }
 
   /** Keep the state warm while a station is active: SDK events go quiet when
@@ -540,25 +619,108 @@ class SpotifyProvider {
     }));
   }
 
+  /**
+   * Issue step 5: PUT /v1/me/player with `{ device_ids, play: false }` hands
+   * playback to the SDK device *without* starting anything — the play request
+   * that follows is what actually starts a station. Without this, a play
+   * request aimed at a device Spotify has never activated is accepted (204)
+   * but never reaches the browser.
+   */
+  async transferPlayback() {
+    if (!this.deviceId) return false;
+    console.log('[Spotify] Transferring playback to SDK device', this.deviceId);
+    await this.api('PUT', '/me/player', { device_ids: [this.deviceId], play: false });
+    console.log('[Spotify] Transfer accepted — SDK device', this.deviceId, 'is the playback target.');
+    return true;
+  }
+
+  /** Only transfer when the SDK device is not already Spotify's active one —
+   *  a repeat transfer on every next/previous/pause is a gratuitous pause. */
+  async ensureActiveDevice() {
+    const st = this.player ? await this.player.getCurrentState().catch(() => null) : null;
+    if (st?.device?.is_active || st?.device?.id === this.deviceId) {
+      console.log('[Spotify] SDK device is already the active playback device.');
+      return true;
+    }
+    return this.transferPlayback();
+  }
+
+  /** GET /v1/me/player. 204 (empty body) means no active device and nothing
+   *  playing, which is the normal state before any playback starts. */
+  async readPlayback() {
+    await this.ensureToken();
+    const res = await fetch(`${API_URL}/me/player`, {
+      headers: { Authorization: `Bearer ${this.token.access}` },
+    });
+    if (res.status === 204) return null;
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.warn('[Spotify] GET /me/player ->', res.status, text);
+      return null;
+    }
+    return res.json();
+  }
+
+  /** Issue step 11: log the device Spotify would play on — id, name, type,
+   *  is_active, volume_percent, currently playing track — before playback. */
+  async logPlaybackState(label) {
+    const j = await this.readPlayback().catch(() => null);
+    if (!j) {
+      console.log(`[Spotify] ${label}: no active playback device / nothing playing (204).`);
+      return null;
+    }
+    const item = j.item || {};
+    console.log(`[Spotify] ${label}:`, {
+      device_id: j.device?.id,
+      device_name: j.device?.name,
+      device_type: j.device?.type,
+      is_active: j.device?.is_active,
+      volume_percent: j.device?.volume_percent,
+      is_playing: j.is_playing,
+      currently_playing: item.name
+        ? `${item.name} — ${(item.artists || []).map((a) => a.name).join(', ')}`
+        : '(none)',
+    });
+    return j;
+  }
+
   async playStation(station) {
     if (!station.uris || !station.uris.length) throw new Error('That station has nothing in it.');
+    console.log('[Spotify] playStation:', station.id, JSON.stringify(station.uris));
     const ready = await this.ensureConnected();
     if (!ready || !this.deviceId) {
       throw new Error('Spotify couldn’t start a player on this device — is the account on Premium?');
     }
+    // Issue step 11: what is the device Spotify would play on, before we touch it?
+    await this.logPlaybackState('before play');
     // The Web Playback SDK player has no play() method: starting playback is the
     // Web API's job. A playlist is a context, not a track, so it starts via
-    // context_uri, while search results (single tracks) go through the uris
-    // path. Passing a spotify:playlist: URI in uris simply refuses to play.
+    // context_uri (issue step 7), while search results (single tracks) go
+    // through the uris path (issue step 8). Passing a spotify:playlist: URI in
+    // uris simply refuses to play.
     const isContext = station.uris[0].startsWith('spotify:playlist:');
     const body = isContext
       ? { context_uri: station.uris[0] }
       : { uris: station.uris, offset: { position: 0 } };
-    // Targeting the SDK device via ?device_id both transfers playback to it
-    // (activateElement() is long gone from the SDK) and starts the station, so
-    // the SDK's player_state_changed events keep driving the in-game bar.
-    await this.api('PUT', `/me/player/play?device_id=${encodeURIComponent(this.deviceId)}`, body);
+    console.log('[Spotify] Starting playback:', JSON.stringify(body));
+    try {
+      await this.api('PUT', `/me/player/play?device_id=${encodeURIComponent(this.deviceId)}`, body);
+    } catch (e) {
+      // 404 = "device not found", 502 = "command failed" — both mean Spotify
+      // had not finished registering the fresh SDK device. Re-transferring it
+      // wakes it up; try once more before giving up.
+      if (![404, 502].includes(e?.status)) throw e;
+      console.warn(
+        '[Spotify] Play rejected with', e.status, '— re-transferring the device and retrying.'
+      );
+      await this.transferPlayback();
+      await new Promise((r) => setTimeout(r, DEVICE_MARGIN_MS / 2));
+      await this.api('PUT', `/me/player/play?device_id=${encodeURIComponent(this.deviceId)}`, body);
+    }
     this.startPolling();
+    // Issue step 15: confirm the SDK device actually became the active one and
+    // audio should be flowing, rather than assuming a 204 meant success.
+    await this.logPlaybackState('after play');
     // A freshly-started station often has no event yet; prime the bar from the
     // device instead of waiting for the next player_state_changed.
     const st = this.player ? await this.player.getCurrentState().catch(() => null) : null;
@@ -933,13 +1095,17 @@ export class Radio {
     }
     this.el.status.textContent = 'Starting…';
     try {
-      await this.provider.playStation(station);
-      this.playing = true;
+      // Wire the UI callbacks before playback begins, not after: the SDK can
+      // emit its first player_state_changed the moment the play request lands,
+      // and the toast/duck logic must be listening by then.
       this.provider.onTrack = (t) => this.announce(t);
       this.provider.onPlay = (p) => {
         this.playing = p;
         this.renderPlayback();
+        this.emit(); // duck the theme while Spotify plays, bring it back on pause
       };
+      await this.provider.playStation(station);
+      this.playing = true;
       this.emit();
       this.renderPlayback();
       this.el.status.textContent = '';
