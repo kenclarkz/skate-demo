@@ -5,6 +5,11 @@ on:
     types: [created]
 
   workflow_dispatch:
+    inputs:
+      prompt:
+        description: "What should OpenCode do?"
+        required: true
+        default: "Analyze this repository"
 
 permissions:
   contents: write
@@ -13,7 +18,17 @@ permissions:
   id-token: write
 
 jobs:
-  test-comment:
+  opencode:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'issue_comment' &&
+        (
+          contains(github.event.comment.body, '/opencode') ||
+          contains(github.event.comment.body, '/oc')
+        )
+      )
+
     runs-on: ubuntu-latest
 
     steps:
@@ -28,7 +43,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Find old model configuration
+      - name: Check for old OpenCode model configuration
         run: |
           echo "=== Searching repository for old model ==="
           grep -R "claude-sonnet-4-20250514" . \
@@ -36,7 +51,7 @@ jobs:
             --exclude-dir=node_modules \
             || true
 
-          echo "=== OpenCode config files ==="
+          echo "=== OpenCode configuration files ==="
           find . -maxdepth 3 \
             \( -name "opencode.json" -o -name "opencode.jsonc" \) \
             -print
@@ -44,8 +59,8 @@ jobs:
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         with:
-          model: anthropic/claude-sonnet-4-6
-          prompt: ${{ github.event.comment.body }}
+          model: anthropic/claude-sonnet-4-5
+          prompt: ${{ github.event_name == 'workflow_dispatch' && inputs.prompt || github.event.comment.body }}
           use_github_token: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
