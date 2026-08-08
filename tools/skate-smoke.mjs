@@ -3568,6 +3568,188 @@ section('The park editor');
   await run(() => window.__skate.showStart());
 }
 
+// --------------------------------------------------------------------------
+section('The park editor is responsive');
+{
+  // The editor's chrome has to re-flow by viewport width, not by device sniff:
+  // a phone folds the panels into a bottom sheet behind a scrim, a tablet into
+  // a side drawer, and a desktop keeps them in an always-on rail. All three are
+  // driven through the real buttons the player uses, at each width.
+  const openFresh = (file) =>
+    run((f) => window.__skate.openDesigner(f), file);
+
+  // --- phone: bottom sheet + action bar --------------------------------
+  await page.setViewportSize({ width: 380, height: 640 });
+  const phone = await openFresh({
+    v: 1, id: 'user-resp', name: 'Resp park', blurb: 'Responsive smoke.',
+    extent: 20, ground: 'wood', spawn: { x: 0, z: -17 },
+    objects: [{ id: 'r1', type: 'slab', x: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 8, d: 4, h: 0.25, color: 'concrete' }],
+  }).then(() =>
+    run(() => {
+      const g = window.__skate;
+      const designer = document.getElementById('designer');
+      return {
+        active: g.designer.active,
+        state: g.state,
+        chromeShown: !designer.hidden,
+        railOpen: designer.classList.contains('dg-rail-open'),
+        scrimHidden: document.getElementById('dg-scrim').hidden,
+        labels: getComputedStyle(document.getElementById('dg-save').querySelector('.dg-lbl')).display,
+        actionsVisible: document.getElementById('dg-actions').getBoundingClientRect().height > 0,
+      };
+    })
+  );
+  ok(phone.active && phone.state === 'designer' && phone.chromeShown, 'a phone opens the editor full-screen');
+  ok(phone.labels === 'none', 'with icon-only toolbar buttons on a phone');
+  ok(phone.actionsVisible, 'and the touch action bar (Add / Move / Rotate / Scale / Properties) at the bottom');
+  ok(!phone.railOpen && phone.scrimHidden, 'with the panels rail folded away and no scrim');
+
+  // + Object lifts the bottom sheet and drops the scrim; a palette tap drops
+  // the object AND puts the park view back.
+  await run(() => document.getElementById('dg-add').click());
+  // The slide transition is compositor-timed, and under a throttled headless
+  // frame rate it can take far longer than its declared 240 ms — wait for the
+  // sheet to actually land rather than guessing a wall-clock delay.
+  await page
+    .waitForFunction(() => getComputedStyle(document.getElementById('dg-rail')).transform === 'none', null, { timeout: 8000 })
+    .catch(() => {});
+  const phoneAdd = await run(() => {
+    const g = window.__skate;
+    const designer = document.getElementById('designer');
+    const rail = document.getElementById('dg-rail');
+    const viewportH = window.innerHeight;
+    const first = {
+      railOpen: designer.classList.contains('dg-rail-open'),
+      scrimShown: !document.getElementById('dg-scrim').hidden,
+      docked: rail.getBoundingClientRect().bottom,
+      viewportH,
+      settled: getComputedStyle(rail).transform,
+    };
+    document.querySelector('#dg-palette [data-type="stairs"]').click();
+    return {
+      first,
+      objects: g.designer.file.objects.length,
+      after: {
+        railOpen: designer.classList.contains('dg-rail-open'),
+        scrimShown: !document.getElementById('dg-scrim').hidden,
+      },
+    };
+  });
+  ok(phoneAdd.first.railOpen && phoneAdd.first.scrimShown, 'the Add button lifts the palette sheet and drops the scrim');
+  ok(
+    Math.abs(phoneAdd.first.docked - (phoneAdd.first.viewportH - 58)) < 10,
+    `docked to the bottom edge above the action bar (bottom ${phoneAdd.first.docked} of ${phoneAdd.first.viewportH})`
+  );
+  ok(phoneAdd.objects === 2, 'and a palette tap adds the object');
+  ok(!phoneAdd.after.railOpen && !phoneAdd.after.scrimShown, 'then closes the sheet again so the park view returns');
+
+  // Properties opens the same sheet on the object's controls.
+  const phoneProps = await run(() => {
+    const g = window.__skate;
+    g.designer.select('r1');
+    document.getElementById('dg-props').click();
+    const designer = document.getElementById('designer');
+    return {
+      railOpen: designer.classList.contains('dg-rail-open'),
+      panelTab: document.getElementById('dg-rail').classList.contains('dg-tab-panel'),
+      scrimShown: !document.getElementById('dg-scrim').hidden,
+      panelText: document.getElementById('dg-panel').textContent.length,
+    };
+  });
+  ok(phoneProps.railOpen && phoneProps.scrimShown, 'Properties lifts the sheet onto the properties panel');
+  ok(phoneProps.panelTab && phoneProps.panelText > 40, 'with the panel tab showing the object controls');
+
+  // Scrim tap folds the sheet away again.
+  const phoneScrim = await run(() => {
+    document.getElementById('dg-scrim').click();
+    const designer = document.getElementById('designer');
+    return {
+      railOpen: designer.classList.contains('dg-rail-open'),
+      scrimShown: !document.getElementById('dg-scrim').hidden,
+    };
+  });
+  ok(!phoneScrim.railOpen && !phoneScrim.scrimShown, 'and tapping the scrim folds it away');
+
+  // The menu drawer slides in from the right and its toggles work.
+  await run(() => document.getElementById('dg-menu').click());
+  await page
+    .waitForFunction(() => getComputedStyle(document.getElementById('dg-drawer')).transform === 'none', null, { timeout: 8000 })
+    .catch(() => {});
+  const phoneMenu = await run(() => {
+    const g = window.__skate;
+    const designer = document.getElementById('designer');
+    const drawer = document.getElementById('dg-drawer');
+    const open = {
+      drawerOpen: designer.classList.contains('dg-drawer-open'),
+      scrimShown: !document.getElementById('dg-scrim').hidden,
+      drawerRect: drawer.getBoundingClientRect(),
+      viewportW: window.innerWidth,
+      settled: getComputedStyle(drawer).transform,
+    };
+    const gridLabel = drawer.querySelector('[data-dgmenu="grid"]').textContent;
+    drawer.querySelector('[data-dgmenu="grid"]').click();
+    const toggled = {
+      grid: g.designer.gridOn,
+      label: drawer.querySelector('[data-dgmenu="grid"]').textContent,
+    };
+    return { open, gridLabel, toggled };
+  });
+  ok(phoneMenu.open.drawerOpen && phoneMenu.open.scrimShown, 'the menu button slides the drawer out over the park view');
+  ok(
+    Math.abs(phoneMenu.open.drawerRect.right - phoneMenu.open.viewportW) < 2,
+    `docked to the right edge (right ${Math.round(phoneMenu.open.drawerRect.right)} of ${phoneMenu.open.viewportW})`
+  );
+  ok(phoneMenu.gridLabel.includes('on'), 'with the current grid state on its toggle');
+  ok(phoneMenu.toggled.grid === false && phoneMenu.toggled.label.includes('off'), 'and the toggle flips it');
+
+  // --- tablet: the sheet becomes a side drawer -------------------------
+  await page.setViewportSize({ width: 800, height: 600 });
+  const tablet = await run(() => {
+    document.getElementById('dg-menu').click(); // drawer was left open
+    document.getElementById('dg-add').click();
+    const rail = document.getElementById('dg-rail');
+    const r = rail.getBoundingClientRect();
+    return {
+      actions: getComputedStyle(document.getElementById('dg-actions')).display,
+      rightDocked: r.right >= window.innerWidth - 12,
+      fullHeight: r.bottom - r.top > 300,
+      railOpen: document.getElementById('designer').classList.contains('dg-rail-open'),
+    };
+  });
+  ok(tablet.actions !== 'none', 'a tablet still has the touch action bar');
+  ok(tablet.railOpen, 'and the Add button opens the panel rail');
+  ok(tablet.rightDocked, 'which slides in from the right edge instead of the bottom');
+  ok(tablet.fullHeight, 'as a full-height side drawer');
+
+  // --- desktop: always-on rail, no action bar, no scrim ----------------
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const desktop = await run(() => {
+    const g = window.__skate;
+    const designer = document.getElementById('designer');
+    const rail = document.getElementById('dg-rail');
+    const r = rail.getBoundingClientRect();
+    // Open the rail through the same path a click uses, and prove the open
+    // state never summons a scrim on desktop.
+    g.designer._openRail('palette');
+    return {
+      actions: getComputedStyle(document.getElementById('dg-actions')).display,
+      railVisible: r.width > 200 && r.height > 400,
+      railOpen: designer.classList.contains('dg-rail-open'),
+      scrimShown: !document.getElementById('dg-scrim').hidden,
+      labels: getComputedStyle(document.getElementById('dg-save').querySelector('.dg-lbl')).display,
+      tabsHidden: getComputedStyle(document.getElementById('dg-rail-head')).display === 'none',
+    };
+  });
+  ok(desktop.railVisible, 'a desktop gets the always-on side rail');
+  ok(desktop.tabsHidden, 'with the sheet-style tab bar gone');
+  ok(desktop.labels !== 'none', 'and the toolbar buttons labeled again');
+  ok(desktop.actions === 'none', 'the touch action bar is gone');
+  ok(desktop.railOpen && !desktop.scrimShown, 'and opening the rail never covers the desktop view with a scrim');
+
+  await run(() => window.__skate.showStart());
+  await page.setViewportSize({ width: 900, height: 560 });
+}
+
 await page.goto(`${BASE}/index.html?debug=1`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.__skate, null, { timeout: 20000 });
 await run(() => {

@@ -284,22 +284,67 @@
 
       <!-- The park editor. Not an overlay: the whole screen is the design
            canvas, with this chrome around it. js/skate/parkDesigner.js builds
-           the palette rail and the properties panel and binds it all. -->
+           the palette rail and the properties panel and binds it all. The
+           layout is responsive — a desktop gets the always-on side rail,
+           while a phone folds everything behind the bottom action bar, a
+           bottom sheet and the ☰ menu. -->
       <div id="designer" hidden>
         <header class="designer-bar">
-          <button id="dg-back" type="button">Back</button>
+          <button id="dg-back" type="button" aria-label="Back" title="Exit editor"><span class="dg-ico">&#8249;</span><span class="dg-lbl">Back</span></button>
           <input id="dg-name" type="text" maxlength="40" spellcheck="false" aria-label="Park name">
           <span id="dg-count" class="designer-count"></span>
-          <button id="dg-undo" type="button" disabled>Undo</button>
-          <button id="dg-redo" type="button" disabled>Redo</button>
-          <button id="dg-save" type="button">Save</button>
-          <button id="dg-test" type="button" class="primary">Save &amp; Test</button>
+          <button id="dg-undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled><span class="dg-ico">&#8634;</span><span class="dg-lbl">Undo</span></button>
+          <button id="dg-redo" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled><span class="dg-ico">&#8635;</span><span class="dg-lbl">Redo</span></button>
+          <button id="dg-save" type="button" aria-label="Save" title="Save"><span class="dg-ico">&#10003;</span><span class="dg-lbl">Save</span></button>
+          <button id="dg-test" type="button" class="primary" title="Save &amp; Test"><span class="dg-ico">&#9654;</span><span class="dg-lbl">Test</span></button>
+          <button id="dg-menu" type="button" class="dg-icon-btn" aria-label="Editor menu" title="Editor menu">&#9776;</button>
         </header>
-        <div id="dg-rail">
+
+        <!-- The object palette and the properties panel, in one container.
+             Desktop shows both stacked on the right; a narrow viewport folds
+             it into a bottom sheet / side drawer with Objects/Properties tabs. -->
+        <div id="dg-rail" aria-label="Editor panels">
+          <div id="dg-rail-head">
+            <button type="button" data-dgtab="palette" class="dg-tab on">Objects</button>
+            <button type="button" data-dgtab="panel" class="dg-tab">Properties</button>
+            <button id="dg-rail-close" type="button" class="dg-icon-btn" aria-label="Close panel">&#10005;</button>
+          </div>
           <nav id="dg-palette" aria-label="Objects"></nav>
           <aside id="dg-panel" aria-label="Properties"></aside>
         </div>
+
+        <!-- The mobile/tablet editor menu: slides over the park view so it
+             never permanently takes space from the 3D scene. -->
+        <nav id="dg-drawer" aria-label="Editor menu" hidden>
+          <h2 class="dg-drawer-title">Park designer</h2>
+          <button type="button" data-dgmenu="objects">Objects</button>
+          <button type="button" data-dgmenu="props">Properties</button>
+          <button type="button" data-dgmenu="park">Park settings</button>
+          <button type="button" data-dgmenu="boundary">Boundary</button>
+          <button type="button" data-dgmenu="spawn">Spawn</button>
+          <button type="button" data-dgmenu="grid">Grid: on</button>
+          <button type="button" data-dgmenu="snap">Snap: on</button>
+          <button type="button" data-dgmenu="test" class="primary">&#9654; Test park</button>
+          <button type="button" data-dgmenu="save">Save</button>
+          <button type="button" data-dgmenu="exit">Exit editor</button>
+        </nav>
+
+        <!-- The mobile action bar: add an object, pick a transform mode, open
+             the properties sheet. Hidden on desktop where the rail is enough. -->
+        <div id="dg-actions" aria-label="Editor actions">
+          <button id="dg-add" type="button">+ Object</button>
+          <div id="dg-modes" role="group" aria-label="Transform mode">
+            <button type="button" data-mode="move" class="on" title="Move">Move</button>
+            <button type="button" data-mode="rotate" title="Rotate">Rotate</button>
+            <button type="button" data-mode="scale" title="Scale">Scale</button>
+          </div>
+          <button id="dg-props" type="button" aria-label="Properties" title="Properties">&#9881;</button>
+        </div>
+
         <p id="dg-hint" class="designer-hint">Drag an object to move it &middot; drag the ground to look around &middot; scroll to zoom &middot; R rotates &middot; Del deletes &middot; Ctrl+Z undoes</p>
+
+        <!-- Taps anywhere else close the sheet or the menu. -->
+        <div id="dg-scrim" hidden></div>
       </div>
 
       <div id="ios-hint" hidden>

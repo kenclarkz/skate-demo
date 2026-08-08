@@ -1037,16 +1037,23 @@ button:disabled.primary {
 }
 
 /* --- the park editor ------------------------------------------------------ */
+/* One layout, three skins. The same chrome is re-flowed purely from viewport
+   width, never from a device sniff:
+     - desktop (≥1000px): a top bar, an always-on side rail, no action bar.
+     - tablet / landscape phone (600–999px): compact top bar, a side drawer
+       for the panels, and the touch action bar.
+     - phone (<600px): icon-only top bar, the panels in a bottom sheet, and
+       the touch action bar. The 3D park view always keeps the whole screen. */
 #designer {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    'bar rail'
-    'canvas rail'
-    'hint rail';
+    'bar'
+    'canvas'
+    'actions';
   pointer-events: none;
 }
 
@@ -1058,17 +1065,43 @@ button:disabled.primary {
   grid-area: bar;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: calc(8px + var(--pad-t)) calc(10px + var(--pad-r)) 8px calc(10px + var(--pad-l));
+  gap: 6px;
+  padding: calc(8px + var(--pad-t)) calc(8px + var(--pad-r)) 8px calc(8px + var(--pad-l));
   pointer-events: auto;
-  z-index: 2;
+  z-index: 3;
 }
 
 #designer .designer-bar button {
-  min-height: 42px;
-  padding: 10px 14px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 12px;
   font-size: 14px;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+#designer .designer-bar button.primary {
+  color: #17130a;
+}
+
+/* Button labels come back only where there is room: a desktop toolbar fits
+   "Save" and "Test" beside the park name, a phone does not. */
+#designer .designer-bar .dg-lbl {
+  display: none;
+}
+
+#designer .designer-bar .dg-ico {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.dg-icon-btn {
+  width: 44px;
+  padding: 8px !important;
+  font-size: 18px;
 }
 
 #dg-name {
@@ -1082,7 +1115,7 @@ button:disabled.primary {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 9px 12px;
-  min-height: 42px;
+  min-height: 44px;
   outline: none;
 }
 
@@ -1098,39 +1131,128 @@ button:disabled.primary {
   color: var(--dim);
 }
 
-#designer .designer-hint {
-  grid-area: hint;
-  margin: 0;
-  padding: 8px calc(14px + var(--pad-l));
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--dim);
-  pointer-events: none;
-}
-
-#dg-rail {
-  grid-area: rail;
-  grid-row: 1 / -1;
+/* The mobile action bar sits above the safe-area inset at the bottom of the
+   phone, never underneath it. */
+#dg-actions {
+  grid-area: actions;
   display: flex;
-  flex-direction: column;
-  width: 250px;
-  max-width: 78vw;
-  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 8px calc(10px + var(--pad-r)) calc(8px + var(--pad-b)) calc(10px + var(--pad-l));
   pointer-events: auto;
   z-index: 2;
-  border-left: 1px solid var(--line);
-  background: rgba(10, 14, 18, 0.55);
-  backdrop-filter: blur(3px);
+}
+
+#dg-actions button {
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 13px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#dg-modes {
+  display: flex;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#dg-modes button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 6px;
+  font-size: 12px;
+}
+
+#dg-modes button.on {
+  background: rgba(255, 201, 63, 0.18);
+  color: var(--hot);
+  border-color: var(--hot);
+}
+
+/* The rail: the palette over the properties panel. On a phone it is a bottom
+   sheet, on tablet a right-side drawer, on desktop a permanent column. */
+#dg-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(58px + var(--pad-b));
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  max-height: 66vh;
+  background: rgba(10, 14, 18, 0.97);
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  transform: translateY(calc(100% + 14px));
+  transition: transform 0.24s ease;
+  pointer-events: auto;
+  touch-action: pan-y;
+  overflow: hidden;
+}
+
+#designer.dg-rail-open #dg-rail {
+  transform: none;
+}
+
+#dg-rail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.dg-tab {
+  min-height: 38px;
+  padding: 8px 14px;
+  font-size: 13px;
+  border-radius: 999px;
+  color: var(--dim);
+}
+
+.dg-tab.on {
+  background: rgba(255, 201, 63, 0.16);
+  color: var(--hot);
+  border-color: var(--hot);
+}
+
+#dg-rail-close {
+  margin-left: auto;
 }
 
 #dg-palette {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 10px 8px;
-  max-height: 40vh;
+  padding: 10px 10px 12px;
   overflow-y: auto;
   overflow-x: hidden;
+  touch-action: pan-y;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#dg-panel {
+  display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 12px 14px;
+  text-align: left;
+  touch-action: pan-y;
+}
+
+#dg-rail.dg-tab-panel #dg-palette {
+  display: none;
+}
+
+#dg-rail.dg-tab-panel #dg-panel {
+  display: flex;
+  flex-direction: column;
 }
 
 .dg-swatch {
@@ -1152,7 +1274,7 @@ button:disabled.primary {
   background: rgba(44, 53, 65, 0.95);
 }
 
-.dg-swatch.dg-active {
+.dg-swatch.on {
   border-color: var(--hot);
   box-shadow: inset 0 0 0 1px var(--hot);
 }
@@ -1164,7 +1286,7 @@ button:disabled.primary {
   gap: 1px;
   text-align: left;
   padding: 7px 9px;
-  min-height: 44px;
+  min-height: 46px;
   border-radius: 10px;
   flex: 0 0 auto;
 }
@@ -1185,18 +1307,9 @@ button:disabled.primary {
   max-width: 100%;
 }
 
-.dg-palette-btn.dg-active {
+.dg-palette-btn.on {
   border-color: var(--hot);
   box-shadow: inset 0 0 0 1px var(--hot);
-}
-
-#dg-panel {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 10px 12px 14px;
-  text-align: left;
-  border-top: 1px solid var(--line);
 }
 
 #dg-panel h3 {
@@ -1229,12 +1342,16 @@ button:disabled.primary {
   font-weight: 700;
 }
 
+/* A label, its slider and its readout: label | slider | value. */
 .dg-field {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 36px;
+  grid-template-columns: auto minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
+  padding: 4px 4px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .dg-field input[type='range'] {
@@ -1250,8 +1367,8 @@ button:disabled.primary {
 
 .dg-field input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--hot);
   border: 2px solid #17130a;
@@ -1259,8 +1376,8 @@ button:disabled.primary {
 }
 
 .dg-field input[type='range']::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--hot);
   border: 2px solid #17130a;
@@ -1274,18 +1391,78 @@ button:disabled.primary {
   text-align: right;
 }
 
+.dg-pos {
+  grid-template-columns: 26px minmax(0, 1fr) 44px;
+}
+
+.dg-group {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dg-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  justify-items: center;
+}
+
+.dg-note {
+  margin: 6px 4px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+
+.dg-boundary {
+  color: var(--ink);
+  border-left: 3px solid #4cc3ff;
+  padding: 2px 8px;
+  background: rgba(76, 195, 255, 0.08);
+  border-radius: 4px;
+}
+
+.dg-btn {
+  min-height: 42px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.dg-btn.danger {
+  color: var(--bad);
+}
+
+.dg-yaw {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+  flex: 1;
+  text-align: right;
+}
+
 .dg-switch {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
+  padding: 2px 4px;
 }
 
 .dg-switch input[type='checkbox'] {
   width: 18px;
   height: 18px;
   accent-color: var(--hot);
+}
+
+.dg-uniform {
+  padding: 6px 4px 2px;
 }
 
 .dg-grid {
@@ -1318,6 +1495,145 @@ button:disabled.primary {
   min-height: 38px;
   padding: 8px 10px;
   font-size: 13px;
+}
+
+/* The editor menu: slides in from the right over the park view. */
+#dg-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: min(300px, 84vw);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: calc(18px + var(--pad-t)) 14px calc(18px + var(--pad-b));
+  background: rgba(10, 14, 18, 0.97);
+  border-left: 1px solid var(--line);
+  transform: translateX(calc(100% + 12px));
+  transition: transform 0.24s ease;
+  pointer-events: auto;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+
+#designer.dg-drawer-open #dg-drawer {
+  transform: none;
+}
+
+.dg-drawer-title {
+  margin: 0 4px 4px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+#dg-drawer button {
+  text-align: left;
+  min-height: 46px;
+  padding: 12px 14px;
+}
+
+/* Taps anywhere else drop the sheet or the menu. */
+#dg-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* The keyboard cheat-sheet only makes sense where there is a keyboard: the
+   action bar owns the bottom of a phone, and touch has no R / Del / Ctrl+Z. */
+#designer .designer-hint {
+  display: none;
+  position: absolute;
+  left: calc(14px + var(--pad-l));
+  bottom: calc(10px + var(--pad-b));
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+/* --- tablet / landscape phones ------------------------------------------- */
+@media (min-width: 600px) and (max-width: 999px) {
+  #dg-rail {
+    left: auto;
+    right: calc(8px + var(--pad-r));
+    top: calc(60px + var(--pad-t));
+    bottom: calc(58px + var(--pad-b));
+    width: min(330px, 92vw);
+    max-height: none;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    transform: translateX(calc(100% + 16px));
+  }
+
+  #designer.dg-rail-open #dg-rail {
+    transform: none;
+  }
+}
+
+/* --- desktop -------------------------------------------------------------- */
+@media (min-width: 1000px) {
+  #designer {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'bar rail'
+      'canvas rail'
+      'actions rail';
+  }
+
+  #dg-rail {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    grid-area: rail;
+    grid-row: 1 / -1;
+    width: 250px;
+    max-width: 78vw;
+    max-height: none;
+    transform: none;
+    background: rgba(10, 14, 18, 0.55);
+    backdrop-filter: blur(3px);
+    border: none;
+    border-top: none;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+  }
+
+  #dg-rail-head {
+    display: none;
+  }
+
+  #dg-palette {
+    max-height: 40vh;
+  }
+
+  #dg-panel {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--line);
+  }
+
+  #dg-actions {
+    display: none;
+  }
+
+  #designer .designer-bar .dg-lbl {
+    display: inline;
+  }
+
+  #designer .designer-hint {
+    display: block;
+  }
 }
 
 /* --- my parks ------------------------------------------------------------- */
