@@ -44,9 +44,21 @@ const THEME_TRACK = { id: 'theme', name: 'The park’s own speakers', artists: [
 // The app is a static site, so there is nowhere safe to hide a secret; the
 // PKCE flow (a verifier/challenge pair instead of a client secret) is what the
 // docs prescribe for exactly this situation, and the token it trades for only
-// ever lives in sessionStorage. The client id is public by design — see the
-// README for how to point the game at your own registered app.
+// ever lives in sessionStorage. The client id is public by design.
+//
+// That id must be a real Spotify app, or the authorization server answers the
+// login attempt with a dead-end "client_id: Invalid" white page. To make the
+// radio work you have to register your own app (Developer Dashboard → Create
+// app), put its Client ID here, and list the game's URLs under the app's
+// Redirect URIs — see the "Spotify radio" section of the README. The id below
+// is not a registered app, so sign-in preflights it and says so in the panel
+// instead of stranding the player on Spotify's error page.
 const CLIENT_ID = '2b2f2c0bbce14e70a25dca88348b8ed9';
+
+/** What a dead client id looks like to the player, instead of the white page. */
+const CLIENT_ID_ERROR =
+  'Spotify rejected this app’s client id (client_id: Invalid). The site ' +
+  'owner must register a Spotify app and set its client id in js/skate/radio.js — see the README.';
 const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const API_URL = 'https://api.spotify.com/v1';
@@ -229,8 +241,40 @@ class SpotifyProvider {
     return !!this.token;
   }
 
+  /**
+   * Cheap preflight that tells a real client id from a dead one. Spotify only
+   * answers "invalid_client" when the id itself is unknown, so handing the
+   * token endpoint a deliberately fake code separates the two cases: a real id
+   * comes back "invalid_grant" (the code is fake), a dead one comes back
+   * "invalid_client". If the request fails outright, let the real redirect
+   * happen and let Spotify decide.
+   */
+  async checkClientId() {
+    try {
+      const res = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: 'skate-preflight',
+          redirect_uri: redirectUri(),
+          client_id: CLIENT_ID,
+          code_verifier: 'skate-preflight',
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      return j.error !== 'invalid_client';
+    } catch {
+      return true;
+    }
+  }
+
   /** Kick off the PKCE dance by sending the player off to Spotify. */
   async signIn() {
+    // An unregistered client id would strand the player on Spotify's own
+    // "client_id: Invalid" white page; catch it before the redirect and show
+    // the message in the panel instead.
+    if (!(await this.checkClientId())) throw new Error(CLIENT_ID_ERROR);
     const verifier = randomChars(64);
     const challenge = await sha256Hex(verifier);
     const state = randomChars(16);
@@ -277,7 +321,11 @@ class SpotifyProvider {
         client_id: CLIENT_ID,
       }),
     });
-    if (!res.ok) throw new Error(`Spotify sign-in expired (${res.status}).`);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      if (j.error === 'invalid_client') throw new Error(CLIENT_ID_ERROR);
+      throw new Error(`Spotify sign-in expired (${res.status}).`);
+    }
     const j = await res.json();
     this.token = {
       access: j.access_token,
@@ -300,7 +348,11 @@ class SpotifyProvider {
         code_verifier: verifier,
       }),
     });
-    if (!res.ok) throw new Error(`Spotify sign-in failed (${res.status}).`);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      if (j.error === 'invalid_client') throw new Error(CLIENT_ID_ERROR);
+      throw new Error(`Spotify sign-in failed (${res.status}).`);
+    }
     const j = await res.json();
     this.token = {
       access: j.access_token,
