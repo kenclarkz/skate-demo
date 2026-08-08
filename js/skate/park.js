@@ -20,15 +20,15 @@ import * as THREE from '../game/three.js';
 import { box, piece, merge } from '../game/geo.js';
 
 // --- palette --------------------------------------------------------------
-const CONCRETE = 0xb4afa2;
-const CONCRETE_DARK = 0x9a9587;
-const RAMP = 0x8c8578;      // skatelite: darker and smoother than the flat
-const COPING = 0xc2c6cc;    // galvanised steel, polished by decades of grinds
-const STEEL = 0x9fa5ad;
-const PAINT = 0xd6c064;
-const DIRT = 0x7d6c50;
-const CURB = 0xc6c1b2;
-const HOOP = 0xe0552f;      // a landmark colour on purpose — it's meant to be seen from across the map
+export const CONCRETE = 0xb4afa2;
+export const CONCRETE_DARK = 0x9a9587;
+export const RAMP = 0x8c8578;      // skatelite: darker and smoother than the flat
+export const COPING = 0xc2c6cc;    // galvanised steel, polished by decades of grinds
+export const STEEL = 0x9fa5ad;
+export const PAINT = 0xd6c064;
+export const DIRT = 0x7d6c50;
+export const CURB = 0xc6c1b2;
+export const HOOP = 0xe0552f;      // a landmark colour on purpose — it's meant to be seen from across the map
 
 // Surface kinds, so physics can tell paved from dirt and flat from transition.
 export const SMOOTH = 0;
@@ -46,7 +46,7 @@ export const TRANSITION = 2;
  * it.
  */
 let _groundTexture = null;
-function groundTexture() {
+export function groundTexture() {
   if (_groundTexture) return _groundTexture;
   const c = document.createElement('canvas');
   c.width = c.height = 256;
@@ -128,7 +128,7 @@ const DIRT_Y = -0.02;
 // Each has at(x, z, out) -> boolean, filling `out` only on a hit, and
 // build(entries) pushing its merge entries.
 
-class Slab {
+export class Slab {
   /** A flat top: the ground, a platform deck, a ledge, a manual pad. */
   constructor(x0, x1, z0, z1, y, kind = SMOOTH, color = CONCRETE, depth = 0.4) {
     Object.assign(this, { x0, x1, z0, z1, y, kind, color, depth });
@@ -172,7 +172,7 @@ class Slab {
  * A straight ramp. `axis` is the one the slope runs along; the surface rises
  * linearly from y0 at the low end of that axis to y1 at the high end.
  */
-class Bank {
+export class Bank {
   constructor(x0, x1, z0, z1, axis, y0, y1, color = RAMP) {
     Object.assign(this, { x0, x1, z0, z1, axis, y0, y1, color });
     this.len = axis === 'x' ? x1 - x0 : z1 - z0;
@@ -234,7 +234,7 @@ class Bank {
  * u = R, so H is kept a good way under R to stop the lip going past anything a
  * skater would actually ride up.
  */
-class Quarter {
+export class Quarter {
   constructor(c0, c1, base, axis, sign, R, H, deck = 0, color = RAMP) {
     Object.assign(this, { c0, c1, base, axis, sign, R, H, deck, color });
     // Where the arc reaches deck height, from y = R - sqrt(R² - u²).
@@ -300,7 +300,7 @@ class Quarter {
 }
 
 /** A stair set. Riding it is a bail; the handrail beside it is the point. */
-class Stairs {
+export class Stairs {
   constructor(c0, c1, top, axis, sign, steps, rise, run) {
     Object.assign(this, { c0, c1, top, axis, sign, steps, rise, run });
     this.yTop = steps * rise;
@@ -381,7 +381,7 @@ function disposeSources(entries) {
  * segment plus a precomputed unit direction, because grind detection runs every
  * step against every line and the normalising would otherwise dominate it.
  */
-class Grind {
+export class Grind {
   constructor(ax, ay, az, bx, by, bz, kind, radius) {
     this.a = new THREE.Vector3(ax, ay, az);
     this.b = new THREE.Vector3(bx, by, bz);
@@ -432,18 +432,22 @@ export class Park {
     this.id = def.id;
     this.name = def.name;
     this.blurb = def.blurb;
-    // Every def is authored at 1x — TRACK_SCALE is applied uniformly right
-    // here, so spawn, the AI's patrol loop and the logo spots all land in
-    // the same doubled-up world the geometry below scales itself into.
-    this.spawn = { ...def.spawn, x: def.spawn.x * TRACK_SCALE, z: def.spawn.z * TRACK_SCALE };
-    this.patrol = def.patrol.map((pt) => ({ x: pt.x * TRACK_SCALE, z: pt.z * TRACK_SCALE }));
-    this.logos = def.logos.map((pt) => ({ x: pt.x * TRACK_SCALE, z: pt.z * TRACK_SCALE }));
+    // Built-in maps are authored at 1x and stretched to TRACK_SCALE once, here —
+    // spawn, patrol and the logo spots all land in the same doubled-up world the
+    // geometry below scales itself into. A map can opt out with `def.scale: 1`
+    // and author its own layout directly in world units — which is what a
+    // player-built park does, since its coordinates were placed in the editor
+    // at the exact world positions they should be ridden at.
+    const SCALE = def.scale || TRACK_SCALE;
+    this.spawn = { ...def.spawn, x: def.spawn.x * SCALE, z: def.spawn.z * SCALE };
+    this.patrol = def.patrol.map((pt) => ({ x: pt.x * SCALE, z: pt.z * SCALE }));
+    this.logos = def.logos.map((pt) => ({ x: pt.x * SCALE, z: pt.z * SCALE }));
     // Every map shares this footprint by default; a def can ask for its own
     // (the open-world map is several times the size) and opt out of the
     // fence and curb that make sense around a bounded pad but not around
     // one you are meant to feel like you can roam past the edge of.
-    this.extentX = (def.extentX || PARK_X) * TRACK_SCALE;
-    this.extentZ = (def.extentZ || PARK_Z) * TRACK_SCALE;
+    this.extentX = (def.extentX || PARK_X) * SCALE;
+    this.extentZ = (def.extentZ || PARK_Z) * SCALE;
     this.noFence = !!def.noFence;
     // A park can ask to keep every wheel — the player's and the AI's — on the
     // concrete itself, rather than letting the dirt run-off around it be part
@@ -492,34 +496,35 @@ export class Park {
     this.rideBoundX = this.padOnly ? this.extentX : this.worldR;
     this.rideBoundZ = this.padOnly ? this.extentZ : this.worldR;
     this.add(new Slab(-dirtR, dirtR, -dirtR, dirtR, DIRT_Y, ROUGH, DIRT, 1.2));
-    this.add(new Slab(-this.extentX, this.extentX, -this.extentZ, this.extentZ, 0, SMOOTH, CONCRETE, 0.55));
+    this.add(new Slab(-this.extentX, this.extentX, -this.extentZ, this.extentZ, 0, SMOOTH, this.def.ground || CONCRETE, 0.55));
 
     // Every def.build() below is written in 1x coordinates. Stretch just the
     // features/rails/copings it adds — not the pad above, already at full
     // size — out to TRACK_SCALE once, here, so no map's own layout ever has
     // to know the multiplier exists.
     const before = this.features.length;
+    const SCALE = this.def.scale || TRACK_SCALE;
     this.def.build(this);
-    if (TRACK_SCALE !== 1) {
-      for (let i = before; i < this.features.length; i++) this.features[i].scaleXZ(TRACK_SCALE);
-      for (const g of this.grinds) g.scaleXZ(TRACK_SCALE);
+    if (SCALE !== 1) {
+      for (let i = before; i < this.features.length; i++) this.features[i].scaleXZ(SCALE);
+      for (const g of this.grinds) g.scaleXZ(SCALE);
       for (const r of this.rails) {
-        r.ax *= TRACK_SCALE;
-        r.az *= TRACK_SCALE;
-        r.bx *= TRACK_SCALE;
-        r.bz *= TRACK_SCALE;
+        r.ax *= SCALE;
+        r.az *= SCALE;
+        r.bx *= SCALE;
+        r.bz *= SCALE;
       }
       for (const c of this.copings) {
-        c.x0 *= TRACK_SCALE;
-        c.x1 *= TRACK_SCALE;
-        c.z0 *= TRACK_SCALE;
-        c.z1 *= TRACK_SCALE;
+        c.x0 *= SCALE;
+        c.x1 *= SCALE;
+        c.z0 *= SCALE;
+        c.z1 *= SCALE;
       }
       // Radius/tube are real sizes, the same as a ramp's own R/H — only the
       // position they sit at is in the map's own stretched-out coordinates.
       for (const h of this.hoops) {
-        h.cx *= TRACK_SCALE;
-        h.cz *= TRACK_SCALE;
+        h.cx *= SCALE;
+        h.cz *= SCALE;
       }
     }
   }

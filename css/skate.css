@@ -1036,6 +1036,346 @@ button:disabled.primary {
   color: var(--hot);
 }
 
+/* --- the park editor ------------------------------------------------------ */
+#designer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'bar rail'
+    'canvas rail'
+    'hint rail';
+  pointer-events: none;
+}
+
+#designer:not([hidden]) + #overlay {
+  display: none;
+}
+
+#designer .designer-bar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(8px + var(--pad-t)) calc(10px + var(--pad-r)) 8px calc(10px + var(--pad-l));
+  pointer-events: auto;
+  z-index: 2;
+}
+
+#designer .designer-bar button {
+  min-height: 42px;
+  padding: 10px 14px;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+#dg-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  min-height: 42px;
+  outline: none;
+}
+
+#dg-name:focus {
+  border-color: var(--hot);
+}
+
+.designer-count {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+
+#designer .designer-hint {
+  grid-area: hint;
+  margin: 0;
+  padding: 8px calc(14px + var(--pad-l));
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+#dg-rail {
+  grid-area: rail;
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  width: 250px;
+  max-width: 78vw;
+  min-width: 0;
+  pointer-events: auto;
+  z-index: 2;
+  border-left: 1px solid var(--line);
+  background: rgba(10, 14, 18, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+#dg-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dg-swatch {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  padding: 0;
+  border-radius: 14px;
+  font-size: 26px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.dg-swatch:hover {
+  background: rgba(44, 53, 65, 0.95);
+}
+
+.dg-swatch.dg-active {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+.dg-palette-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
+  padding: 7px 9px;
+  min-height: 44px;
+  border-radius: 10px;
+  flex: 0 0 auto;
+}
+
+.dg-palette-btn b {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dg-palette-btn span {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--dim);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.dg-palette-btn.dg-active {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+#dg-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px 14px;
+  text-align: left;
+  border-top: 1px solid var(--line);
+}
+
+#dg-panel h3 {
+  margin: 6px 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.dg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.dg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0 4px;
+}
+
+.dg-row b {
+  font-weight: 700;
+}
+
+.dg-field {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 36px;
+  align-items: center;
+  gap: 8px;
+}
+
+.dg-field input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(10, 14, 18, 0.8);
+  border: 1px solid var(--line);
+  outline: none;
+}
+
+.dg-field input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--hot);
+  border: 2px solid #17130a;
+  cursor: pointer;
+}
+
+.dg-field input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--hot);
+  border: 2px solid #17130a;
+  cursor: pointer;
+}
+
+.dg-field output {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dg-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dg-switch input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--hot);
+}
+
+.dg-grid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dg-grid input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--hot);
+}
+
+.dg-danger {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+#dg-panel .dg-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0 4px;
+}
+
+#dg-panel .dg-tools button {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+/* --- my parks ------------------------------------------------------------- */
+.tag {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dim);
+  text-align: center;
+}
+
+.mypark-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.mypark-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  min-height: 96px;
+  padding: 12px 14px;
+  position: relative;
+}
+
+.mypark-card b {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mypark-card .meta {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dim);
+  font-weight: 400;
+}
+
+.mypark-card .mypark-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+  align-self: stretch;
+}
+
+.mypark-card .mypark-actions button {
+  flex: 1;
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.mypark-card button.mypark-del {
+  color: var(--bad);
+}
+
 /* --- the board shop -------------------------------------------------------- */
 .store-section-title {
   margin: 4px 0 8px;

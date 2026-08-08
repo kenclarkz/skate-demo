@@ -8,7 +8,7 @@ import { TrickPreview } from './preview.js';
 import { drawPortrait } from './character-portrait.js';
 import { drawGestureDiagram } from './gesture-diagram.js';
 
-const SCREENS = ['start', 'paused', 'guide', 'parks', 'store', 'settings'];
+const SCREENS = ['start', 'paused', 'guide', 'parks', 'myparks', 'store', 'settings'];
 
 /** Reasons a bail can happen, in the words a skater would use. */
 const BAIL_TEXT = {
@@ -315,6 +315,8 @@ export class Hud {
     this.statLines = document.getElementById('stat-lines');
     this.parkNow = document.getElementById('park-now');
     this.parkGrid = document.getElementById('park-grid');
+    this.myParkGrid = document.getElementById('mypark-grid');
+    this.myParkNewBtn = document.getElementById('btn-mypark-new');
     this.boardGrid = document.getElementById('board-grid');
     this.outfitGrid = document.getElementById('outfit-grid');
     this.accessoryGrid = document.getElementById('accessory-grid');
@@ -361,6 +363,11 @@ export class Hud {
       reset: null,
       parks: null,
       selectPark: null,
+      myParks: null,
+      newPark: null,
+      playPark: null,
+      editPark: null,
+      deletePark: null,
       speed: null,
       camZoom: null,
       musicVolume: null,
@@ -396,6 +403,9 @@ export class Hud {
     click('btn-guide-back', () => this.on.back?.());
     click('btn-parks', () => this.on.parks?.());
     click('btn-parks-back', () => this.on.back?.());
+    click('btn-myparks', () => this.on.myParks?.());
+    click('btn-myparks-back', () => this.on.back?.());
+    click('btn-mypark-new', () => this.on.newPark?.());
     click('btn-store', () => this.on.store?.());
     click('btn-store-back', () => this.on.back?.());
     click('btn-settings', () => this.on.settings?.());
@@ -435,6 +445,19 @@ export class Hud {
     this.parkGrid?.addEventListener('click', (e) => {
       const card = e.target.closest('[data-park]');
       if (card) this.on.selectPark?.(card.dataset.park);
+    });
+    this.myParkGrid?.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-id]');
+      if (!card) return;
+      const act = e.target.closest('[data-act]');
+      if (act) {
+        const id = card.dataset.id;
+        if (act.dataset.act === 'play') this.on.playPark?.(id);
+        if (act.dataset.act === 'edit') this.on.editPark?.(id);
+        if (act.dataset.act === 'delete') this.on.deletePark?.(id);
+      } else {
+        this.on.editPark?.(card.dataset.id);
+      }
     });
     this.lightingToggle = document.getElementById('lighting-toggle');
     this.lightingToggle?.addEventListener('click', (e) => {
@@ -734,6 +757,28 @@ export class Hud {
     for (const btn of this.lightingToggle.querySelectorAll('[data-lighting]')) {
       btn.classList.toggle('active', btn.dataset.lighting === mode);
     }
+  }
+
+  // --- my parks ------------------------------------------------------------
+  /** Every park the player built, with Play/Edit/Delete actions. */
+  renderMyParks(parks, currentId) {
+    if (!this.myParkGrid) return;
+    this.myParkGrid.innerHTML =
+      parks
+        .map((p) => {
+          const current = p.id === currentId ? ' (now)' : '';
+          return (
+            `<div class="mypark-card" data-id="${p.id}">` +
+            `<b>${p.name}${current}</b>` +
+            `<span class="meta">${p.objects} object${p.objects === 1 ? '' : 's'}</span>` +
+            `<span class="mypark-actions">` +
+            `<button type="button" data-act="play">Play</button>` +
+            `<button type="button" data-act="edit">Edit</button>` +
+            `<button type="button" class="mypark-del" data-act="delete">Delete</button>` +
+            `</span></div>`
+          );
+        })
+        .join('') || `<p class="tag">Nothing here yet — build your first park.</p>`;
   }
 
   // --- board shop ------------------------------------------------------------

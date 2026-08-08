@@ -61,7 +61,12 @@ section('Absolute-path audit');
     readFileSync(join(ROOT, f), 'utf8')
       .split('\n')
       .forEach((line, i) => {
-        const code = line.replace(/https?:\/\/\S*/g, '').replace(/\/\/.*$/, '');
+        const code = line
+          .replace(/https?:\/\/\S*/g, '')
+          // this.api(...) carries Spotify REST paths like '/me/player' — real
+          // API routes, not page assets, so they must not trip the asset audit.
+          .replace(/this\.api\([^)]*\)/g, '')
+          .replace(/\/\/.*$/, '');
         if (BAD.some((re) => re.test(code))) offenders.push(`${f}:${i + 1}: ${line.trim()}`);
       });
   }
@@ -148,11 +153,13 @@ section('Rolling');
   // is that it decays smoothly and never gains energy on the flat.
   const roll = await run(() => {
     const g = window.__skate;
-    // x = -10 is a clear lane: west of the funbox, east of the flat bar, and
-    // clear of both transitions until z = 40 — the park's own footprint is
-    // 2x scale (see TRACK_SCALE in park.js), so every feature sits twice as
-    // far out as its name alone would suggest.
-    g.place(-10,-18, 0, 8);
+    // x = -33 is a clear lane: east of the kicker and the west bank, west of
+    // the north-south flat bar, and clear of the east-west flat bar, the
+    // spine, the funbox and both quarterpipes right down the pad — the park's
+    // own footprint is 2x scale (see TRACK_SCALE in park.js), so every
+    // feature sits twice as far out as its name alone would suggest, and the
+    // spine alone blocks x = -10 where this test used to run.
+    g.place(-33,-18, 0, 8);
     const samples = [];
     for (let i = 0; i < 4; i++) {
       g.hold(1);
@@ -168,7 +175,7 @@ section('Rolling');
   // legs only move so fast.
   const early = await run(() => {
     const g = window.__skate;
-    g.place(-10,-18, 0, 0);
+    g.place(-33,-18, 0, 0);
     for (let i = 0; i < 4; i++) {
       g.drive(1 / 120, { push: true });
       g.hold(0.5);
@@ -179,7 +186,7 @@ section('Rolling');
 
   const pushed = await run(() => {
     const g = window.__skate;
-    g.place(-10,-18, 0, 0);
+    g.place(-33,-18, 0, 0);
     // Eleven pushes, each started the moment the last cycle ends.
     for (let i = 0; i < 11; i++) {
       g.drive(1 / 120, { push: true });
@@ -1621,13 +1628,20 @@ section('Push gesture (touch and mouse)');
   ok(before === 0 && after > 0.3, `sliding down the steering side pushes (0 → ${after.toFixed(2)} m/s)`);
 
   // Holding the thumb down, rather than lifting and pulling again each time, is
-  // the actual point of the change: it has to keep pushing on its own.
+  // the actual point of the change: it has to keep pushing on its own. Each
+  // stage is waited for as real speed rather than slept through — the frame
+  // rate here is at the mercy of how many AI skaters are being simulated, and
+  // a fixed 650ms is not reliably a full push cycle.
   await page.mouse.move(w * 0.25, h * 0.4);
   await page.mouse.down();
   await page.mouse.move(w * 0.25, h * 0.4 + 60, { steps: 6 }); // past the threshold, then just held
-  await sleep(650); // one push cycle
+  await page
+    .waitForFunction((a) => window.__skate.ride.speed > a + 1, after, { timeout: 10000 })
+    .catch(() => {});
   const mid = await run(() => window.__skate.ride.speed);
-  await sleep(650); // held straight through into a second one, no re-drag
+  await page
+    .waitForFunction((m) => window.__skate.ride.speed > m, mid, { timeout: 10000 })
+    .catch(() => {});
   const held = await run(() => window.__skate.ride.speed);
   await page.mouse.up();
   ok(
@@ -1636,15 +1650,21 @@ section('Push gesture (touch and mouse)');
   );
 
   // And the same holds for a keyboard held down rather than tapped repeatedly.
+  // Same polling: each sample is waited for as actual speed gained, since a
+  // push begins before it imparts any, and a pushCount tick is not a metre.
   const before2 = await run(() => {
     const g = window.__skate;
     g.place(-10, -18, 0, 0);
     return g.ride.speed;
   });
   await page.keyboard.down('KeyW');
-  await sleep(650);
+  await page
+    .waitForFunction(() => window.__skate.ride.speed > 1, null, { timeout: 10000 })
+    .catch(() => {});
   const kMid = await run(() => window.__skate.ride.speed);
-  await sleep(650);
+  await page
+    .waitForFunction((m) => window.__skate.ride.speed > m, kMid, { timeout: 10000 })
+    .catch(() => {});
   const kHeld = await run(() => window.__skate.ride.speed);
   await page.keyboard.up('KeyW');
   ok(
@@ -2035,7 +2055,12 @@ section('Camera: distance does not grow with ground speed');
   const runs = await run(() => {
     const g = window.__skate;
     const at = (speed) => {
-      g.place(0, -14, 0, speed);
+      // A clean flat stretch. z = -14 sits on the funbox's ramp, and the glide
+      // below never re-samples the terrain — pos.y stays at the 0.22 m it
+      // spawns at, so a long fast glide onto the flat reads as a phantom 0.2 m
+      // of air and lifts the camera with it. z = -28 is clear concrete, so
+      // pos.y is a flat 0 all the way out.
+      g.place(0, -28, 0, speed);
       // The rider has to actually travel, not just hold a velocity: the whole
       // question is where the camera settles relative to a skater in steady
       // motion, and a frozen position with 40 m/s on the clock is a state the
@@ -3155,11 +3180,15 @@ section('Gesture trail');
   ok(stashed.pathLen > 4, `with the whole gesture in it (${stashed.pathLen} points)`);
 
   // The live render loop (running because unfreeze() above started it) both
-  // draws and prunes this every frame — real wall-clock time, since that is
-  // what the fade itself is measured in.
-  await sleep(500);
-  const faded = await run(() => window.__skate.input.recentTrails.length);
-  ok(faded === 0, 'and it is gone again once its fade has finished');
+  // draws and prunes this every frame — the fade itself is measured in real
+  // wall-clock time, but under software GL the frame that does the pruning can
+  // land anywhere in the 350ms window, so wait for the result rather than
+  // sleeping past it.
+  const faded = await page
+    .waitForFunction(() => window.__skate.input.recentTrails.length === 0, null, { timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  ok(faded, 'and it is gone again once its fade has finished');
 
   await run(() => window.__skate.freeze());
 }
@@ -3361,18 +3390,24 @@ section('The loop and the page');
   ok(after > before, `the render loop runs (${after - before} frames in 2 s)`);
 
   // Keyboard: hold the charge, release, and expect to be off the ground.
-  // Real wall-clock time, not simulated steps — generous on purpose, since a
-  // park full of AI skaters can push a slow machine's real frame rate well
-  // under 60, and this only needs "held long enough," not an exact duration.
+  // The charge is waited for, not slept through — the same pattern as the grab
+  // section: a park full of AI skaters can push a slow machine's real frame
+  // rate well under 60, and a fixed 900ms of real time is not reliably a
+  // useful charge, where waiting for ride.charge is exactly that however long
+  // it actually takes.
   await run(() => {
     window.__skate.place(-10,-18, 0, 6);
   });
   await page.keyboard.down('Space');
-  await sleep(900);
+  await page
+    .waitForFunction(() => window.__skate.ride.charge >= 0.85, null, { timeout: 10000 })
+    .catch(() => {});
   await page.keyboard.up('Space');
-  await sleep(400);
-  const airborne = await run(() => window.__skate.ride.mode);
-  ok(airborne === 1, 'space bar loads and releases into an ollie');
+  const airborne = await page
+    .waitForFunction(() => window.__skate.ride.mode === 1, null, { timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  ok(airborne, 'space bar loads and releases into an ollie');
 
   const hudText = await page.evaluate(() => document.getElementById('score')?.textContent);
   ok(typeof hudText === 'string', 'the HUD is wired up');
@@ -3387,6 +3422,123 @@ section('The loop and the page');
     sw.includes('audio/theme.mp3') && existsSync(join(ROOT, 'audio/theme.mp3')),
     'and the music track is both on disk and named in the service worker'
   );
+}
+
+// --------------------------------------------------------------------------
+section('The park editor');
+{
+  // Open the editor on a hand-built file — the same shape parkFile.js writes
+  // and validate() would accept on the way back in.
+  const open = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1,
+      id: 'user-smoke',
+      name: 'Smoke ramp',
+      blurb: 'Built by the smoke test.',
+      extent: 20,
+      ground: 'wood',
+      spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 's1', type: 'slab', x: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 8, d: 4, h: 0.25, color: 'concrete' },
+        { id: 's2', type: 'quarter', x: 0, z: -9, ry: 0, sx: 1, sz: 1, w: 4, R: 2.4, H: 1.8, deck: 0.6, color: 'wood' },
+      ],
+    });
+    return {
+      active: g.designer.active,
+      objects: g.designer.file.objects.length,
+      pickables: g.designer.pickables.length,
+      chromeShown: !document.getElementById('designer').hidden,
+      overlayShown: !document.getElementById('overlay').hidden,
+      state: g.state,
+    };
+  });
+  ok(open.active && open.chromeShown && !open.overlayShown, 'opening the editor shows its chrome and hides the overlay');
+  ok(open.state === 'designer', 'and puts the app in the designer state');
+  ok(open.objects === 2 && open.pickables === 2, `with both objects live in the editor scene (${open.objects} objects, ${open.pickables} pickables)`);
+
+  // The palette path: add a third object, then select and inspect one.
+  const added = await run(() => {
+    const g = window.__skate;
+    g.designer.addObject('stairs');
+    g.designer.select('s2');
+    return {
+      objects: g.designer.file.objects.length,
+      pickables: g.designer.pickables.length,
+      sel: g.designer.sel,
+      panelText: document.getElementById('dg-panel')?.textContent.length || 0,
+    };
+  });
+  ok(added.objects === 3 && added.pickables === 3, 'the palette adds an object to the file and the scene');
+  ok(added.sel === 's2', 'selecting an object marks it');
+  ok(added.panelText > 40, 'and fills the properties panel');
+
+  // Every palette type has to actually build its preview and paint its
+  // collision — a crash or a missing builder here shows up only when a player
+  // picks that object, so try them all rather than trusting a representative.
+  const palette = await run(() => {
+    const g = window.__skate;
+    const results = [];
+    for (const type of ['bank', 'rail', 'ledge', 'funbox']) {
+      let ok = true;
+      try {
+        g.designer.addObject(type);
+      } catch {
+        ok = false;
+      }
+      results.push(`${type}:${ok ? 'ok' : 'THREW'}`);
+    }
+    return {
+      results,
+      objects: g.designer.file.objects.length,
+      pickables: g.designer.pickables.length,
+    };
+  });
+  ok(palette.results.every((r) => r.endsWith(':ok')), `every palette type builds its preview (${palette.results.join(', ')})`);
+  ok(palette.objects === 7 && palette.pickables === 7, `and each one lands in the file and the scene (${palette.objects} objects)`);
+
+  // Save writes the file to storage.
+  const saved = await run(() => {
+    window.__skate.designer.save();
+    return JSON.parse(localStorage.getItem('skate.parks') || '[]').map((f) => f.id);
+  });
+  ok(saved.includes('user-smoke'), 'Save persists the file to storage');
+
+  // Save & Test loads the park and starts the run.
+  const tested = await run(() => {
+    const g = window.__skate;
+    g.designer.on.test();
+    return {
+      state: g.state,
+      park: g.park.id,
+      active: g.designer.active,
+      chromeShown: !document.getElementById('designer').hidden,
+      spawnX: g.park.spawn.x,
+      spawnZ: g.park.spawn.z,
+    };
+  });
+  ok(tested.state === 'playing' && !tested.active && !tested.chromeShown, 'Save & Test leaves the editor and starts the run');
+  ok(tested.park === 'user-smoke', `on the park just built (${tested.park})`);
+  ok(tested.spawnX === 0 && tested.spawnZ === -17, 'from the file\'s own clear spawn');
+
+  // The My Parks screen lists the saved park, and Delete removes it.
+  await run(() => {
+    const g = window.__skate;
+    g.freeze();
+    g.showMyParks();
+  });
+  const listed = await run(() => document.getElementById('mypark-grid')?.textContent || '');
+  ok(listed.includes('Smoke ramp'), 'My Parks lists the park just built');
+  await run(() => document.querySelector('[data-act="delete"]')?.click());
+  const afterDelete = await run(() => ({
+    grid: document.getElementById('mypark-grid')?.textContent || '',
+    files: JSON.parse(localStorage.getItem('skate.parks') || '[]').length,
+    current: window.__skate.state,
+  }));
+  ok(!afterDelete.grid.includes('Smoke ramp') && afterDelete.files === 0, 'Delete removes it from the grid and from storage');
+  ok(afterDelete.current === 'myparks', 'and the screen stays put');
+
+  await run(() => window.__skate.showStart());
 }
 
 await page.goto(`${BASE}/index.html?debug=1`, { waitUntil: 'load' });

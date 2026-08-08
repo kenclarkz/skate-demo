@@ -193,7 +193,7 @@ export class Input {
     // than the screen on a lot of phones, and this is the only way down to
     // the card past the fold.
     const block = (e) => {
-      if (e.target.closest?.('#overlay')) return;
+      if (e.target.closest?.('#overlay, #designer')) return;
       e.preventDefault();
     };
     document.addEventListener('touchmove', block, { passive: false });
