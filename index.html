@@ -129,6 +129,7 @@
           <nav class="menu">
             <button id="btn-play" class="primary" type="button">Skate</button>
             <button id="btn-parks" type="button">Choose park</button>
+            <button id="btn-myparks" type="button">My parks</button>
             <button id="btn-store" type="button">Shop</button>
             <button id="btn-guide" type="button">How to play</button>
             <button id="btn-settings" type="button">Settings</button>
@@ -215,6 +216,14 @@
           <button id="btn-parks-back" class="primary" type="button">Back</button>
         </section>
 
+        <section id="screen-myparks" class="screen wide" hidden>
+          <h1>My parks</h1>
+          <p class="tag">Build a park of your own and skate it like the rest of them.</p>
+          <div class="mypark-grid" id="mypark-grid"></div>
+          <button id="btn-mypark-new" class="primary" type="button">New park</button>
+          <button id="btn-myparks-back" class="primary" type="button">Back</button>
+        </section>
+
         <section id="screen-store" class="screen wide" hidden>
           <h1>Shop</h1>
           <p class="tag">Land tricks to earn coins. <b id="store-coins">0</b> coins</p>
@@ -271,6 +280,26 @@
         <!-- There is no slam screen. A fall ends a combo, not a run: the rider
              gets back up where they landed and the reason appears as a callout
              over the game, so nothing interrupts. -->
+      </div>
+
+      <!-- The park editor. Not an overlay: the whole screen is the design
+           canvas, with this chrome around it. js/skate/parkDesigner.js builds
+           the palette rail and the properties panel and binds it all. -->
+      <div id="designer" hidden>
+        <header class="designer-bar">
+          <button id="dg-back" type="button">Back</button>
+          <input id="dg-name" type="text" maxlength="40" spellcheck="false" aria-label="Park name">
+          <span id="dg-count" class="designer-count"></span>
+          <button id="dg-undo" type="button" disabled>Undo</button>
+          <button id="dg-redo" type="button" disabled>Redo</button>
+          <button id="dg-save" type="button">Save</button>
+          <button id="dg-test" type="button" class="primary">Save &amp; Test</button>
+        </header>
+        <div id="dg-rail">
+          <nav id="dg-palette" aria-label="Objects"></nav>
+          <aside id="dg-panel" aria-label="Properties"></aside>
+        </div>
+        <p id="dg-hint" class="designer-hint">Drag an object to move it &middot; drag the ground to look around &middot; scroll to zoom &middot; R rotates &middot; Del deletes &middot; Ctrl+Z undoes</p>
       </div>
 
       <div id="ios-hint" hidden>

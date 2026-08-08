@@ -4,6 +4,9 @@
 import * as THREE from '../game/three.js';
 import * as C from './config.js';
 import { Park, PARKS, ROUGH } from './park.js';
+import { ParkDesigner } from './parkDesigner.js';
+import { newFile, buildDef } from './parkFile.js';
+import { listFiles, removeFile } from './parkStorage.js';
 import { Board } from './board.js';
 import { Skater } from './skater.js';
 import { Ride, GROUND, GRIND, AIR } from './physics.js';
@@ -32,9 +35,11 @@ const PLAYING = 'playing';
 const PAUSED = 'paused';
 const GUIDE = 'guide';
 const PARKMENU = 'parks';
+const MYPARKSMENU = 'myparks';
 const STOREMENU = 'store';
 const SETTINGSMENU = 'settings';
 const WALKING = 'walking';
+const DESIGNER = 'designer';
 const BAILED = 'bail';
 
 const AI_COUNT = 13;
@@ -70,7 +75,15 @@ const lighting = new LightingManager(scene, renderer);
 lighting.setMode(save.lighting === NIGHT ? NIGHT : DAY, true);
 
 // --- world ----------------------------------------------------------------
-let park = new Park(PARKS.find((p) => p.id === save.park) || PARKS[0]);
+// The player's own parks, from localStorage. They ride alongside the built-in
+// ones everywhere a park is chosen; `allParks()` is the single source for the
+// combined picker, and `buildDef` turns a saved file into a real `Park` def.
+let userParks = listFiles();
+function allParks() {
+  return [...PARKS, ...userParks.map((f) => buildDef(f))];
+}
+
+let park = new Park(allParks().find((p) => p.id === save.park) || PARKS[0]);
 scene.add(park.group);
 lighting.setPark(park);
 
@@ -229,6 +242,10 @@ function updateShadow() {
 // --- systems --------------------------------------------------------------
 const hud = new Hud();
 if (DEBUG) hud.enableDebug();
+// The park editor is a second scene on the same canvas. It stays dormant until
+// the player opens My Parks — nothing about the play scene is touched while it
+// is closed, and while it is open it is the only thing being rendered.
+const designer = new ParkDesigner(renderer, camera);
 const audio = new Audio(save.sound);
 // The radio is an optional extra: it needs Spotify's provider, and a broken
 // login must never take the game down, so a null back from bootRadio just
@@ -308,9 +325,42 @@ function showGuide() {
 function showParks() {
   state = PARKMENU;
   input.enabled = false;
-  hud.renderParks(PARKS, park.id);
+  hud.renderParks(allParks(), park.id);
   hud.setLightingMode(save.lighting);
   hud.show('parks');
+}
+
+function showMyParks() {
+  state = MYPARKSMENU;
+  input.enabled = false;
+  hud.renderMyParks(userParks, park.id);
+  hud.show('myparks');
+}
+
+/** The freshest saved copy of every user park, from storage. */
+function refreshUserParks() {
+  userParks = listFiles();
+}
+
+/**
+ * Into the editor. The overlay is put away and the whole screen becomes the
+ * design canvas; the editor owns rendering and input from here until Back or
+ * Save & Test hands the screen back.
+ */
+function openDesigner(file) {
+  designer.open(file);
+  state = DESIGNER;
+  input.enabled = false;
+  hud.hide();
+  hud.stats.hidden = true;
+}
+
+/** Persist the working file, then leave the editor. `file` is `designer.file`
+ * after a save — the live working copy. */
+function leaveDesigner() {
+  designer.close();
+  refreshUserParks();
+  hud.stats.hidden = false;
 }
 
 function showStore() {
@@ -354,12 +404,47 @@ hud.on.guide = () => showGuide();
 hud.on.back = () => showStart();
 hud.on.parks = () => showParks();
 hud.on.selectPark = (id) => {
-  const def = PARKS.find((p) => p.id === id);
+  const def = allParks().find((p) => p.id === id);
   if (def && def.id !== park.id) {
     loadPark(def);
     respawn();
   }
   showStart();
+};
+hud.on.myParks = () => showMyParks();
+hud.on.newPark = () => openDesigner(newFile());
+hud.on.editPark = (id) => {
+  const file = userParks.find((f) => f.id === id);
+  if (file) openDesigner(file);
+};
+hud.on.playPark = (id) => {
+  const file = userParks.find((f) => f.id === id);
+  if (!file) return;
+  if (park.id !== id) {
+    loadPark(buildDef(file));
+    respawn();
+  }
+  startGame();
+};
+hud.on.deletePark = (id) => {
+  removeFile(id);
+  refreshUserParks();
+  hud.renderMyParks(userParks, park.id);
+};
+// The editor's chrome calls back into the app: Back returns to My Parks with
+// whatever was autosaved, Save & Test loads the park it just wrote and starts
+// the run from a clear spawn.
+designer.on.back = () => {
+  leaveDesigner();
+  showMyParks();
+};
+designer.on.test = () => {
+  designer.save();
+  const def = buildDef(designer.file);
+  leaveDesigner();
+  if (park.id !== def.id) loadPark(def);
+  respawn();
+  startGame();
 };
 hud.on.lighting = (mode) => {
   save.setLighting(mode);
@@ -770,8 +855,10 @@ function step(dt, frameInput) {
     state === START ||
     state === GUIDE ||
     state === PARKMENU ||
+    state === MYPARKSMENU ||
     state === STOREMENU ||
-    state === SETTINGSMENU
+    state === SETTINGSMENU ||
+    state === DESIGNER
   ) {
     // Nothing moves, but the camera still eases into place behind a fresh spawn.
   }
@@ -938,7 +1025,11 @@ function loop(now) {
   if (steps === 8) acc = 0; // give up rather than fall further behind
 
   updateHud(dt);
-  render(dt);
+  // While the editor is open it owns the whole canvas — the play scene is
+  // neither stepped visually nor rendered, so a design session never has a
+  // ghost of the park drifting behind it.
+  if (designer.active) designer.tick(dt);
+  else render(dt);
   hud.preview?.update(dt); // no-ops unless the guide screen actually asked for one
   hud.updateGestureDiagram(dt); // no-ops unless the current tutorial step has one
   gestureTrail.draw(input);
@@ -1018,6 +1109,14 @@ window.__skate = {
   camera,
   renderer,
   lighting,
+  designer,
+  get userParks() {
+    return userParks;
+  },
+  allParks,
+  showMyParks,
+  openDesigner,
+  showStart,
   start: startGame,
   respawn,
   selectBoard,
