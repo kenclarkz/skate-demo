@@ -31,7 +31,7 @@ jobs:
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         with:
-          model: anthropic/claude-sonnet-4-20250514
+          model: anthropic/claude-sonnet-4-6
           prompt: ${{ github.event.comment.body }}
           use_github_token: true
         env:
