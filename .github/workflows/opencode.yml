@@ -28,6 +28,19 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Find old model configuration
+        run: |
+          echo "=== Searching repository for old model ==="
+          grep -R "claude-sonnet-4-20250514" . \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            || true
+
+          echo "=== OpenCode config files ==="
+          find . -maxdepth 3 \
+            \( -name "opencode.json" -o -name "opencode.jsonc" \) \
+            -print
+
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         with:
