@@ -24,8 +24,11 @@
 // only real stations today, but "a station" is a list of URIs that can come
 // from anywhere, and the saved `radioPlaylistId` stores exactly that id.
 
-/** The local server that counts as "development" for the Spotify redirect. */
-const DEV_HOST = 'localhost:8080';
+/** The redirect URIs the Spotify app must list. Production is always the
+ *  GitHub Pages URL; development is the loopback IP Spotify now insists on
+ *  (localhost aliases are rejected by the current redirect rules). */
+const PROD_REDIRECT = 'https://kenclarkz.github.io/skate/';
+const DEV_REDIRECT = 'http://127.0.0.1:8080/';
 
 // The station that is always there, whether or not anyone is signed in. When
 // it is "playing", the toast says what it actually is: the park's speakers.
@@ -76,15 +79,14 @@ const SCOPES = [
   'playlist-read-private',
 ];
 
-/** The redirect URL the Spotify app must list. GitHub Pages is the prod host;
- *  a local http server on 8080 swaps in automatically — whichever of localhost
- *  or 127.0.0.1 the dev reached, the URI is normalised to the one to register. */
+/** The exact redirect URL the Spotify app must list. Production always
+ *  resolves to the registered GitHub Pages URL; a local http server on 8080
+ *  swaps in the loopback IP (localhost aliases are no longer accepted). */
 function redirectUri() {
   const dev =
     location.port === '8080' &&
     (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-  if (dev) return new URL(location.pathname, `http://${DEV_HOST}`).href;
-  return location.origin + location.pathname;
+  return dev ? DEV_REDIRECT : PROD_REDIRECT;
 }
 
 /**
@@ -290,6 +292,7 @@ class SpotifyProvider {
     u.searchParams.set('state', state);
     u.searchParams.set('code_challenge_method', 'S256');
     u.searchParams.set('code_challenge', challenge);
+    console.log('[Spotify] redirect_uri:', redirectUri());
     location.href = u.href;
   }
 

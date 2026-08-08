@@ -102,8 +102,9 @@ your own app:
 1. Create an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) ("Create app").
 2. Under *Edit settings → Redirect URIs*, add the exact URLs the game runs at
    (trailing slashes matter — each must match the address bar exactly):
-   - `https://<your-user>.github.io/<repo>/` for the GitHub Pages build
-   - `http://localhost:8080/` for local development
+   - `https://kenclarkz.github.io/skate/` for the GitHub Pages build
+   - `http://127.0.0.1:8080/` for local development (the loopback IP — Spotify
+     no longer accepts `localhost` aliases)
 3. Enable **Web Playback SDK** on the app, and while it is in Development Mode
    add the Spotify account(s) that should use it under *Users and access*.
 4. Copy the app's **Client ID** into `CLIENT_ID` in `js/skate/radio.js` and
