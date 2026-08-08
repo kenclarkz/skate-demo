@@ -39,6 +39,24 @@ jobs:
           git config --global user.name "OpenCode"
           git config --global user.email "opencode@users.noreply.github.com"
 
+      - name: Configure OpenCode permissions
+        run: |
+          mkdir -p ~/.config/opencode
+
+          cat > ~/.config/opencode/opencode.json <<'EOF'
+          {
+            "permission": {
+              "*": "allow",
+              "external_directory": {
+                "*": "allow"
+              }
+            }
+          }
+          EOF
+
+          echo "OpenCode permissions configured:"
+          cat ~/.config/opencode/opencode.json
+
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         with:
