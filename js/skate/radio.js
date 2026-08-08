@@ -53,7 +53,7 @@ const THEME_TRACK = { id: 'theme', name: 'The park’s own speakers', artists: [
 // Redirect URIs — see the "Spotify radio" section of the README. The id below
 // is not a registered app, so sign-in preflights it and says so in the panel
 // instead of stranding the player on Spotify's error page.
-const CLIENT_ID = '2b2f2c0bbce14e70a25dca88348b8ed9';
+const CLIENT_ID = 'c43d6dbf57104622919931948f2536df';
 
 /** What a dead client id looks like to the player, instead of the white page. */
 const CLIENT_ID_ERROR =
