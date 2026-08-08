@@ -24,8 +24,9 @@ jobs:
     steps:
       - name: Show event information
         run: |
-          echo "EVENT: ${{ github.event_name }}"
-          echo "COMMENT: ${{ github.event.comment.body }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Comment: ${{ github.event.comment.body }}"
 
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -37,23 +38,6 @@ jobs:
         run: |
           git config --global user.name "OpenCode"
           git config --global user.email "opencode@users.noreply.github.com"
-
-      - name: Find OpenCode configuration
-        run: |
-          echo "=== OpenCode config files ==="
-
-          find . -maxdepth 5 \
-            \( -name "opencode.json" -o -name "opencode.jsonc" \) \
-            -print
-
-          echo ""
-          echo "=== Model configuration ==="
-
-          grep -R "claude-sonnet\|big-pickle" . \
-            --exclude-dir=.git \
-            --exclude-dir=node_modules \
-            --exclude-dir=.github \
-            || true
 
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
