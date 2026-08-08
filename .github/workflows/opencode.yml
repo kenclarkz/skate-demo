@@ -19,16 +19,6 @@ permissions:
 
 jobs:
   opencode:
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'issue_comment' &&
-        (
-          contains(github.event.comment.body, '/opencode') ||
-          contains(github.event.comment.body, '/oc')
-        )
-      )
-
     runs-on: ubuntu-latest
 
     steps:
@@ -57,18 +47,9 @@ jobs:
             -print
 
           echo ""
-          echo "=== Search for Anthropic models ==="
+          echo "=== Model configuration ==="
 
-          grep -R "anthropic/" . \
-            --exclude-dir=.git \
-            --exclude-dir=node_modules \
-            --exclude-dir=.github \
-            || true
-
-          echo ""
-          echo "=== Search for Big Pickle ==="
-
-          grep -R "big-pickle" . \
+          grep -R "claude-sonnet\|big-pickle" . \
             --exclude-dir=.git \
             --exclude-dir=node_modules \
             --exclude-dir=.github \
