@@ -703,6 +703,56 @@ body {
   color: var(--dim);
 }
 
+/* The one-tap "autoplay was blocked" fallback: a full-width primary button in
+   the Settings radio section, so the player can re-enter the SDK activation
+   path from a real touch event on iPhone. */
+#radio-activate {
+  width: 100%;
+}
+
+/* The temporary Spotify debug panel in Settings. A compact definition list so
+   every field the player-control layer cares about is on screen at once. */
+.spotify-debug {
+  margin-top: 4px;
+  padding: 10px 12px;
+  text-align: left;
+  color: var(--ink);
+  background: rgba(20, 26, 33, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.spotify-debug summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dim);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.spotify-debug dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 10px;
+  margin: 8px 0 0;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.spotify-debug dt {
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.spotify-debug dd {
+  margin: 0;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 /* --- screens ------------------------------------------------------------- */
 #overlay {
   position: absolute;

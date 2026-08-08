@@ -109,6 +109,7 @@
           </div>
           <div class="radio-controls">
             <button id="radio-prev" type="button" aria-label="Previous track" disabled>&#8249;</button>
+            <button id="radio-play" type="button" aria-label="Play or pause" disabled>&#9654;</button>
             <button id="radio-next" type="button" aria-label="Next track" disabled>&#8250;</button>
           </div>
           <button id="radio-now" type="button" aria-label="What is playing" hidden>
@@ -172,6 +173,33 @@
             <input type="search" id="radio-search" class="radio-search-input" placeholder="Search songs or artists…" autocomplete="off" aria-label="Search songs on Spotify">
             <div id="radio-search-results" class="radio-stations" hidden></div>
             <button id="opt-radio-visible" type="button">Radio in game: On</button>
+
+            <!-- Shown when the browser refuses Spotify autoplay (autoplay_failed
+                 or a playback request that never yields a playing track): one
+                 button that re-enters the SDK activation path directly from the
+                 user's own touch. radio.js shows/hides and binds it. -->
+            <button id="radio-activate" class="primary" type="button" hidden>Tap PLAY to activate Spotify audio</button>
+
+            <!-- Temporary Spotify debug panel while the player-control layer is
+                 being proven out. Every row is fed live by js/skate/radio.js. -->
+            <details id="spotify-debug" class="spotify-debug" open>
+              <summary>Spotify debug</summary>
+              <dl>
+                <div><dt>SDK</dt><dd id="dbg-sdk">—</dd></div>
+                <div><dt>Player</dt><dd id="dbg-player">—</dd></div>
+                <div><dt>Device ID</dt><dd id="dbg-device">—</dd></div>
+                <div><dt>Token</dt><dd id="dbg-token">—</dd></div>
+                <div><dt>Current Track</dt><dd id="dbg-track">—</dd></div>
+                <div><dt>Artist</dt><dd id="dbg-artist">—</dd></div>
+                <div><dt>Album</dt><dd id="dbg-album">—</dd></div>
+                <div><dt>Paused</dt><dd id="dbg-paused">—</dd></div>
+                <div><dt>Position</dt><dd id="dbg-position">—</dd></div>
+                <div><dt>Duration</dt><dd id="dbg-duration">—</dd></div>
+                <div><dt>Volume</dt><dd id="dbg-volume">—</dd></div>
+                <div><dt>Last API Status</dt><dd id="dbg-api">—</dd></div>
+                <div><dt>Last SDK Event</dt><dd id="dbg-event">—</dd></div>
+              </dl>
+            </details>
           </nav>
           <button id="btn-settings-back" class="primary" type="button">Back</button>
         </section>
