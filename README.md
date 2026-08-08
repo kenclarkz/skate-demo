@@ -102,7 +102,7 @@ your own app:
 1. Create an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) ("Create app").
 2. Under *Edit settings → Redirect URIs*, add the exact URLs the game runs at
    (trailing slashes matter — each must match the address bar exactly):
-   - `https://kenclarkz.github.io/skate/` for the GitHub Pages build
+   - `https://kenclarkz.github.io/skate-demo/` for the GitHub Pages build
    - `http://127.0.0.1:8080/` for local development (the loopback IP — Spotify
      no longer accepts `localhost` aliases)
 3. Enable **Web Playback SDK** on the app, and while it is in Development Mode

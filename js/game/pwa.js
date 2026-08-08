@@ -1,7 +1,7 @@
 // Service worker registration and the two install flows.
 //
 // Every path here is relative on purpose: this site is served from a project
-// subpath of github.io (/skate/), so a leading slash would resolve to the
+// subpath of github.io (/skate-demo/), so a leading slash would resolve to the
 // domain root and 404.
 
 const IOS_HINT_KEY = 'templeRunner.iosHintDismissed';
