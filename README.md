@@ -87,3 +87,24 @@ node tools/skate-smoke.mjs
 `tools/skate-shot.mjs` poses the rig at the moments most likely to break
 (mid-ollie, mid-kickflip, a grind, a slam) and saves a screenshot of each,
 for fast visual iteration.
+
+## The Spotify radio
+
+The radio in Settings can stream a connected player's Spotify playlists and
+search results. Because this is a static site with nowhere to hide a secret,
+it uses the PKCE flow plus the Web Playback SDK, and the app's **Client ID**
+lives in one constant — `CLIENT_ID` at the top of `js/skate/radio.js`. That id
+must belong to a registered Spotify app: an id Spotify doesn't recognise makes
+the login attempt land on a dead-end `client_id: Invalid` white page (the game
+now checks for that and explains it in the Settings panel instead). To wire up
+your own app:
+
+1. Create an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) ("Create app").
+2. Under *Edit settings → Redirect URIs*, add the exact URLs the game runs at
+   (trailing slashes matter — each must match the address bar exactly):
+   - `https://<your-user>.github.io/<repo>/` for the GitHub Pages build
+   - `http://localhost:8080/` for local development
+3. Enable **Web Playback SDK** on the app, and while it is in Development Mode
+   add the Spotify account(s) that should use it under *Users and access*.
+4. Copy the app's **Client ID** into `CLIENT_ID` in `js/skate/radio.js` and
+   deploy — the radio then lets connected players sign in and pick a playlist.
