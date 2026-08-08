@@ -1032,6 +1032,7 @@ export class Radio {
     this.playing = false;
     this.connected = false;
     this.now = null;             // last track the SDK actually reported
+    this.enabled = true;         // master switch — OFF stops Spotify + stands controls down
     this.visible = true;         // whether the in-game bar shows at all
     this.inGame = false;         // whether a run (not a menu) is on screen
     this.screen = null;          // current menu name, or null while playing
@@ -1055,6 +1056,7 @@ export class Radio {
       list: document.getElementById('radio-settings-stations'),
       search: document.getElementById('radio-search'),
       results: document.getElementById('radio-search-results'),
+      enabledBtn: document.getElementById('opt-radio-enabled'),
       visibleBtn: document.getElementById('opt-radio-visible'),
       activate: document.getElementById('radio-activate'),
       debug: document.getElementById('spotify-debug'),
@@ -1094,6 +1096,11 @@ export class Radio {
       this.renderVisibleBtn();
       this.renderPlayback();
     });
+    // The master switch: OFF stops Spotify and stands every radio control
+    // down; ON re-enables it all without starting anything itself.
+    el.enabledBtn.addEventListener('click', () => {
+      this.setEnabled(!this.enabled);
+    });
     el.search.addEventListener('input', () => this.onSearchInput());
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && el.search.value) {
@@ -1110,6 +1117,8 @@ export class Radio {
     const saved = this.ctx.save?.radioPlaylistId;
     this.visible = this.ctx.save?.radioVisible !== false;
     this.renderVisibleBtn();
+    this.enabled = this.ctx.save?.radioEnabled !== false;
+    this.renderEnabledBtn();
     this.provider.onSignOut = () => {
       this.connected = false;
       this.station = null;
@@ -1118,6 +1127,7 @@ export class Radio {
       this.renderPlayback();
       this.syncPanel();
       this.renderDebug();
+      this.ctx.audio?.setMusicDucked(false);
     };
     // player_state_changed is the source of truth for the whole radio UI: it
     // reports the actual current track/artist/album/paused/position/duration,
@@ -1168,10 +1178,10 @@ export class Radio {
     if (name === 'settings') this.syncPanel();
   }
 
-  /** Reflect the run/menu + the player's on/off choice on the bar itself. */
+  /** Reflect the run/menu + the player's on/off choices on the bar itself. */
   syncBar() {
     if (!this.el.bar) return;
-    this.el.bar.hidden = !(this.inGame && this.visible);
+    this.el.bar.hidden = !(this.inGame && this.visible && this.enabled);
   }
 
   /** One place to redraw the bar: the ACTUAL current track (this.now is fed by
@@ -1189,7 +1199,7 @@ export class Radio {
     if (this.el.scroll && this.el.track.scrollWidth > this.el.scroll.clientWidth) {
       this.el.track.classList.add('scroll');
     }
-    const controllable = this.connected && this.station && !this.station.builtin;
+    const controllable = this.enabled && this.connected && this.station && !this.station.builtin;
     this.el.prevBtn.disabled = !controllable;
     this.el.nextBtn.disabled = !controllable;
     if (this.el.playBtn) {
@@ -1204,7 +1214,7 @@ export class Radio {
   // inside the user's gesture, so nothing may await between the tap and the
   // SDK method call.
   next() {
-    if (!this.connected || !this.station || this.station.builtin) return;
+    if (!this.enabled || !this.connected || !this.station || this.station.builtin) return;
     try {
       this.provider.nextTrack();
     } catch (e) {
@@ -1213,7 +1223,7 @@ export class Radio {
   }
 
   previous() {
-    if (!this.connected || !this.station || this.station.builtin) return;
+    if (!this.enabled || !this.connected || !this.station || this.station.builtin) return;
     try {
       this.provider.previousTrack();
     } catch (e) {
@@ -1222,7 +1232,7 @@ export class Radio {
   }
 
   playPause() {
-    if (!this.connected || !this.station || this.station.builtin) return;
+    if (!this.enabled || !this.connected || !this.station || this.station.builtin) return;
     try {
       this.provider.togglePlay();
     } catch (e) {
@@ -1234,6 +1244,7 @@ export class Radio {
   /** The signed-in signed-out split, plus (lazily) the station list. */
   async syncPanel() {
     if (!this.el.list) return;
+    this.applyEnabledState();
     const signedIn = this.connected;
     this.el.login.hidden = signedIn;
     this.el.logout.hidden = !signedIn;
@@ -1253,6 +1264,17 @@ export class Radio {
     } catch (e) {
       this.el.status.textContent =
         'Couldn’t load your playlists — check the connection and try again.';
+    }
+  }
+
+  /** When the radio is switched off, every radio control in Settings stands
+   *  down too: the login/logout split, the search box, and the station cards
+   *  (stationCard() disables those itself). */
+  applyEnabledState() {
+    const on = this.enabled;
+    for (const id of ['radio-settings-login', 'radio-settings-logout', 'radio-search', 'radio-activate']) {
+      const n = document.getElementById(id);
+      if (n) n.disabled = !on;
     }
   }
 
@@ -1293,6 +1315,7 @@ export class Radio {
 
     btn.append(art, text, live);
     if (station.id === this.station?.id) btn.classList.add('active');
+    btn.disabled = !this.enabled;
     btn.addEventListener('click', () => this.play(station));
     return btn;
   }
@@ -1396,11 +1419,11 @@ export class Radio {
    * of the handler. The rest of the pipeline runs in startSpotifyPlaylist.
    */
   play(station) {
+    if (!this.enabled) return;
     this.station = station;
     if (station.builtin) {
       this.playing = true;
       this.provider.stopPolling();
-      this.ctx.audio?.setMusicDucked(false);
       this.emit();
       this.renderPlayback();
       this.announce(THEME_TRACK);
@@ -1490,10 +1513,47 @@ export class Radio {
   /** The save + duck-theme side of a station change, in one place. */
   emit() {
     if (this.station) this.ctx.save?.setRadioPlaylistId?.(this.station.id);
-    // Music ducking/muting is temporarily DISABLED while we debug Spotify:
-    // the park's theme no longer ducks out of the way, so a silent Spotify
-    // player cannot be mistaken for a muted theme. Re-enable once Spotify
-    // audio is proven working.
+    // While a real Spotify station is actually playing, the park's own theme
+    // stops so the two never stack; the moment Spotify pauses or stops — or
+    // the built-in station is the one playing — the theme comes back at the
+    // volume the player saved. `this.playing` is fed by onPlay, which the SDK
+    // drives from player_state_changed — the source of truth.
+    const spotifyPlaying = this.enabled && this.playing && this.station && !this.station.builtin;
+    this.ctx.audio?.setMusicDucked(spotifyPlaying);
+  }
+
+  // --- the Skate Radio ON/OFF switch --------------------------------------
+  /** Master switch. OFF stops Spotify and stands every radio control down;
+   *  ON re-enables it all without starting anything itself. */
+  setEnabled(on) {
+    this.enabled = on !== false;
+    if (!this.enabled) this.stopSpotify();
+    this.ctx.save?.setRadioEnabled?.(this.enabled);
+    this.renderEnabledBtn();
+    this.renderPlayback();
+    this.syncPanel();
+  }
+
+  /** Turn the radio off: pause whatever Spotify is playing and let the theme
+   *  come back at its saved volume. The SDK's own togglePlay is the control,
+   *  guarded by the state it reported, so an already-paused player is never
+   *  accidentally resumed. */
+  stopSpotify() {
+    if (this.playing && this.provider.spotifyPlayer) {
+      try {
+        this.provider.togglePlay();
+      } catch (e) {
+        console.warn('radio:', e);
+      }
+    }
+    this.playing = false;
+    this.ctx.audio?.setMusicDucked(false);
+  }
+
+  renderEnabledBtn() {
+    if (this.el.enabledBtn) {
+      this.el.enabledBtn.textContent = `Skate Radio: ${this.enabled ? 'On' : 'Off'}`;
+    }
   }
 
   // --- autoplay + the debug panel -----------------------------------------
@@ -1510,6 +1570,7 @@ export class Radio {
   /** The PLAY button: invoked directly from the user's touch event, so it
    *  re-activates the SDK in-gesture and then re-runs the playback pipeline. */
   async onActivate() {
+    if (!this.enabled) return;
     this.provider.activate();
     this.hideActivate();
     if (this.station && !this.station.builtin) {
@@ -1565,6 +1626,8 @@ export class Radio {
   resetSettings() {
     this.visible = true;
     this.renderVisibleBtn();
+    this.enabled = true;
+    this.renderEnabledBtn();
     this.station = BUILTIN_STATION;
     this.playing = false;
     this.now = null;

@@ -36,6 +36,7 @@ const DEFAULTS = {
   holdToPush: true, // holding the push key/thumb repeats pushes — see HOLD_TO_PUSH
   radioPlaylistId: 'builtin', // the last station picked — see js/skate/radio.js
   radioVisible: true, // whether the in-game radio bar shows at all
+  radioEnabled: true, // master switch for the whole Skate Radio — see js/skate/radio.js
 };
 
 // `boards`, `outfits` and `accessories` (which ones are owned) are arrays and
@@ -77,6 +78,7 @@ function read() {
     s.holdToPush = s.holdToPush !== false;
     s.radioPlaylistId = typeof s.radioPlaylistId === 'string' ? s.radioPlaylistId : 'builtin';
     s.radioVisible = s.radioVisible !== false;
+    s.radioEnabled = s.radioEnabled !== false;
     // The starter board and the starter outfit are always owned, whatever a
     // hand-edited save says.
     s.boards = Array.isArray(parsed.boards)
@@ -184,6 +186,9 @@ export const save = {
   },
   get radioVisible() {
     return state.radioVisible;
+  },
+  get radioEnabled() {
+    return state.radioEnabled;
   },
 
   /** @returns true if this beat the previous best combo. */
@@ -331,6 +336,13 @@ export const save = {
   /** Whether the in-game radio bar is shown. `false` hides it mid-run too. */
   setRadioVisible(on) {
     state.radioVisible = on !== false;
+    flush();
+  },
+
+  /** Master switch for the whole Skate Radio. `false` stops Spotify and
+   *  stands every radio control down — see js/skate/radio.js. */
+  setRadioEnabled(on) {
+    state.radioEnabled = on !== false;
     flush();
   },
 
