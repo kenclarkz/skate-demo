@@ -134,9 +134,11 @@ function randomChars(n) {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function sha256Hex(text) {
+async function sha256Base64Url(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  let binary = '';
+  for (const b of new Uint8Array(digest)) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /**
@@ -276,7 +278,7 @@ class SpotifyProvider {
     // the message in the panel instead.
     if (!(await this.checkClientId())) throw new Error(CLIENT_ID_ERROR);
     const verifier = randomChars(64);
-    const challenge = await sha256Hex(verifier);
+    const challenge = await sha256Base64Url(verifier);
     const state = randomChars(16);
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     sessionStorage.setItem(STATE_KEY, state);
