@@ -1,5 +1,4 @@
 name: opencode
-
 on:
   issue_comment:
     types: [created]
@@ -9,33 +8,30 @@ on:
         description: "What should OpenCode do?"
         required: true
         default: "Analyze this repository"
-
 permissions:
   contents: write
   issues: write
   pull-requests: write
   id-token: write
-
 jobs:
   opencode:
     if: |
       github.event_name == 'workflow_dispatch' ||
-      contains(github.event.comment.body, '/opencode')
-
+      contains(github.event.comment.body, '/opencode') ||
+      contains(github.event.comment.body, '/oc')
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
+          persist-credentials: false
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         with:
           model: anthropic/claude-sonnet-4-5
-          prompt: ${{ github.event.inputs.prompt || github.event.comment.body }}
-          token: ${{ github.token }}
+          prompt: ${{ github.event_name == 'workflow_dispatch' && inputs.prompt || github.event.comment.body }}
+          use_github_token: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
