@@ -13,10 +13,11 @@
 //      feed — is a new object that speaks the same five methods, not a rewrite
 //      of the panel that hosts them.
 //
-//   2. Radio — the DOM half. It owns the open/close pill, the station list,
-//      the now-playing toast, and the little save + duck-the-theme logic.
-//      It only ever calls the provider through that interface, so it never
-//      needs to know how the current station is actually streaming.
+//   2. Radio — the DOM half. It owns the Settings station picker (login,
+//      playlists, song search), the tiny in-game bar with its scrolling track
+//      name and skip buttons, the now-playing toast, and the little save +
+//      duck-the-theme logic. It only ever calls the provider through that
+//      interface, so it never needs to know how the current station streams.
 //
 // The one thing that is deliberately NOT Spotify-specific anywhere: stations
 // are just `{ id, name, detail, uris }`. Spotify playlists happen to be the
@@ -423,6 +424,27 @@ class SpotifyProvider {
     return out;
   }
 
+  /**
+   * A quick track search — the "pick a song" half of the radio settings.
+   * A result is a station like any other: a single-URI station whose one song
+   * it is. Searching costs one round-trip per query, so the caller debounces.
+   */
+  async searchTracks(query) {
+    await this.ensureToken();
+    const headers = { Authorization: `Bearer ${this.token.access}` };
+    const url = `${API_URL}/search?type=track&limit=10&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`Spotify search failed (${res.status}).`);
+    const j = await res.json();
+    return (j.tracks?.items || []).map((t) => ({
+      id: `spotify:search:${t.id}`,
+      name: t.name,
+      detail: (t.artists || []).map((a) => a.name).join(', ') || 'Spotify',
+      uris: [`spotify:track:${t.id}`],
+      image: t.album?.images?.[0]?.url,
+    }));
+  }
+
   async playStation(station) {
     if (!station.uris || !station.uris.length) throw new Error('That station has nothing in it.');
     await this.ensureConnected();
@@ -466,8 +488,15 @@ class SpotifyProvider {
 /**
  * The DOM side of the radio. Talks to a provider through the interface above
  * and to nothing else: no fetch, no sessionStorage, no Spotify imports.
- * The panel is built entirely from markup in index.html; this class only
- * binds and re-labels it.
+ * There are two halves, both built from markup in index.html:
+ *
+ *   • Settings — the station picker. Sign in to Spotify, pick a playlist or
+ *     search a song, and the run's music becomes it.
+ *
+ *   • The in-game bar — a tiny card in the corner of the run showing the
+ *     track name, a ticker that scrolls it when it is too long to fit, and
+ *     skip buttons underneath. It is hidden while a menu is up, and can be
+ *     switched off entirely from Settings ("Radio in game").
  */
 export class Radio {
   constructor(ctx) {
@@ -478,47 +507,51 @@ export class Radio {
     this.playing = false;
     this.connected = false;
     this.now = null;             // last track we announced
+    this.visible = true;         // whether the in-game bar shows at all
+    this.inGame = false;         // whether a run (not a menu) is on screen
+    this.screen = null;          // current menu name, or null while playing
     this.toastTimer = null;
+    this.toastOutTimer = null;
+    this._searchTimer = null;
 
     this.el = {
-      pill: ctx.root.querySelector('#radio-open'),
-      label: ctx.root.querySelector('#radio-open b'),
-      panel: ctx.root.querySelector('#radio-panel'),
-      status: ctx.root.querySelector('#radio-status'),
-      login: ctx.root.querySelector('#radio-login'),
-      logout: ctx.root.querySelector('#radio-logout'),
-      list: ctx.root.querySelector('#radio-stations'),
+      bar: ctx.root.querySelector('#radio'),
+      track: ctx.root.querySelector('#radio-track'),
+      scroll: ctx.root.querySelector('.radio-scroll'),
+      prevBtn: ctx.root.querySelector('#radio-prev'),
+      nextBtn: ctx.root.querySelector('#radio-next'),
       toast: ctx.root.querySelector('#radio-now'),
       toastTrack: ctx.root.querySelector('#radio-now-track'),
       toastStation: ctx.root.querySelector('#radio-now-station'),
+      login: document.getElementById('radio-settings-login'),
+      logout: document.getElementById('radio-settings-logout'),
+      status: document.getElementById('radio-settings-status'),
+      list: document.getElementById('radio-settings-stations'),
+      search: document.getElementById('radio-search'),
+      results: document.getElementById('radio-search-results'),
+      visibleBtn: document.getElementById('opt-radio-visible'),
     };
     this.bind();
   }
 
   bind() {
-    const root = this.ctx.root;
-    this.el.pill.addEventListener('click', () => this.toggle());
-    this.el.login.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.signIn();
+    const el = this.el;
+    el.prevBtn.addEventListener('click', () => this.previous());
+    el.nextBtn.addEventListener('click', () => this.next());
+    el.login.addEventListener('click', () => this.signIn());
+    el.logout.addEventListener('click', () => this.signOut());
+    el.visibleBtn.addEventListener('click', () => {
+      this.visible = !this.visible;
+      this.ctx.save?.setRadioVisible?.(this.visible);
+      this.renderVisibleBtn();
+      this.renderPlayback();
     });
-    this.el.logout.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.station = null;
-      this.playing = false;
-      this.connected = false;
-      this.now = null;
-      this.sync();
-      this.syncPanel();
-      this.provider.signOut().catch(() => {});
-      this.emit();
-    });
-    this.el.panel.addEventListener('click', (e) => {
-      if (e.target === this.el.panel) this.close();
-    });
-    this.el.toast.addEventListener('click', () => this.open());
+    el.search.addEventListener('input', () => this.onSearchInput());
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.el.panel.hidden === false) this.close();
+      if (e.key === 'Escape' && el.search.value) {
+        el.search.value = '';
+        this.onSearchInput();
+      }
     });
   }
 
@@ -527,11 +560,14 @@ export class Radio {
    *  all if there is no session to restore. */
   async init() {
     const saved = this.ctx.save?.radioPlaylistId;
+    this.visible = this.ctx.save?.radioVisible !== false;
+    this.renderVisibleBtn();
     this.provider.onSignOut = () => {
       this.connected = false;
       this.station = null;
       this.playing = false;
-      this.sync();
+      this.now = null;
+      this.renderPlayback();
       this.syncPanel();
     };
     try {
@@ -540,55 +576,91 @@ export class Radio {
       this.connected = false;
     }
     this.stations = [BUILTIN_STATION];
-    if (this.connected) {
-      this.syncPanel();
-      this.sync();
-    } else if (saved === BUILTIN_STATION.id || !saved) {
+    if (this.connected && saved && saved !== BUILTIN_STATION.id) {
+      // Best effort: name the saved station from the playlists if we can,
+      // otherwise the park's speakers are the honest stand-in.
+      try {
+        const list = await this.provider.getStations();
+        this.stations = [BUILTIN_STATION, ...list];
+        this.station = list.find((s) => s.id === saved) || BUILTIN_STATION;
+      } catch {
+        this.station = BUILTIN_STATION;
+      }
+    } else {
       this.station = BUILTIN_STATION;
     }
-    if (this.station) this.renderPlayback();
-    this.sync();
-  }
-
-  // --- the pill -----------------------------------------------------------
-  toggle() {
-    this.el.panel.hidden = this.el.panel.hidden !== true;
-    if (!this.el.panel.hidden) {
-      this.syncPanel();
-      this.renderPlayback();
+    this.renderPlayback();
+    this.syncPanel();
+    // A login redirect lands back on the start screen; open the settings
+    // again so the freshly-loaded playlists are right where they left off.
+    if (sessionStorage.getItem('skate.radio.returnToSettings')) {
+      sessionStorage.removeItem('skate.radio.returnToSettings');
+      document.dispatchEvent(new CustomEvent('radio:open-settings'));
     }
   }
 
-  open() {
-    if (this.el.panel.hidden === true) {
-      this.el.panel.hidden = false;
-      this.syncPanel();
-      this.renderPlayback();
+  // --- the in-game bar ----------------------------------------------------
+  /** main.js hands over every menu transition: a menu name while one is up,
+   *  null the moment a run starts. The bar only exists mid-run. */
+  onScreen(name) {
+    this.screen = name;
+    this.inGame = name === null;
+    this.renderPlayback();
+    if (name === 'settings') this.syncPanel();
+  }
+
+  /** Reflect the run/menu + the player's on/off choice on the bar itself. */
+  syncBar() {
+    if (!this.el.bar) return;
+    this.el.bar.hidden = !(this.inGame && this.visible);
+  }
+
+  /** One place to redraw the bar: the label, the ticker, the skip buttons. */
+  renderPlayback() {
+    this.syncBar();
+    if (!this.el.track) return;
+    const label = this.now ? this.now.name : this.station?.name || '';
+    this.el.track.textContent = label;
+    // The ticker is opt-in per label: a short name sits still, a long one
+    // scrolls. Restarting it means dropping the class for a frame.
+    this.el.track.classList.remove('scroll');
+    void this.el.track.offsetWidth;
+    if (this.el.scroll && this.el.track.scrollWidth > this.el.scroll.clientWidth) {
+      this.el.track.classList.add('scroll');
+    }
+    const skippable = this.connected && this.station && !this.station.builtin;
+    this.el.prevBtn.disabled = !skippable;
+    this.el.nextBtn.disabled = !skippable;
+  }
+
+  async next() {
+    if (!this.connected || !this.station || this.station.builtin || !this.playing) return;
+    try {
+      await this.provider.next();
+    } catch (e) {
+      console.warn('radio:', e);
     }
   }
 
-  close() {
-    this.el.panel.hidden = true;
-  }
-
-  /** The pill is always live (it has to be — it is how you find the radio),
-   *  and its label is the one thing the player reads at a glance. */
-  sync() {
-    if (this.station && (this.playing || !this.station.builtin)) {
-      this.el.label.textContent = this.station.name;
-    } else {
-      this.el.label.textContent = 'Radio';
+  async previous() {
+    if (!this.connected || !this.station || this.station.builtin || !this.playing) return;
+    try {
+      await this.provider.previous();
+    } catch (e) {
+      console.warn('radio:', e);
     }
   }
 
-  // --- the panel ----------------------------------------------------------
+  // --- the settings half --------------------------------------------------
   /** The signed-in signed-out split, plus (lazily) the station list. */
   async syncPanel() {
+    if (!this.el.list) return;
     const signedIn = this.connected;
+    this.el.login.hidden = signedIn;
     this.el.logout.hidden = !signedIn;
     if (!signedIn) {
       this.el.status.textContent =
-        'Pick your playlist and it plays over the park — sign in with Spotify for yours.';
+        'Connect Spotify and your playlists appear here — pick one and it plays over the park.';
       this.renderStations([BUILTIN_STATION]);
       return;
     }
@@ -597,17 +669,17 @@ export class Radio {
       const list = await this.provider.getStations();
       this.stations = [BUILTIN_STATION, ...list];
       this.renderStations(this.stations);
-      if (this.el.panel.hidden === false && list.length) this.el.status.textContent = '';
+      if (this.screen === 'settings' && list.length) this.el.status.textContent = '';
     } catch (e) {
       this.el.status.textContent =
         'Couldn’t load your playlists — check the connection and try again.';
     }
   }
 
-  renderStations(list) {
+  renderStations(list, target = this.el.list) {
     const f = document.createDocumentFragment();
     for (const s of list) f.appendChild(this.stationCard(s));
-    this.el.list.replaceChildren(f);
+    target.replaceChildren(f);
   }
 
   stationCard(station) {
@@ -647,12 +719,57 @@ export class Radio {
 
   async signIn() {
     try {
+      // The OAuth hop lands back on the app's own URL; the flag makes init()
+      // reopen the settings screen so the playlists appear right there.
+      sessionStorage.setItem('skate.radio.returnToSettings', '1');
       this.el.status.textContent = 'Opening Spotify…';
       await this.provider.signIn();
-      // signIn() navigates away; if it somehow comes straight back, the
-      // redirect handling in restoreSession() picks the session up again.
     } catch (e) {
       this.el.status.textContent = e?.message || 'Couldn’t reach Spotify.';
+    }
+  }
+
+  async signOut() {
+    this.station = null;
+    this.playing = false;
+    this.connected = false;
+    this.now = null;
+    this.el.search.value = '';
+    this.onSearchInput();
+    this.provider.signOut().catch(() => {});
+    this.renderPlayback();
+    this.syncPanel();
+    this.emit();
+  }
+
+  // --- song search --------------------------------------------------------
+  onSearchInput() {
+    clearTimeout(this._searchTimer);
+    const q = this.el.search.value.trim();
+    if (!q) {
+      this.el.results.hidden = true;
+      this.el.results.replaceChildren();
+      this.el.list.hidden = false;
+      this.renderStations(this.stations || [BUILTIN_STATION]);
+      return;
+    }
+    this.el.list.hidden = true;
+    this.el.status.textContent = 'Searching…';
+    this._searchTimer = setTimeout(() => this.search(q), 350);
+  }
+
+  async search(q) {
+    if (!this.connected) {
+      this.el.status.textContent = 'Connect Spotify to search songs.';
+      return;
+    }
+    try {
+      const songs = await this.provider.searchTracks(q);
+      this.el.results.hidden = false;
+      this.renderStations(songs, this.el.results);
+      this.el.status.textContent = songs.length ? '' : 'No songs found.';
+    } catch (e) {
+      this.el.status.textContent = e?.message || 'Search failed — check the connection.';
     }
   }
 
@@ -666,19 +783,23 @@ export class Radio {
     this.el.toastTrack.textContent = track.name;
     this.el.toastStation.textContent =
       track.artists?.length ? track.artists.join(', ') : this.station?.name || '';
-    // Restart the CSS animation by dropping it into a fresh node.
+    // Restart the CSS animation by dropping the toast into a fresh node —
+    // then re-point at the clone's own labels, or the next announce would
+    // edit nodes that are no longer in the document.
     const n = this.el.toast.cloneNode(true);
     this.el.toast.replaceWith(n);
     this.el.toast = n;
-    this.el.toast.hidden = false;
+    this.el.toastTrack = n.querySelector('#radio-now-track');
+    this.el.toastStation = n.querySelector('#radio-now-station');
+    n.hidden = false;
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => {
-      this.el.toast.classList.add('out');
-      setTimeout(() => {
-        this.el.toast.hidden = true;
-        this.el.toast.classList.remove('out');
-      }, 400);
-    }, HIDE_TOAST_MS);
+    clearTimeout(this.toastOutTimer);
+    this.toastTimer = setTimeout(() => n.classList.add('out'), HIDE_TOAST_MS);
+    this.toastOutTimer = setTimeout(() => {
+      n.classList.remove('out');
+      n.hidden = true;
+    }, HIDE_TOAST_MS + 400);
+    this.renderPlayback();
   }
 
   // --- playback -----------------------------------------------------------
@@ -690,8 +811,8 @@ export class Radio {
       this.ctx.audio?.setMusicDucked(false);
       this.emit();
       this.renderPlayback();
-      this.sync();
       this.announce(THEME_TRACK);
+      this.syncPanel();
       return;
     }
     if (!this.connected) {
@@ -705,13 +826,12 @@ export class Radio {
       this.provider.onTrack = (t) => this.announce(t);
       this.provider.onPlay = (p) => {
         this.playing = p;
-        this.sync();
         this.renderPlayback();
       };
       this.emit();
       this.renderPlayback();
-      this.sync();
       this.el.status.textContent = '';
+      this.syncPanel();
     } catch (e) {
       this.el.status.textContent = e?.message || 'That station wouldn’t start.';
     }
@@ -723,17 +843,37 @@ export class Radio {
     const duck = this.playing && this.station && !this.station.builtin;
     this.ctx.audio?.setMusicDucked(duck);
   }
+
+  // --- the "Radio in game" toggle ------------------------------------------
+  renderVisibleBtn() {
+    if (this.el.visibleBtn) {
+      this.el.visibleBtn.textContent = `Radio in game: ${this.visible ? 'On' : 'Off'}`;
+    }
+  }
+
+  /** A stats reset backs the radio's own choices out to their defaults too. */
+  resetSettings() {
+    this.visible = true;
+    this.renderVisibleBtn();
+    this.station = BUILTIN_STATION;
+    this.playing = false;
+    this.now = null;
+    this.provider.stopPolling();
+    this.ctx.audio?.setMusicDucked(false);
+    this.renderPlayback();
+    this.syncPanel();
+  }
 }
 
 /**
  * The one entry point main.js calls. `save` and `audio` come from the app so
- * this module never needs to know how main.js built them; the panel markup it
- * binds lives in index.html. Returns the Radio so main.js can hand it to the
- * debug hook.
+ * this module never needs to know how main.js built them; the markup it binds
+ * lives in index.html. Returns the Radio so main.js can hand it the debug
+ * hook and the menu-transition feed.
  */
 export function boot(save, audio) {
   const root = document.getElementById('hud');
-  if (!root || !root.querySelector('#radio-open')) return null;
+  if (!root || !root.querySelector('#radio-track')) return null;
   const radio = new Radio({ root, save, audio });
   radio.init().catch((e) => {
     // A broken radio must never break the game: log and carry on with the
@@ -741,7 +881,7 @@ export function boot(save, audio) {
     console.error('radio:', e);
     radio.station = BUILTIN_STATION;
     radio.renderPlayback();
-    radio.sync();
+    radio.syncPanel();
   });
   return radio;
 }

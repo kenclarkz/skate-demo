@@ -377,6 +377,9 @@ export class Hud {
       sit: null,
       grabStart: null,
       grabEnd: null,
+      // Fired on every menu transition: the menu name on show(), null on hide().
+      // The radio uses it to know when a run is on screen — see main.js.
+      screenChanged: null,
     };
     this._score = -1;
     this._best = -1;
@@ -621,6 +624,7 @@ export class Hud {
     this.stats.hidden = true;
     if (name === 'guide') this.showTutStep(0);
     else this.preview?.stop(); // no sense rendering a second scene nobody can see
+    this.on.screenChanged?.(name);
   }
 
   hide() {
@@ -628,6 +632,7 @@ export class Hud {
     this.stats.hidden = false;
     this.current = null;
     this.preview?.stop();
+    this.on.screenChanged?.(null);
   }
 
   get visible() {

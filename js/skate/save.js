@@ -34,6 +34,8 @@ const DEFAULTS = {
   camZoom: 1, // chase camera distance, 0.5 (close) .. 1 (default) — see CAM_ZOOM
   musicVolume: 0.5, // 0..1, independent of the sound on/off toggle
   holdToPush: true, // holding the push key/thumb repeats pushes — see HOLD_TO_PUSH
+  radioPlaylistId: 'builtin', // the last station picked — see js/skate/radio.js
+  radioVisible: true, // whether the in-game radio bar shows at all
 };
 
 // `boards`, `outfits` and `accessories` (which ones are owned) are arrays and
@@ -73,6 +75,8 @@ function read() {
     const mv = Number(s.musicVolume);
     s.musicVolume = Number.isFinite(mv) ? Math.min(1, Math.max(0, mv)) : DEFAULTS.musicVolume;
     s.holdToPush = s.holdToPush !== false;
+    s.radioPlaylistId = typeof s.radioPlaylistId === 'string' ? s.radioPlaylistId : 'builtin';
+    s.radioVisible = s.radioVisible !== false;
     // The starter board and the starter outfit are always owned, whatever a
     // hand-edited save says.
     s.boards = Array.isArray(parsed.boards)
@@ -174,6 +178,12 @@ export const save = {
   },
   get holdToPush() {
     return state.holdToPush;
+  },
+  get radioPlaylistId() {
+    return state.radioPlaylistId;
+  },
+  get radioVisible() {
+    return state.radioVisible;
   },
 
   /** @returns true if this beat the previous best combo. */
@@ -309,6 +319,18 @@ export const save = {
 
   setHoldToPush(on) {
     state.holdToPush = !!on;
+    flush();
+  },
+
+  /** Remember which station the player last picked, so a reload lands on it. */
+  setRadioPlaylistId(id) {
+    state.radioPlaylistId = typeof id === 'string' ? id : 'builtin';
+    flush();
+  },
+
+  /** Whether the in-game radio bar is shown. `false` hides it mid-run too. */
+  setRadioVisible(on) {
+    state.radioVisible = on !== false;
     flush();
   },
 
