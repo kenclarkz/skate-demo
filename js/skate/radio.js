@@ -195,6 +195,8 @@ class SpotifyProvider {
       this.deviceId = await new Promise((resolve) => {
         const t0 = performance.now();
         const tick = async () => {
+          // The 'ready' listener above may have fired while we waited.
+          if (this.deviceId) return resolve(this.deviceId);
           const st = await player.getCurrentState();
           if (st?.device?.id) return resolve(st.device.id);
           if (performance.now() - t0 > DEVICE_MARGIN_MS) return resolve(null);
@@ -379,6 +381,36 @@ class SpotifyProvider {
     if (ms > 0) this._tokenTimer = setTimeout(() => this.ensureToken().catch(() => {}), ms);
   }
 
+  /**
+   * One authenticated round-trip against the Spotify Web API. Playback control
+   * (play/pause/skip) lives here, not on the SDK player — the Web Playback SDK
+   * only provides the device and its state events. A 2xx means success (the
+   * play endpoint answers 204 and no body); anything else is read as text so
+   * Spotify's own error message makes it into the console instead of vanishing.
+   */
+  async api(method, path, body) {
+    await this.ensureToken();
+    const res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.token.access}`,
+        'Content-Type': 'application/json',
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (res.ok) return res;
+    const text = await res.text().catch(() => '');
+    let detail = text;
+    try {
+      detail = JSON.parse(text)?.error?.message || text;
+    } catch {
+      /* not JSON — keep the raw response text */
+    }
+    console.error(`[Spotify] ${method} ${path} failed:`, res.status, detail);
+    if (res.status === 401) this.onAuthError();
+    throw new Error(`Spotify playback failed (${res.status}${detail ? ` — ${detail}` : ''}).`);
+  }
+
   // --- the SDK player -----------------------------------------------------
   async ensurePlayer() {
     if (this.player) return this.player;
@@ -510,42 +542,51 @@ class SpotifyProvider {
 
   async playStation(station) {
     if (!station.uris || !station.uris.length) throw new Error('That station has nothing in it.');
-    await this.ensureConnected();
-    const state = await this.player.getCurrentState();
-    // A playlist is a context, not a track: the SDK's play() only starts it via
+    const ready = await this.ensureConnected();
+    if (!ready || !this.deviceId) {
+      throw new Error('Spotify couldn’t start a player on this device — is the account on Premium?');
+    }
+    // The Web Playback SDK player has no play() method: starting playback is the
+    // Web API's job. A playlist is a context, not a track, so it starts via
     // context_uri, while search results (single tracks) go through the uris
     // path. Passing a spotify:playlist: URI in uris simply refuses to play.
     const isContext = station.uris[0].startsWith('spotify:playlist:');
-    // The SDK device is only "the" player once it is the active device. If the
-    // account is mid-session elsewhere (a phone, a desktop client), activateElement()
-    // is the transfer — do it whenever the current state is not already this device.
-    if (!state?.device?.id || state.device.id !== this.deviceId) {
-      await this.player.activateElement();
-    }
-    await this.player.play(
-      isContext ? { context_uri: station.uris[0] } : { uris: station.uris, offset: 0 }
-    );
+    const body = isContext
+      ? { context_uri: station.uris[0] }
+      : { uris: station.uris, offset: { position: 0 } };
+    // Targeting the SDK device via ?device_id both transfers playback to it
+    // (activateElement() is long gone from the SDK) and starts the station, so
+    // the SDK's player_state_changed events keep driving the in-game bar.
+    await this.api('PUT', `/me/player/play?device_id=${encodeURIComponent(this.deviceId)}`, body);
     this.startPolling();
+    // A freshly-started station often has no event yet; prime the bar from the
+    // device instead of waiting for the next player_state_changed.
+    const st = this.player ? await this.player.getCurrentState().catch(() => null) : null;
+    if (st) this.onState(st);
   }
 
   async togglePause() {
     await this.ensureConnected();
     const st = await this.player.getCurrentState();
     if (!st) return null;
-    if (st.paused) await this.player.resume();
-    else await this.player.pause();
-    this.onPlay?.(st.paused);
-    return st.paused;
+    const resuming = !!st.paused;
+    await this.api(
+      'PUT',
+      `/me/player/${resuming ? 'play' : 'pause'}?device_id=${encodeURIComponent(this.deviceId)}`,
+      resuming ? {} : undefined
+    );
+    this.onPlay?.(resuming);
+    return resuming;
   }
 
   async next() {
     await this.ensureConnected();
-    await this.player.nextTrack().catch(() => {});
+    await this.api('POST', `/me/player/next?device_id=${encodeURIComponent(this.deviceId)}`);
   }
 
   async previous() {
     await this.ensureConnected();
-    await this.player.previousTrack().catch(() => {});
+    await this.api('POST', `/me/player/previous?device_id=${encodeURIComponent(this.deviceId)}`);
   }
 
   dispose() {
