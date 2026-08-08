@@ -1638,6 +1638,61 @@ export const PARKS = [
       p.ledge(9.6, 0.42, -14, 9.6, 0.42, -2);
     },
   },
+
+  {
+    id: 'skyline',
+    name: 'The Skyline',
+    blurb: 'Two towering walls face off down a run of long rails. Pick a line and fly.',
+    seed: 0x91e3,
+    padOnly: true,
+    extentX: 30,
+    extentZ: 26,
+    spawn: { x: 0, y: 0, z: -16, yaw: 0 },
+    patrol: [
+      { x: 0, z: -18 }, { x: 6, z: -6 }, { x: 6, z: 8 }, { x: 0, z: 18 },
+      { x: -6, z: 8 }, { x: -6, z: -6 },
+    ],
+    logos: [
+      { x: 0, z: -12 }, { x: -6, z: -2 }, { x: 6, z: -2 }, { x: 0, z: 10 },
+      { x: -10, z: 14 }, { x: 14, z: 12 },
+    ],
+    build(p) {
+      // --- the two big walls: the tallest transitions here, facing each
+      // other down the whole length of the park -----------------------------
+      const n = p.add(new Quarter(-15, 15, 20, 'z', 1, 4.2, 3.5, 3.0));
+      p.add(new Slab(-15, 15, 20 + n.uTop / TRACK_SCALE, 20 + n.uTop / TRACK_SCALE + 3.0, 3.5, SMOOTH, CONCRETE, 3.5));
+      p.coping(-15, 15, 20 + n.uTop / TRACK_SCALE, 3.5);
+
+      const s = p.add(new Quarter(-15, 15, -20, 'z', -1, 4.2, 3.5, 3.0));
+      p.add(new Slab(-15, 15, -20 - s.uTop / TRACK_SCALE - 3.0, -20 - s.uTop / TRACK_SCALE, 3.5, SMOOTH, CONCRETE, 3.5));
+      p.coping(-15, 15, -20 - s.uTop / TRACK_SCALE, 3.5);
+
+      // --- the long rails: two bars running the full length of the park,
+      // so a single grind carries from one wall all the way to the other ----
+      p.rail(-8, 0.4, -18, -8, 0.4, 18, 0.028);
+      p.rail(8, 0.4, -18, 8, 0.4, 18, 0.028);
+
+      // --- centre manual box: the one thing between the walls to link a
+      // line, roll over, or pop off -----------------------------------------
+      p.add(new Bank(-2.5, 2.5, -6, -3, 'z', 0, 0.5));
+      p.add(new Slab(-2.5, 2.5, -3, 3, 0.5, SMOOTH, CONCRETE, 0.55));
+      p.add(new Bank(-2.5, 2.5, 3, 6, 'z', 0.5, 0));
+      p.rail(0, 0.81, -2.9, 0, 0.81, 2.9, 0.028);
+      p.ledge(-2.5, 0.5, -3, -2.5, 0.5, 3);
+      p.ledge(2.5, 0.5, -3, 2.5, 0.5, 3);
+
+      // --- west hip: a banked ledge for carving on the way to the walls ----
+      p.add(new Bank(-22, -12, 6, 16, 'x', 1.3, 0));
+      p.add(new Slab(-22, -12, 16, 20, 1.3, SMOOTH, CONCRETE, 1.4));
+      p.ledge(-12, 0, 6, -12, 0, 16);
+
+      // --- east stair set and handrail: the way down off a high deck ------
+      p.add(new Bank(11, 17, 4, 8, 'z', 0, 1.2));
+      p.add(new Slab(11, 17, 8, 14, 1.2, SMOOTH, CONCRETE, 1.3));
+      p.add(new Stairs(11, 17, 14, 'z', 1, 5, 0.24, 0.56));
+      p.rail(12.2, 1.31, 13.5, 12.2, 0.06, 15.8, 0.028);
+    },
+  },
 ];
 
 export const DEFAULT_PARK = PARKS[0];
