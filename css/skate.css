@@ -1265,18 +1265,20 @@ button:disabled.primary {
   line-height: 1;
   display: grid;
   place-items: center;
-  background: rgba(30, 37, 46, 0.9);
+  background: var(--sw, rgba(30, 37, 46, 0.9));
   border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
   flex: 0 0 auto;
 }
 
 .dg-swatch:hover {
-  background: rgba(44, 53, 65, 0.95);
+  filter: brightness(1.15);
+  background: var(--sw, rgba(44, 53, 65, 0.95));
 }
 
 .dg-swatch.on {
   border-color: var(--hot);
-  box-shadow: inset 0 0 0 1px var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot), 0 0 0 2px rgba(255, 201, 63, 0.35);
 }
 
 .dg-palette-btn {
@@ -1407,9 +1409,50 @@ button:disabled.primary {
 
 .dg-swatches {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   justify-items: center;
+}
+
+/* The colour wheel: a hue/saturation disc with a brightness slider, so an
+   object (or the pad) can be painted any colour, not just the swatches. */
+.dg-color {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 10px;
+}
+
+.dg-wheel {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.dg-brightness {
+  width: 100%;
+}
+
+.dg-hexrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+
+.dg-hex-chip {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--chip, #888);
+  border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 .dg-note {

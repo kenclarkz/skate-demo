@@ -301,8 +301,8 @@ export class Quarter {
 
 /** A stair set. Riding it is a bail; the handrail beside it is the point. */
 export class Stairs {
-  constructor(c0, c1, top, axis, sign, steps, rise, run, baseY = 0) {
-    Object.assign(this, { c0, c1, top, axis, sign, steps, rise, run, baseY });
+  constructor(c0, c1, top, axis, sign, steps, rise, run, baseY = 0, color = CONCRETE_DARK) {
+    Object.assign(this, { c0, c1, top, axis, sign, steps, rise, run, baseY, color });
     this.yTop = steps * rise;
     this.len = steps * run;
   }
@@ -328,7 +328,7 @@ export class Stairs {
       p.push([i * this.run, y], [(i + 1) * this.run, y]);
     }
     p.push([this.len, -0.6]);
-    profile(entries, p, this.axis, this.top, this.sign, this.c0, this.c1, CONCRETE_DARK);
+    profile(entries, p, this.axis, this.top, this.sign, this.c0, this.c1, this.color);
   }
 
   /** rise and steps are untouched — the same number of steps at the same
@@ -533,9 +533,9 @@ export class Park {
   }
 
   /** A round grindable bar, plus the posts that hold it up. */
-  rail(ax, ay, az, bx, by, bz, radius) {
+  rail(ax, ay, az, bx, by, bz, radius, color = STEEL) {
     this.grinds.push(new Grind(ax, ay, az, bx, by, bz, 'rail', radius));
-    this.rails.push({ ax, ay, az, bx, by, bz, radius });
+    this.rails.push({ ax, ay, az, bx, by, bz, radius, color });
   }
 
   /** Steel pipe let into a ramp's lip. Grindable, and it reads as a real park. */
@@ -667,7 +667,7 @@ export class Park {
     }
 
     for (const r of this.rails) {
-      tube(entries, STEEL, r.ax, r.ay, r.az, r.bx, r.by, r.bz, r.radius);
+      tube(entries, r.color, r.ax, r.ay, r.az, r.bx, r.by, r.bz, r.radius);
       const dx = r.bx - r.ax;
       const dy = r.by - r.ay;
       const dz = r.bz - r.az;
@@ -680,7 +680,7 @@ export class Park {
         const pz = r.az + dz * t;
         const ground = this.heightAt(px, pz);
         const ph = Math.max(0.05, py - ground - r.radius);
-        entries.push(box(STEEL, 0.05, ph, 0.05, px, ground + ph / 2, pz));
+        entries.push(box(r.color, 0.05, ph, 0.05, px, ground + ph / 2, pz));
       }
     }
 

@@ -13,7 +13,7 @@
 // the standard parks are drawn on (PARK_X × PARK_Z in park.js), so an empty
 // custom park is exactly the same 52 × 60 m site as Home Park or The Bowl.
 
-import { buildObjects, clearAt, groundColor, newObject, objectType } from './parkObjects.js';
+import { buildObjects, clearAt, isHexColor, newObject, objectType, padColor } from './parkObjects.js';
 import { PARK_X, PARK_Z } from './park.js';
 
 export { PARK_X, PARK_Z };
@@ -113,6 +113,8 @@ export function validate(raw) {
   const halfZ = clampNum(isNewShape ? raw.boundary.maxZ : raw.extent, 6, 60, PARK_Z);
   file.boundary = { minX: -halfX, maxX: halfX, minZ: -halfZ, maxZ: halfZ };
   file.ground = ['concrete', 'wood', 'dirt'].includes(raw.ground) ? raw.ground : 'concrete';
+  // A custom pad colour dialled in on the editor's wheel rides over the preset.
+  file.groundHex = isHexColor(raw.groundHex) ? raw.groundHex : undefined;
   // New parks get the padOnly treatment the built-in parks have — the fence is
   // the playable edge, not decoration. Old square parks keep their original
   // roam-past-the-pad behaviour so existing parks do not change underfoot.
@@ -141,9 +143,11 @@ export function validate(raw) {
       }
       // The surface color lives in each object type's defaults (it is picked
       // from the paint swatches, not the property sliders), so a type that
-      // carries one keeps it across a save/load round trip.
+      // carries one keeps it across a save/load round trip. A hex string from
+      // the color wheel is kept verbatim.
       if ('color' in type.defaults) {
-        clean.color = SURFACE_IDS.includes(o.color) ? o.color : clean.color;
+        const c = o.color;
+        clean.color = SURFACE_IDS.includes(c) || isHexColor(c) ? c : clean.color;
       }
       file.objects.push(clean);
     }
@@ -151,7 +155,7 @@ export function validate(raw) {
   return file;
 }
 
-const SURFACE_IDS = ['concrete', 'dark', 'wood', 'paint', 'dirt'];
+const SURFACE_IDS = ['concrete', 'dark', 'wood', 'steel', 'paint', 'dirt'];
 
 function clampNum(v, min, max, fallback) {
   return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
@@ -176,7 +180,7 @@ export function buildDef(file) {
     // The fence is the playable edge for a new park, exactly as it is for the
     // built-in padOnly maps; legacy square parks stay roamable by default.
     padOnly: !!file.padOnly,
-    ground: groundColor(file.ground),
+    ground: padColor(file),
     build(p) {
       buildObjects(p, file.objects);
     },

@@ -33,12 +33,51 @@ export const SURFACES = [
   { id: 'concrete', label: 'Concrete', color: CONCRETE },
   { id: 'dark', label: 'Gunmetal', color: CONCRETE_DARK },
   { id: 'wood', label: 'Skatelite', color: RAMP },
+  { id: 'steel', label: 'Steel', color: STEEL },
   { id: 'paint', label: 'Paint', color: PAINT },
   { id: 'dirt', label: 'Dirt', color: DIRT },
 ];
 
 export function surfaceColor(id) {
   return (SURFACES.find((s) => s.id === id) || SURFACES[0]).color;
+}
+
+/** A hex string like `#b4afa2`, or null if it is not one. */
+export function isHexColor(color) {
+  return typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color);
+}
+
+/**
+ * Resolve an object's `color` field to a real colour. The editor lets a player
+ * paint an object from the surface swatches *or* dial in any colour on the
+ * wheel, so the field carries either a surface id ('concrete', 'wood', ...) or
+ * a `#rrggbb` hex — this turns both into a colour the builders can use.
+ */
+export function objectColor(color) {
+  return isHexColor(color) ? color : surfaceColor(color);
+}
+
+/** A numeric colour (0xb4afa2) as a `#rrggbb` CSS string, for the editor's
+ * swatches and chips — CSS cannot read a bare hex number. */
+export function cssColor(color) {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+/** A colour in `#rrggbb` form no matter what it arrived as — a surface id
+ * ('wood'), a numeric colour, or a wheel-picked hex string — for the editor's
+ * wheel and chips, which work on strings. Unknown colours fall back to
+ * concrete. */
+export function cssColorOf(color) {
+  if (isHexColor(color)) return color;
+  const c = typeof color === 'number' ? color : surfaceColor(color);
+  return cssColor(c);
+}
+
+/** The pad's own colour: a custom wheel pick overrides the ground preset. */
+export function padColor(file) {
+  const hex = file && file.groundHex;
+  if (isHexColor(hex)) return hex;
+  return groundColor(file && file.ground);
 }
 
 // --- transforms -----------------------------------------------------------
@@ -118,14 +157,14 @@ export const OBJECTS = [
     ],
     build(p, o) {
       const r = worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
-      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, surfaceColor(o.color), slabDepth(o.h)));
+      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, objectColor(o.color), slabDepth(o.h)));
     },
     footprint(o) {
       return worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
     },
     preview(o) {
       const depth = slabDepth(o.h);
-      return box(o.w, depth, o.d, 0, o.h - depth / 2, 0, surfaceColor(o.color));
+      return box(o.w, depth, o.d, 0, o.h - depth / 2, 0, objectColor(o.color));
     },
   },
 
@@ -160,7 +199,7 @@ export const OBJECTS = [
         y0 = low[1] < high[1] ? o.y : o.h + o.y;
         y1 = low[1] < high[1] ? o.h + o.y : o.y;
       }
-      p.add(new Bank(x0, x1, z0, z1, axis, y0, y1, surfaceColor(o.color)));
+      p.add(new Bank(x0, x1, z0, z1, axis, y0, y1, objectColor(o.color)));
     },
     footprint(o) {
       return worldRect(o, -o.w / 2, o.w / 2, -o.len / 2, o.len / 2);
@@ -172,7 +211,7 @@ export const OBJECTS = [
         [o.len, o.h],
         [0, 0],
       ];
-      return prism(pts, o.len, o.w, 0, surfaceColor(o.color));
+      return prism(pts, o.len, o.w, 0, objectColor(o.color));
     },
   },
 
@@ -197,7 +236,7 @@ export const OBJECTS = [
       const baseC = axis === 'z' ? base[1] : base[0];
       const c0 = axis === 'z' ? cross.x0 : cross.z0;
       const c1 = axis === 'z' ? cross.x1 : cross.z1;
-      p.add(new Quarter(c0, c1, baseC, axis, sign, o.R, H, o.deck, surfaceColor(o.color), o.y));
+      p.add(new Quarter(c0, c1, baseC, axis, sign, o.R, H, o.deck, objectColor(o.color), o.y));
     },
     footprint(o) {
       const H = Math.min(o.H, o.R - 0.05);
@@ -206,7 +245,7 @@ export const OBJECTS = [
     },
     preview(o) {
       const H = Math.min(o.H, o.R - 0.05);
-      return new THREE.Mesh(quarterGeo(o.w, o.R, H, o.deck), mat(surfaceColor(o.color)));
+      return new THREE.Mesh(quarterGeo(o.w, o.R, H, o.deck), mat(objectColor(o.color)));
     },
   },
 
@@ -247,7 +286,7 @@ export const OBJECTS = [
     build(p, o) {
       const H = Math.min(o.H, o.R - 0.05);
       const uTop = quarterU(o.R, H);
-      const color = surfaceColor(o.color);
+      const color = objectColor(o.color);
       const base = worldPoint(o, 0, 0);
       const cross = worldRect(o, -o.w / 2, o.w / 2, 0, 0);
       const f = frame(o);
@@ -267,7 +306,7 @@ export const OBJECTS = [
     preview(o) {
       const H = Math.min(o.H, o.R - 0.05);
       const uTop = quarterU(o.R, H);
-      const color = surfaceColor(o.color);
+      const color = objectColor(o.color);
       const g = new THREE.Group();
       g.add(new THREE.Mesh(quarterGeo(o.w, o.R, H, 0), mat(color)));
       if (o.deck > 0) {
@@ -293,7 +332,7 @@ export const OBJECTS = [
       const H = Math.min(o.H, o.R - 0.05);
       const uTop = quarterU(o.R, H);
       const half = o.gap / 2;
-      const color = surfaceColor(o.color);
+      const color = objectColor(o.color);
       const f = frame(o);
       const axis = forwardAxis(o);
       const dir = axis === 'z' ? f.fz : f.fx;
@@ -314,7 +353,7 @@ export const OBJECTS = [
     preview(o) {
       const H = Math.min(o.H, o.R - 0.05);
       const half = o.gap / 2;
-      const color = surfaceColor(o.color);
+      const color = objectColor(o.color);
       const g = new THREE.Group();
       const n = quarterGeo(o.w, o.R, H, 0);
       n.translate(0, 0, half);
@@ -354,7 +393,7 @@ export const OBJECTS = [
     id: 'stairs',
     label: 'Stairs',
     hint: 'Steps up to a deck. The tall end meets whatever you place behind it.',
-    defaults: { w: 3, steps: 4, rise: 0.18, run: 0.28 },
+    defaults: { w: 3, steps: 4, rise: 0.18, run: 0.28, color: 'dark' },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
       { key: 'steps', label: 'Steps', min: 1, max: 10, step: 1, unit: '' },
@@ -371,7 +410,7 @@ export const OBJECTS = [
       const sign = axis === 'z' ? (f.fz > 0 ? -1 : 1) : f.fx > 0 ? -1 : 1;
       const c0 = axis === 'z' ? cross.x0 : cross.z0;
       const c1 = axis === 'z' ? cross.x1 : cross.z1;
-      p.add(new Stairs(c0, c1, topC, axis, sign, Math.max(1, Math.round(o.steps)), o.rise, o.run, o.y));
+      p.add(new Stairs(c0, c1, topC, axis, sign, Math.max(1, Math.round(o.steps)), o.rise, o.run, o.y, objectColor(o.color)));
     },
     footprint(o) {
       const len = o.steps * o.run;
@@ -390,7 +429,7 @@ export const OBJECTS = [
       }
       pts.push([len, -0.6]);
       // u = 0 is the tall end; the local frame keeps that end at +z.
-      return prism(pts, len, o.w, len / 2, CONCRETE_DARK, true);
+      return prism(pts, len, o.w, len / 2, objectColor(o.color), true);
     },
   },
 
@@ -398,7 +437,7 @@ export const OBJECTS = [
     id: 'rail',
     label: 'Rail',
     hint: 'A round grindable bar on posts, at whatever height you set.',
-    defaults: { len: 4, h: 0.9, r: 0.045 },
+    defaults: { len: 4, h: 0.9, r: 0.045, color: 'steel' },
     props: [
       { key: 'len', label: 'Length', min: 1, max: 16, step: 0.1, unit: 'm' },
       { key: 'h', label: 'Height', min: 0.1, max: 3, step: 0.05, unit: 'm' },
@@ -407,14 +446,15 @@ export const OBJECTS = [
     build(p, o) {
       const a = worldPoint(o, -o.len / 2, 0);
       const b = worldPoint(o, o.len / 2, 0);
-      p.rail(a[0], o.h + o.y, a[1], b[0], o.h + o.y, b[1], o.r);
+      p.rail(a[0], o.h + o.y, a[1], b[0], o.h + o.y, b[1], o.r, objectColor(o.color));
     },
     footprint(o) {
       return worldRect(o, -o.len / 2, o.len / 2, -0.4, 0.4);
     },
     preview(o) {
+      const color = objectColor(o.color);
       const g = new THREE.Group();
-      const bar = new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r, o.len, 10), mat(STEEL));
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r, o.len, 10), mat(color));
       bar.rotation.z = Math.PI / 2;
       bar.position.y = o.h;
       g.add(bar);
@@ -422,7 +462,7 @@ export const OBJECTS = [
       for (let i = 0; i < posts; i++) {
         const x = -o.len / 2 + (o.len * i) / (posts - 1);
         const ph = Math.max(0.05, o.h - o.r);
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, ph, 0.05), mat(STEEL));
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, ph, 0.05), mat(color));
         post.position.set(x, ph / 2, 0);
         g.add(post);
       }
@@ -442,7 +482,7 @@ export const OBJECTS = [
     ],
     build(p, o) {
       const r = worldRect(o, -o.len / 2, o.len / 2, -o.w / 2, o.w / 2);
-      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, surfaceColor(o.color), slabDepth(o.h)));
+      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, objectColor(o.color), slabDepth(o.h)));
       const a = worldPoint(o, -o.len / 2, o.w / 2);
       const b = worldPoint(o, o.len / 2, o.w / 2);
       p.ledge(a[0], o.h + o.y, a[1], b[0], o.h + o.y, b[1]);
@@ -453,7 +493,7 @@ export const OBJECTS = [
     preview(o) {
       const depth = slabDepth(o.h);
       const g = new THREE.Group();
-      g.add(box(o.len, depth, o.w, 0, o.h - depth / 2, 0, surfaceColor(o.color)));
+      g.add(box(o.len, depth, o.w, 0, o.h - depth / 2, 0, objectColor(o.color)));
       g.add(box(o.len, 0.07, 0.07, 0, o.h + 0.035, o.w / 2, STEEL));
       return g;
     },
@@ -472,7 +512,7 @@ export const OBJECTS = [
     ],
     build(p, o) {
       const H = Math.min(o.h, o.R - 0.05);
-      const color = surfaceColor(o.color);
+      const color = objectColor(o.color);
       const r = worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
       p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, color, slabDepth(o.h)));
       const f = frame(o);
@@ -557,7 +597,7 @@ export const OBJECTS = [
     },
     preview(o) {
       const H = Math.min(o.h, o.R - 0.05);
-      const color = surfaceColor(o.color);
+      const color = objectColor(o.color);
       const g = new THREE.Group();
       const depth = slabDepth(o.h);
       g.add(box(o.w, depth, o.d, 0, o.h - depth / 2, 0, color));
@@ -708,7 +748,7 @@ function halfPipe(p, o) {
   const H = Math.min(o.H, o.R - 0.05);
   const uTop = quarterU(o.R, H);
   const half = o.flat / 2;
-  const color = surfaceColor(o.color);
+  const color = objectColor(o.color);
   const f = frame(o);
   const axis = forwardAxis(o);
   const dir = axis === 'z' ? f.fz : f.fx;
@@ -741,7 +781,7 @@ function halfPipeBounds(o) {
 function halfPipePreview(o) {
   const H = Math.min(o.H, o.R - 0.05);
   const uTop = quarterU(o.R, H);
-  const color = surfaceColor(o.color);
+  const color = objectColor(o.color);
   const g = new THREE.Group();
   g.add(box(o.w, 0.55, o.flat, 0, -0.275, 0, color));
   const n = quarterGeo(o.w, o.R, H, 0);
