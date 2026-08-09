@@ -20,6 +20,15 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
   mega-ramp drop-ins tall enough to need their own approach climb, and a
   gap jump with a ring hanging over it to fly through, on top of the
   original street spot, hill, and manual pad.
+- **A park designer** — a My Parks menu for building your own parks: place and
+  edit the same primitives the shipped parks are made of (slabs, banks,
+  quarters, stairs, rails, ledges, and funboxes, up to 64 per park) on the
+  ground of your choice, in a WYSIWYG editor whose preview rides exactly like
+  the real thing. Parks save in the browser and can be played, edited, or
+  deleted from the menu at any time.
+- **A day/night toggle** on the park screen — the same parks ride under a full
+  daylight sky or a floodlit night one, with the sun giving way to the moon,
+  floodlights, street-lamp glow, and lit signage.
 - **Flick-It input** — pull back to charge, flick the direction your front
   foot would go. Works the same from a touchscreen drag, a mouse, a real
   gamepad stick, or the keyboard.
@@ -42,8 +51,9 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
 - **Eight skaters**, each with their own headwear and palette, picked from a
   skater rack in the shop — from the everyday four up to the legendaries
   (a tiger, the not-quite-Birdman, a bunny, and a garden gnome); a shop full
-  of purchasable board skins, shirts, and headwear accessories (hats and
-  shades), paid for with coins earned from tricks and combos.
+  of purchasable boards across four shapes (shortboard, longboard, penny, and
+  cruiser decks, each in a couple of skins), shirts, and headwear accessories
+  (hats and shades), paid for with coins earned from tricks and combos.
 - **Thirteen ambient AI skaters per park** — five tour the patrol loop the
   whole time, popping tricks with the exact same ride model the player
   rides; the rest spend most of their time on foot near a hangout spot,
