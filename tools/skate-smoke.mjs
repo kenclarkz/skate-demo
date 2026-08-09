@@ -3571,6 +3571,117 @@ section('The park editor');
 }
 
 // --------------------------------------------------------------------------
+section('The park editor camera: two-finger pan, pinch zoom, and orbit');
+{
+  // Two fingers on the canvas take over the camera: they never transform the
+  // prop under them, the pair moving together pans the orbit target, and the
+  // pair spreading/closing still zooms. One finger keeps its old orbit.
+  const open = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1, id: 'user-cam', name: 'Camera smoke', blurb: 'Camera smoke.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [{ id: 'c1', type: 'slab', x: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 8, d: 4, h: 0.25, color: 'concrete' }],
+    });
+    // setPointerCapture would reject a synthetic pointerId; the handler only
+    // needs the call to not throw.
+    g.designer.canvas.setPointerCapture = () => {};
+    return {
+      tx: g.designer.orbit.tx,
+      tz: g.designer.orbit.tz,
+      dist: g.designer.orbit.dist,
+      sel: g.designer.sel,
+    };
+  });
+
+  // Two fingers land at the same height, then both move together by the same
+  // screen amount: a pure pan. Midpoint (60,20) -> (80,30), spacing unchanged.
+  const pan = await run((before) => {
+    const g = window.__skate;
+    const c = g.designer.canvas;
+    const down = (id, x, y) => c.dispatchEvent(new PointerEvent('pointerdown', { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+    const move = (id, x, y) => c.dispatchEvent(new PointerEvent('pointermove', { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+    const up = (id) => c.dispatchEvent(new PointerEvent('pointerup', { pointerId: id, bubbles: true }));
+    down(11, 20, 20);
+    down(12, 100, 20);
+    move(11, 40, 30);
+    move(12, 120, 30);
+    const o = g.designer.file.objects[0];
+    const result = {
+      moved: g.designer.orbit.tx !== before.tx || g.designer.orbit.tz !== before.tz,
+      tx: g.designer.orbit.tx,
+      tz: g.designer.orbit.tz,
+      dist: g.designer.orbit.dist,
+      drag: g.designer._drag,
+      prop: { x: o.x, z: o.z },
+      sel: g.designer.sel,
+    };
+    up(11);
+    up(12);
+    return result;
+  }, open);
+  ok(pan.moved, `two fingers moving together pan the camera (tx ${open.tx} -> ${pan.tx}, tz ${open.tz} -> ${pan.tz})`);
+  ok(Math.abs(pan.dist - open.dist) < 1e-9, 'and with fingers staying the same distance apart, zoom does not move');
+  ok(pan.drag === null, 'with no object drag armed, so a prop can never be edited');
+  ok(pan.prop.x === 0 && pan.prop.z === 0, 'and the prop under the pan stays exactly where it was');
+  ok(pan.sel === open.sel, 'and nothing gets selected or deselected');
+
+  // Now spread a fresh pair of fingers: a pure zoom in.
+  const zoom = await run((state) => {
+    const g = window.__skate;
+    const c = g.designer.canvas;
+    const down = (id, x, y) => c.dispatchEvent(new PointerEvent('pointerdown', { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+    const move = (id, x, y) => c.dispatchEvent(new PointerEvent('pointermove', { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+    const up = (id) => c.dispatchEvent(new PointerEvent('pointerup', { pointerId: id, bubbles: true }));
+    down(11, 20, 20);
+    down(12, 100, 20);
+    move(11, 20, 20);
+    move(12, 220, 20);
+    const result = { dist: g.designer.orbit.dist, yaw: g.designer.orbit.yaw, tx: g.designer.orbit.tx, tz: g.designer.orbit.tz };
+    up(11);
+    up(12);
+    return result;
+  }, pan);
+  ok(zoom.dist < pan.dist, `and spreading the fingers zooms the camera in (dist ${pan.dist.toFixed(1)} -> ${zoom.dist.toFixed(1)})`);
+
+  // A pointercancel mid-gesture must leave the camera controls clean — no
+  // phantom pan or pinch carrying into whatever comes next.
+  const cancelled = await run((state) => {
+    const g = window.__skate;
+    const c = g.designer.canvas;
+    const down = (id, x, y) => c.dispatchEvent(new PointerEvent('pointerdown', { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+    const cancel = (id) => c.dispatchEvent(new PointerEvent('pointercancel', { pointerId: id, bubbles: true }));
+    down(21, 40, 80);
+    down(22, 100, 80);
+    cancel(21);
+    const result = { pointers: g.designer._pointers.size, pinch: g.designer._pinch, pan: g.designer._pan };
+    c.dispatchEvent(new PointerEvent('pointerup', { pointerId: 22, bubbles: true }));
+    return result;
+  }, zoom);
+  ok(cancelled.pointers === 1 && cancelled.pinch === null && cancelled.pan === null, 'cancelling one finger clears the pinch and pan state');
+
+  // One finger still orbits: a lone drag swings the camera yaw and leaves the
+  // zoom and the orbit target alone.
+  const orbit = await run((state) => {
+    const g = window.__skate;
+    const c = g.designer.canvas;
+    const down = (id, x, y) => c.dispatchEvent(new PointerEvent('pointerdown', { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+    const move = (id, x, y) => c.dispatchEvent(new PointerEvent('pointermove', { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+    const up = (id) => c.dispatchEvent(new PointerEvent('pointerup', { pointerId: id, bubbles: true }));
+    down(31, 60, 60);
+    move(31, 120, 60);
+    const during = { yaw: g.designer.orbit.yaw, dist: g.designer.orbit.dist, tx: g.designer.orbit.tx, tz: g.designer.orbit.tz };
+    up(31);
+    return during;
+  }, zoom);
+  ok(orbit.yaw !== zoom.yaw, `and a lone finger still orbits the camera (yaw ${zoom.yaw.toFixed(3)} -> ${orbit.yaw.toFixed(3)})`);
+  ok(Math.abs(orbit.dist - zoom.dist) < 1e-9, 'without disturbing the zoom');
+  ok(orbit.tx === zoom.tx && orbit.tz === zoom.tz, 'or the orbit target');
+
+  await run(() => window.__skate.showStart());
+}
+
+// --------------------------------------------------------------------------
 section('The park editor is vertical');
 {
   // Every palette object has a third axis: an elevation above the pad, so a
