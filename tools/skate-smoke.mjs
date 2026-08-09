@@ -2300,10 +2300,11 @@ section('Camera modes: chase, first person, board view');
     'and the live camera follows each press'
   );
 
-  // The real thing: in first person the lens has to sit at the head and the
-  // rider has to be hidden; in board view the lens has to sit low behind the
-  // board and the rider has to be hidden too. The camera coming back to chase
-  // is what puts the rider on screen again.
+  // The real thing: in first person the lens has to sit at the head, the head
+  // has to come off the rig (or it fills the lens), but the rider and the deck
+  // stay in shot so the view reads as riding; in board view the lens has to
+  // sit low behind the board and the whole rider has to be hidden. The camera
+  // coming back to chase is what puts the rider back on screen.
   const shots = await run(() => {
     const g = window.__skate;
     g.place(0, -14, 0, 5);
@@ -2318,6 +2319,7 @@ section('Camera modes: chase, first person, board view');
       dx: g.camera.position.x - g.ride.pos.x,
       dz: g.camera.position.z - g.ride.pos.z,
       riderVisible: g.ride.skater.visible,
+      headVisible: g.ride.skater.head.visible,
     });
 
     g.config.setCameraMode(g.config.CAMERA_CHASE);
@@ -2345,7 +2347,10 @@ section('Camera modes: chase, first person, board view');
     shots.first.y > 1.2 && shots.first.y < 2.0,
     `first person sits at the rider's head (y=${shots.first.y.toFixed(2)})`
   );
-  ok(!shots.first.riderVisible, 'and hides the rider so the head never fills the lens');
+  ok(
+    shots.first.riderVisible && !shots.first.headVisible,
+    'keeps the rider and deck in the first-person shot, hiding only the head so it never fills the lens'
+  );
   ok(
     Math.hypot(shots.board.dx, shots.board.dz) > 0.8 &&
       Math.hypot(shots.board.dx, shots.board.dz) < 2.2,
