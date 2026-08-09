@@ -5,7 +5,9 @@
       "/tmp/*": "allow",
       "/tmp/**": "allow",
       "/home/runner/.cache/*": "allow",
-      "/home/runner/.cache/**": "allow"
+      "/home/runner/.cache/**": "allow",
+      "/home/runner/work/*": "allow",
+      "/home/runner/work/**": "allow"
     }
   }
 }
