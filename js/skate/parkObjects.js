@@ -211,7 +211,9 @@ export const OBJECTS = [
         [o.len, o.h],
         [0, 0],
       ];
-      return prism(pts, o.len, o.w, 0, objectColor(o.color));
+      // The bank's footprint is centred on the origin (low end at -len/2,
+      // tall end at +len/2), so its base line sits there too — not at z=0.
+      return prism(pts, o.len, o.w, -o.len / 2, objectColor(o.color));
     },
   },
 
@@ -603,8 +605,10 @@ export const OBJECTS = [
       g.add(box(o.w, depth, o.d, 0, o.h - depth / 2, 0, color));
       const fwd = quarterGeo(o.w, o.R, H, 0);
       const back = fwd.clone();
-      const right = fwd.clone();
-      const left = fwd.clone();
+      // The side quarters run along the other axis, so their cross extent is
+      // the funbox's depth, not its width.
+      const right = quarterGeo(o.d, o.R, H, 0);
+      const left = right.clone();
       fwd.translate(0, 0, o.d / 2);
       back.rotateY(Math.PI);
       back.translate(0, 0, -o.d / 2);
@@ -706,8 +710,11 @@ function prismGeo(pts, len, width, zOff = 0, flip = false) {
   const geo = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false, curveSegments: 1 });
   // The extrude ran along +Z; turn it so the profile's u follows +z and the
   // extrusion follows local x. `flip` mirrors it so u=0 lands at +z instead.
+  // The extrusion is then centred on the frame's origin — width runs from
+  // -width/2 to +width/2 — so the preview lines up with the object's own
+  // axis-aligned footprint (what you see is what you ride).
   geo.rotateY(flip ? Math.PI / 2 : -Math.PI / 2);
-  geo.translate(0, 0, zOff);
+  geo.translate(flip ? -width / 2 : width / 2, 0, zOff);
   return geo;
 }
 
