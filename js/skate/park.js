@@ -321,7 +321,12 @@ export function bowlProfile(R, H, rim, baseY = 0) {
     pts.push([u, baseY + R - Math.sqrt(Math.max(0, R * R - u * u))]);
   }
   pts.push([uTop, baseY + H], [uTop + rim, baseY + H], [uTop + rim, -0.6], [0, -0.6]);
-  return pts;
+  // Returned in reverse: LatheGeometry's front face is the side its winding
+  // faces, and the natural out-across-the-deck order winds the outside of the
+  // solid — pool, deck and skirt all end up back-facing and invisible. Reversed,
+  // the pool's concave face, the deck top and the outer skirt are the front
+  // faces, which is the only way the camera sees the bowl at all.
+  return pts.reverse();
 }
 
 /**
