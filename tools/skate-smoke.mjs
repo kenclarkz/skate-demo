@@ -4002,15 +4002,40 @@ section('The park editor is vertical');
   ok(raised.y === 3.5, 'dragging the Elevation slider moves the object up');
   ok(Math.abs(raised.previewY - 3.5) < 1e-6, 'and its preview rises with it');
 
-  // PageUp nudges up in the same grid the panel uses; the lower bound of the
-  // pad keeps a nudge-down from sinking an object through the floor.
+  // PageUp nudges up in the same grid the panel uses; the vertical axis now
+  // spans -20..20, so a nudge-down can sink an object through the floor and
+  // under the pad (that is how a buried bowl or a sunken deck is made).
   const nudged = await run(() => {
     const g = window.__skate;
     g.designer.nudgeY(-10);
     const v1 = g.designer.file.objects.find((o) => o.id === 'v1');
     return { y: v1.y };
   });
-  ok(nudged.y === 0, 'nudging down clamps at the pad top, never below');
+  ok(nudged.y === -6.5, 'nudging down sinks the object below the pad (3.5 - 10 = -6.5)');
+  const floored = await run(() => {
+    const g = window.__skate;
+    g.designer.nudgeY(-30);
+    const v1 = g.designer.file.objects.find((o) => o.id === 'v1');
+    return { y: v1.y };
+  });
+  ok(floored.y === -20, 'and the vertical axis clamps at -20, not the pad top');
+
+  // The vertical scroller goes below the pad as well as above it: -20..20,
+  // so an object (like the small bowl) can be sunk clean through the ground.
+  const bounds = await run(() => {
+    const slider = document.querySelector('#dg-panel [data-pos="y"]');
+    return { min: slider.min, max: slider.max };
+  });
+  ok(bounds.min === '-20' && bounds.max === '20', `the Elevation slider spans -20..20 (got ${bounds.min}..${bounds.max})`);
+  const sunken = await run(() => {
+    const g = window.__skate;
+    const slider = document.querySelector('#dg-panel [data-pos="y"]');
+    slider.value = '-15';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    const v1 = g.designer.file.objects.find((o) => o.id === 'v1');
+    return { y: v1.y };
+  });
+  ok(sunken.y === -15, 'and dragging it below zero sinks the object through the ground');
 
   // Save & Test: the collision the park actually builds has to sit at the
   // raised height, and the raised slab's deck must be rideable at that height.
@@ -4047,6 +4072,23 @@ section('The park editor is vertical');
   });
   ok(Math.abs(quarter.base - 1) < 0.02, `an elevated quarter starts its arc at its base height (base ${quarter.base.toFixed(2)})`);
   ok(Math.abs(quarter.mid - 1.5265) < 0.03, `and the arc rises from there, not from the pad (mid ${quarter.mid.toFixed(2)})`);
+
+  // The small bowl sinks through the ground: a negative elevation carries the
+  // whole pool under the pad, so its lip ends up below ground level and the
+  // ride physics follow the same buried surface the preview shows.
+  const buried = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1, id: 'user-buried', name: 'Buried bowl', blurb: 'The small bowl, through the ground.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'b1', type: 'bowl', x: 0, y: -1.5, z: 0, ry: 0, sx: 1, sz: 1, R: 2.0, H: 1.2, rim: 1.0, color: 'wood' },
+      ],
+    });
+    g.designer.on.test();
+    return { lip: g.park.sample(0, 1.9, { y: 0 }).y };
+  });
+  ok(Math.abs(buried.lip - -0.3) < 0.02, `a bowl buried at y=-1.5 carries its lip below the pad (lip ${buried.lip.toFixed(2)} of -0.3 m)`);
 
   await run(() => window.__skate.showStart());
 }
