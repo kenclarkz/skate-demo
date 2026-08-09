@@ -137,6 +137,7 @@ export function validate(raw) {
       clean.y = clampNum(o.y, 0, 12, 0);
       clean.ry = clampNum(o.ry, -10000, 10000, 0);
       clean.sx = clampNum(o.sx, 0.05, 10, 1);
+      clean.sy = clampNum(o.sy, 0.05, 10, 1);
       clean.sz = clampNum(o.sz, 0.05, 10, 1);
       for (const prop of type.props) {
         clean[prop.key] = clampNum(o[prop.key], prop.min, prop.max, clean[prop.key]);

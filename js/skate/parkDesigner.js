@@ -16,7 +16,7 @@
 
 import * as THREE from '../game/three.js';
 import { box, merge } from '../game/geo.js';
-import { OBJECTS, SURFACES, GROUNDS, newObject, objectType, boundsOf, objectColor, padColor, cssColor, cssColorOf } from './parkObjects.js';
+import { OBJECTS, SURFACES, GROUNDS, newObject, objectType, boundsOf, objectColor, padColor, cssColor, cssColorOf, sh } from './parkObjects.js';
 import { newFile, serialize, deserialize, validate, buildDef, spawnFor, boundaryOf, extentOf, PARK_X, PARK_Z, MAX_OBJECTS } from './parkFile.js';
 import { putFile } from './parkStorage.js';
 
@@ -40,10 +40,14 @@ export class ParkDesigner {
     this.active = false;
     this.file = null;
     this.sel = null;
+    // The whole selection: `sel` is the primary (the last object clicked), and
+    // `multi` holds every selected id — including `sel` — so a shift-click or a
+    // box-select can build a group that Move/Scale/Rotate then act on together.
+    this.multi = new Set();
     this.snapOn = true;
     this.snap = 0.25;
     this.gridOn = true;
-    this.mode = 'move'; // 'move' | 'rotate' | 'scale'
+    this.mode = 'move'; // 'select' | 'move' | 'rotate' | 'scale'
     this.past = [];
     this.future = [];
 
@@ -60,6 +64,7 @@ export class ParkDesigner {
 
     this.orbit = { yaw: -0.55, pitch: 0.45, dist: 34, tx: 0, tz: 0 };
     this._drag = null;
+    this._boxStart = null;
     this._pointers = new Map();
 
     this._ray = new THREE.Raycaster();
@@ -82,6 +87,7 @@ export class ParkDesigner {
     this.drawerEl = document.getElementById('dg-drawer');
     this.scrimEl = document.getElementById('dg-scrim');
     this.actionsEl = document.getElementById('dg-actions');
+    this.marqueeEl = document.getElementById('dg-marquee');
     this.modeBtns = [...document.querySelectorAll('#dg-modes [data-mode]')];
     this.tabBtns = [...document.querySelectorAll('#dg-rail-head [data-dgtab]')];
 
@@ -165,6 +171,7 @@ export class ParkDesigner {
   open(file) {
     this.file = file;
     this.sel = null;
+    this.multi = new Set();
     this.past = [];
     this.future = [];
     if (this.nameInput) this.nameInput.value = file.name;
@@ -328,18 +335,39 @@ export class ParkDesigner {
     g.scale.set(o.sx, 1, o.sz);
   }
 
-  /** Rebuild a single object's preview after it is edited — cheap enough to
-   * run on every pointermove during a drag. */
+  /** Rebuild a single object's preview after its geometry is edited — cheap
+   * enough to run on every pointermove during a drag. */
   _updateObjectPreview(o) {
-    const old = this._objectGroup(o.id);
-    if (old) {
-      this._disposeGroup(old);
-      this.root.remove(old);
-      const i = this.pickables.indexOf(old);
-      if (i >= 0) this.pickables.splice(i, 1);
+    this._refreshObjects([o.id]);
+  }
+
+  /** Rebuild the previews of several objects at once (geometry edits like a
+   * height change bake into the mesh, so a transform is not enough). */
+  _refreshObjects(ids) {
+    for (const id of ids) {
+      const old = this._objectGroup(id);
+      if (old) {
+        this._disposeGroup(old);
+        this.root.remove(old);
+        const i = this.pickables.indexOf(old);
+        if (i >= 0) this.pickables.splice(i, 1);
+      }
     }
-    this.root.add(this._buildObject(o));
+    for (const id of ids) {
+      const o = this.file?.objects.find((x) => x.id === id);
+      if (o) this.root.add(this._buildObject(o));
+    }
     this._updateOutline();
+  }
+
+  /** Reposition existing groups after a transform drag — cheaper than a
+   * rebuild, and enough because move/rotate/scale never change a mesh. */
+  _applyTransformList(ids) {
+    for (const id of ids) {
+      const o = this.file?.objects.find((x) => x.id === id);
+      const g = this._objectGroup(id);
+      if (o && g) this._applyTransform(g, o);
+    }
   }
 
   _objectGroup(id) {
@@ -369,23 +397,62 @@ export class ParkDesigner {
       this._disposeGroup(this._outline);
       this._outline = null;
     }
-    if (!this.sel) return;
-    const o = this.file?.objects.find((x) => x.id === this.sel);
-    if (!o) return;
-    const b = boundsOf(o);
-    const w = b.x1 - b.x0;
-    const d = b.z1 - b.z0;
-    const h = Math.max(0.25, this._objectHeight(o));
+    const c = this._selectionCenter();
+    this._updateGizmo();
+    if (!c) return;
+    const w = c.x1 - c.x0;
+    const d = c.z1 - c.z0;
+    const h = Math.max(0.25, c.h);
     const box = new THREE.BoxGeometry(w + 0.12, h + 0.12, d + 0.12);
     const edges = new THREE.EdgesGeometry(box);
     const line = new THREE.LineSegments(
       edges,
       new THREE.LineBasicMaterial({ color: 0xff3d6e, transparent: true, opacity: 0.9 })
     );
-    line.position.set((b.x0 + b.x1) / 2, (h + 0.12) / 2 + (o.y || 0), (b.z0 + b.z1) / 2);
+    line.position.set(c.x, h / 2 + 0.06 + c.yBase, c.z);
     line.raycast = () => null;
     this._outline = line;
     this.root.add(line);
+  }
+
+  /** The selection's ground rectangle (in object coordinates, from the union
+   * of every selected footprint) plus the tallest object's height, so the
+   * outline and the gizmo pivot read as one box around the whole group. */
+  _selectionCenter() {
+    const list = this._selectedList();
+    if (!list.length) return null;
+    let b = null;
+    for (const o of list) {
+      const ob = boundsOf(o);
+      if (!b) b = { x0: ob.x0, x1: ob.x1, z0: ob.z0, z1: ob.z1 };
+      else {
+        b.x0 = Math.min(b.x0, ob.x0);
+        b.x1 = Math.max(b.x1, ob.x1);
+        b.z0 = Math.min(b.z0, ob.z0);
+        b.z1 = Math.max(b.z1, ob.z1);
+      }
+    }
+    let h = 0;
+    let yBase = 0;
+    for (const o of list) {
+      h = Math.max(h, this._objectHeight(o));
+      yBase = Math.max(yBase, o.y || 0);
+    }
+    return {
+      x: (b.x0 + b.x1) / 2,
+      y: Math.max(0.25, h) / 2 + 0.06 + yBase,
+      z: (b.z0 + b.z1) / 2,
+      x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, h: Math.max(0.25, h), yBase,
+    };
+  }
+
+  /** Follow the selection live while it is being dragged: the outline and the
+   * gizmo keep their shapes, only their pivot moves. */
+  _placeSelection() {
+    const c = this._selectionCenter();
+    if (!c) return;
+    if (this._outline) this._outline.position.set(c.x, c.y, c.z);
+    if (this._gizmo) this._gizmo.position.set(c.x, c.y, c.z);
   }
 
   _objectHeight(o) {
@@ -393,19 +460,19 @@ export class ParkDesigner {
     switch (o.type) {
       case 'slab':
       case 'ledge':
-        return o.h;
+        return sh(o, o.h);
       case 'bank':
-        return o.h;
+        return sh(o, o.h);
       case 'quarter':
-        return Math.min(o.H, o.R - 0.05);
+        return Math.min(sh(o, o.H), o.R - 0.05);
       case 'bowl':
-        return Math.min(o.H, o.R - 0.05);
+        return Math.min(sh(o, o.H), o.R - 0.05);
       case 'stairs':
-        return o.steps * o.rise;
+        return o.steps * sh(o, o.rise);
       case 'rail':
-        return o.h + o.r;
+        return sh(o, o.h) + o.r;
       case 'funbox':
-        return o.h;
+        return sh(o, o.h);
       default:
         return 1;
     }
@@ -470,35 +537,86 @@ export class ParkDesigner {
     const entry = { x: e.clientX, y: e.clientY };
     this._pointers.set(e.pointerId, entry);
     if (this._pointers.size === 2) {
-      // A second finger lands: stop whatever the first was doing and take over
-      // the camera. Pinch zooms, and the two fingers moving together pan.
+      // A second finger lands: stop whatever the first was doing (a drag or a
+      // marquee) and take over the camera. Pinch zooms, two fingers together
+      // pan.
       this._drag = null;
+      this._boxStart = null;
+      if (this.marqueeEl) this.marqueeEl.hidden = true;
       this._pinch = this._pointerDist();
       this._pan = this._pointerMid();
       return;
     }
+    // A handle under the pointer wins over the object body below it, but only
+    // in a mode that has handles — a shift-click is always a selection gesture.
+    if (!e.shiftKey && this.mode !== 'select') {
+      const axis = this._pickGizmo(e.clientX, e.clientY);
+      if (axis) {
+        this._beginAxisDrag(e, axis);
+        return;
+      }
+    }
     const hit = this._pick(e.clientX, e.clientY);
     if (hit) {
-      this.select(hit);
+      if (e.shiftKey) {
+        if (this._isSelected(hit)) this._removeFromSelection(hit);
+        else this._addToSelection(hit);
+      } else if (!this._isSelected(hit)) {
+        this.sel = hit;
+        this.multi = new Set([hit]);
+      } else {
+        // Already in the group: just promote it to primary, keeping the rest.
+        this.sel = hit;
+      }
+      this._updateOutline();
+      this._renderPanel();
+      this._renderModeButtons();
       const pt = this._groundPoint(e.clientX, e.clientY);
       const o = this._selected();
       if (!o) return;
-      // The drag that follows depends on the active transform mode — move,
-      // rotate and scale each read a different thing off the pointer, and only
-      // one is armed at a time, so a stray drag can never turn into the wrong
-      // transform.
+      if (this.mode === 'select') return;
+      const ids = this._selectedIds();
       if (this.mode === 'move') {
-        this._drag = pt ? { kind: 'move', id: o.id, sx: o.x, sz: o.z, gx: pt.x, gz: pt.z, moved: false } : null;
-      } else if (this.mode === 'rotate') {
         this._drag = pt
-          ? { kind: 'rotate', id: o.id, sx: o.x, sz: o.z, base: o.ry, a0: Math.atan2(pt.x - o.x, pt.z - o.z), moved: false }
+          ? { kind: 'move', axis: null, gx: pt.x, gz: pt.z, starts: this._startsFor(ids), moved: false, ids }
+          : null;
+      } else if (this.mode === 'rotate') {
+        const pv = this._selectionCenter();
+        this._drag = pt
+          ? {
+              kind: 'rotate',
+              axis: null,
+              sx: pv.x,
+              sz: pv.z,
+              pv,
+              base: o.ry,
+              a0: Math.atan2(pt.x - pv.x, pt.z - pv.z),
+              starts: this._startsFor(ids),
+              moved: false,
+              ids,
+            }
           : null;
       } else {
-        this._drag = { kind: 'scale', id: o.id, base: o.sx, y0: e.clientY, moved: false };
+        this._drag = { kind: 'scale', axis: null, base: o.sx, y0: e.clientY, starts: this._startsFor(ids), moved: false, ids };
       }
+    } else if (e.shiftKey) {
+      // Shift on empty ground starts a marquee — it only becomes a box-select
+      // once the pointer has moved, and a click that never moves changes nothing.
+      this._boxStart = { x: e.clientX, y: e.clientY };
+      this._drag = null;
     } else {
+      this.clearSelection();
       this._drag = { kind: 'orbit', lastX: e.clientX, lastY: e.clientY };
     }
+  }
+
+  _startsFor(ids) {
+    const starts = {};
+    for (const id of ids) {
+      const ob = this.file.objects.find((x) => x.id === id);
+      starts[id] = { x: ob.x, y: ob.y || 0, z: ob.z, ry: ob.ry, sx: ob.sx, sz: ob.sz };
+    }
+    return starts;
   }
 
   _move(e) {
@@ -525,6 +643,10 @@ export class ParkDesigner {
       this._applyCamera();
       return;
     }
+    if (this._boxStart) {
+      this._showMarquee(e.clientX, e.clientY);
+      return;
+    }
     if (!this._drag) return;
     if (this._drag.kind === 'orbit') {
       this.orbit.yaw += (e.clientX - this._drag.lastX) * 0.006;
@@ -534,18 +656,45 @@ export class ParkDesigner {
       this._applyCamera();
       return;
     }
-    const o = this._selected();
-    if (!o) return;
-    if (this._drag.kind === 'move') {
+    const ids = this._drag.ids || [];
+    const get = (id) => this.file.objects.find((x) => x.id === id);
+    if (this._drag.kind === 'move' && this._drag.axis) {
+      const d = this._axisDragDelta(e, this._drag);
+      if (!this._drag.moved && Math.abs(d) < 0.02) return;
+      this._drag.moved = true;
+      const o0 = this._selected();
+      const dir = new THREE.Vector3();
+      if (this._drag.axis === 'y') dir.set(0, 1, 0);
+      else if (this._drag.axis === 'x') dir.set(Math.cos((o0.ry || 0) * DEG), 0, Math.sin((o0.ry || 0) * DEG));
+      else dir.set(-Math.sin((o0.ry || 0) * DEG), 0, Math.cos((o0.ry || 0) * DEG));
+      for (const id of ids) {
+        const ob = get(id);
+        const st = this._drag.starts[id];
+        if (!ob || !st) continue;
+        if (this._drag.axis === 'y') ob.y = clamp(this._snapY(st.y + d), 0, 12);
+        else {
+          ob.x = this._snap(st.x + dir.x * d);
+          ob.z = this._snap(st.z + dir.z * d);
+        }
+      }
+      this._applyTransformList(ids);
+      this._placeSelection();
+    } else if (this._drag.kind === 'move') {
       const pt = this._groundPoint(e.clientX, e.clientY);
       if (!pt) return;
       const dx = pt.x - this._drag.gx;
       const dz = pt.z - this._drag.gz;
       if (!this._drag.moved && Math.hypot(dx, dz) < 0.02) return;
       this._drag.moved = true;
-      o.x = this._snap(this._drag.sx + dx);
-      o.z = this._snap(this._drag.sz + dz);
-      this._updateObjectPreview(o);
+      for (const id of ids) {
+        const ob = get(id);
+        const st = this._drag.starts[id];
+        if (!ob || !st) continue;
+        ob.x = this._snap(st.x + dx);
+        ob.z = this._snap(st.z + dz);
+      }
+      this._applyTransformList(ids);
+      this._placeSelection();
     } else if (this._drag.kind === 'rotate') {
       const pt = this._groundPoint(e.clientX, e.clientY);
       if (!pt) return;
@@ -554,13 +703,44 @@ export class ParkDesigner {
       while (d < -Math.PI) d += Math.PI * 2;
       if (!this._drag.moved && Math.abs(d) < 0.04) return;
       this._drag.moved = true;
-      o.ry = this._snapAngle(this._drag.base + d);
-      this._updateObjectPreview(o);
+      const cos = Math.cos(d);
+      const sin = Math.sin(d);
+      for (const id of ids) {
+        const ob = get(id);
+        const st = this._drag.starts[id];
+        if (!ob || !st) continue;
+        const dx = st.x - this._drag.pv.x;
+        const dz = st.z - this._drag.pv.z;
+        ob.x = this._snap(this._drag.pv.x + dx * cos - dz * sin);
+        ob.z = this._snap(this._drag.pv.z + dx * sin + dz * cos);
+        ob.ry = this._snapAngle(st.ry + d);
+      }
+      this._applyTransformList(ids);
+      this._placeSelection();
     } else if (this._drag.kind === 'scale') {
-      const s = clamp(this._drag.base * Math.exp((this._drag.y0 - e.clientY) * 0.004), 0.5, 3);
-      o.sx = Math.round(s * 20) / 20;
-      o.sz = o.sx;
-      this._updateObjectPreview(o);
+      let f;
+      if (this._drag.axis) {
+        const d = this._axisDragDelta(e, this._drag);
+        if (!this._drag.moved && Math.abs(d) < 0.02) return;
+        f = Math.exp(d * 0.02);
+      } else {
+        f = Math.exp((this._drag.y0 - e.clientY) * 0.004);
+      }
+      this._drag.moved = true;
+      for (const id of ids) {
+        const ob = get(id);
+        const st = this._drag.starts[id];
+        if (!ob || !st) continue;
+        const s = clamp(Math.round(st.sx * f * 20) / 20, 0.5, 3);
+        if (this._drag.axis === 'x') ob.sx = s;
+        else if (this._drag.axis === 'z') ob.sz = s;
+        else {
+          ob.sx = s;
+          ob.sz = s;
+        }
+      }
+      this._applyTransformList(ids);
+      this._placeSelection();
     }
   }
 
@@ -573,7 +753,25 @@ export class ParkDesigner {
       this._pinch = null;
       this._pan = null;
     }
-    if (this._drag && this._drag.kind !== 'orbit' && this._drag.moved) this.commit();
+    if (this._boxStart) {
+      const ids = this._boxSelect(this._boxStart.x, this._boxStart.y, e.clientX, e.clientY);
+      this._boxStart = null;
+      if (this.marqueeEl) this.marqueeEl.hidden = true;
+      this._drag = null;
+      if (ids.length) {
+        this.sel = ids[ids.length - 1].id;
+        this.multi = new Set(ids.map((o) => o.id));
+        this._updateOutline();
+        this._renderPanel();
+        this._renderModeButtons();
+      }
+      return;
+    }
+    if (this._drag && this._drag.kind !== 'orbit' && this._drag.moved) {
+      this._updateOutline();
+      this.commit();
+    }
+    this._updateGizmo();
     if (this._pointers.size === 0) this._drag = null;
   }
 
@@ -616,13 +814,208 @@ export class ParkDesigner {
     return ((Math.round(deg / 90) % 4) + 4) % 4 * 90;
   }
 
+  _snapY(v) {
+    return this.snapOn ? Math.round(v / 0.1) * 0.1 : Math.round(v * 100) / 100;
+  }
+
+  // --- the transform gizmo -------------------------------------------------
+
+  /** Three axis handles at the selection's centre: the Y handle (vertical —
+   * the editor's lift axis) is always drawn, the X/Z handles follow the
+   * selection's own yaw, and while a handle is being dragged the others are
+   * hidden so nothing jitters under the pointer. In select mode the gizmo
+   * is away entirely, and rotate has no handles because rotation drags the
+   * body. */
+  _updateGizmo() {
+    if (this._gizmo) {
+      this.root.remove(this._gizmo);
+      this._disposeGroup(this._gizmo);
+      this._gizmo = null;
+    }
+    this._gizmoAxis = null;
+    if (!this.sel || this.mode === 'select' || this.mode === 'rotate') return;
+    const c = this._selectionCenter();
+    if (!c) return;
+    const g = new THREE.Group();
+    g.position.set(c.x, c.y, c.z);
+    const yaw = (this._selected()?.ry || 0) * DEG;
+    g.rotation.y = yaw;
+    const active = this._drag && this._drag.kind !== 'orbit' ? this._drag.axis : null;
+    const addAxis = (axis, color, dir) => {
+      const arrow = this._gizmoArrow(axis, color);
+      arrow.position.copy(dir);
+      arrow.visible = !active || active === axis;
+      g.add(arrow);
+    };
+    addAxis('x', 0xff3d6e, new THREE.Vector3(1, 0, 0));
+    addAxis('z', 0x3d8bff, new THREE.Vector3(0, 0, 1));
+    if (this.mode !== 'scale') addAxis('y', 0x39d353, new THREE.Vector3(0, 1, 0));
+    this._gizmo = g;
+    this.root.add(g);
+  }
+
+  _gizmoMat(color) {
+    return new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthTest: false });
+  }
+
+  /** A single axis handle: a thick stem plus a pyramid head. */
+  _gizmoArrow(axis, color) {
+    const g = new THREE.Group();
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 10), this._gizmoMat(color));
+    stem.position.y = 0.8;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.34, 12), this._gizmoMat(color));
+    head.position.y = 1.85;
+    g.add(stem, head);
+    g.userData.gizmoAxis = axis;
+    g.traverse((n) => (n.userData.gizmoAxis = axis));
+    return g;
+  }
+
+  /** Which axis handle, if any, a pointer falls on. */
+  _pickGizmo(clientX, clientY) {
+    if (!this._gizmo) return null;
+    this._ray.setFromCamera(this._ndcPoint(clientX, clientY), this.camera);
+    const hits = this._ray.intersectObjects(this._gizmo.children, true);
+    return hits.length ? hits[0].object.userData.gizmoAxis || null : null;
+  }
+
+  /** The handle's direction, measured on screen: project two points on the
+   * axis and take the unit vector between them, so a drag along the handle is
+   * read as a distance along that screen line — robust from any camera angle,
+   * where a plane intersection can sit nearly parallel to the view and blow
+   * up. Returns null when the axis points almost straight at the camera. */
+  _axisScreen(axis) {
+    const o = this._selected();
+    const c = this._selectionCenter();
+    if (!o || !c) return null;
+    const dir = new THREE.Vector3();
+    if (axis === 'y') dir.set(0, 1, 0);
+    else if (axis === 'x') dir.set(Math.cos((o.ry || 0) * DEG), 0, Math.sin((o.ry || 0) * DEG));
+    else dir.set(-Math.sin((o.ry || 0) * DEG), 0, Math.cos((o.ry || 0) * DEG));
+    const a = this._projectToScreen(c.x, c.y, c.z);
+    const b = this._projectToScreen(c.x + dir.x, c.y + dir.y, c.z + dir.z);
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 1e-4) return null;
+    return { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+  }
+
+  _projectToScreen(x, y, z) {
+    this.camera.updateMatrixWorld();
+    const ndc = new THREE.Vector3(x, y, z).project(this.camera);
+    return {
+      x: ((ndc.x + 1) / 2) * this.canvas.clientWidth,
+      y: ((1 - ndc.y) / 2) * this.canvas.clientHeight,
+    };
+  }
+
+  /** World metres per screen pixel at the selection's depth — how far a drag
+   * on the axis handle moves the selection. */
+  _worldPerPx() {
+    const c = this._selectionCenter();
+    const fwd = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 2).negate();
+    const depth = Math.max(0.1, new THREE.Vector3(c.x, c.y, c.z).sub(this.camera.position).dot(fwd));
+    return (2 * depth * Math.tan((this.camera.fov * DEG) / 2)) / Math.max(1, this.canvas.clientHeight);
+  }
+
+  /** The move/scale pivot is the primary object's centre — its own transforms
+   * are about that point — so a group scales from the object that was last
+   * clicked. */
+  _beginAxisDrag(e, axis) {
+    const o = this._selected();
+    const c = this._selectionCenter();
+    const axisScreen = this._axisScreen(axis);
+    if (!o || !c || !axisScreen) return;
+    const starts = {};
+    for (const id of this._selectedIds()) {
+      const ob = this.file.objects.find((x) => x.id === id);
+      starts[id] = { x: ob.x, y: ob.y || 0, z: ob.z, ry: ob.ry, sx: ob.sx, sz: ob.sz };
+    }
+    if (this.mode === 'move') {
+      this._drag = { kind: 'move', axis, axisScreen, ppx: this._worldPerPx(), sx: e.clientX, sy: e.clientY, starts, moved: false, ids: this._selectedIds() };
+    } else {
+      this._drag = { kind: 'scale', axis, axisScreen, ppx: this._worldPerPx(), sx: e.clientX, sy: e.clientY, starts, moved: false, ids: this._selectedIds() };
+    }
+    this._updateGizmo();
+  }
+
+  /** The distance the pointer has travelled along the handle's screen line,
+   * in world metres. */
+  _axisDragDelta(e, drag) {
+    return ((e.clientX - drag.sx) * drag.axisScreen.x + (e.clientY - drag.sy) * drag.axisScreen.y) * drag.ppx;
+  }
+
+  /** The objects whose footprints a marquee rectangle (as projected onto the
+   * ground) covers. */
+  _boxSelect(cx0, cy0, cx1, cy1) {
+    const a = this._groundPoint(cx0, cy0);
+    const b = this._groundPoint(cx1, cy1);
+    if (!a || !b) return [];
+    const x0 = Math.min(a.x, b.x);
+    const x1 = Math.max(a.x, b.x);
+    const z0 = Math.min(a.z, b.z);
+    const z1 = Math.max(a.z, b.z);
+    return this.file.objects.filter((o) => {
+      const f = boundsOf(o);
+      return f.x1 >= x0 && f.x0 <= x1 && f.z1 >= z0 && f.z0 <= z1;
+    });
+  }
+
+  _showMarquee(x, y) {
+    if (!this.marqueeEl || !this._boxStart) return;
+    this.marqueeEl.hidden = false;
+    this.marqueeEl.style.left = `${Math.min(this._boxStart.x, x)}px`;
+    this.marqueeEl.style.top = `${Math.min(this._boxStart.y, y)}px`;
+    this.marqueeEl.style.width = `${Math.abs(x - this._boxStart.x)}px`;
+    this.marqueeEl.style.height = `${Math.abs(y - this._boxStart.y)}px`;
+  }
+
   // --- selection and editing ----------------------------------------------
 
   select(id) {
     this.sel = id;
+    this.multi = new Set([id]);
     this._updateOutline();
     this._renderPanel();
     this._renderModeButtons();
+  }
+
+  clearSelection() {
+    this.sel = null;
+    this.multi = new Set();
+    this._updateOutline();
+    this._renderPanel();
+    this._renderModeButtons();
+  }
+
+  _isSelected(id) {
+    return this.multi.has(id);
+  }
+
+  _addToSelection(id) {
+    if (!this.file?.objects.some((o) => o.id === id)) return;
+    this.multi.add(id);
+    this.sel = id;
+  }
+
+  _removeFromSelection(id) {
+    this.multi.delete(id);
+    if (!this.multi.size) {
+      this.sel = null;
+      return;
+    }
+    // Promote the newest remaining member so the primary stays meaningful.
+    const first = this.file.objects.find((o) => this.multi.has(o.id));
+    this.sel = first ? first.id : null;
+  }
+
+  /** The full selection, in file order (so a box-select's primary is the last
+   * object it covered, and every operation reads objects in a stable order). */
+  _selectedList() {
+    return this.file ? this.file.objects.filter((o) => this.multi.has(o.id)) : [];
+  }
+
+  _selectedIds() {
+    return [...this.multi];
   }
 
   _selected() {
@@ -640,57 +1033,80 @@ export class ParkDesigner {
     }
     this.file.objects.push(o);
     this.sel = o.id;
+    this.multi = new Set([o.id]);
     this._rebuild();
     this._renderPanel();
     this.commit();
   }
 
   duplicateSelected() {
-    const o = this._selected();
-    if (!o || this.file.objects.length >= MAX_OBJECTS) return;
-    const copy = { ...o, id: newObject(o.type).id, x: this._snap(o.x + 1.5), z: this._snap(o.z + 1.5) };
-    this.file.objects.push(copy);
-    this.sel = copy.id;
+    const list = this._selectedList();
+    if (!list.length || this.file.objects.length >= MAX_OBJECTS) return;
+    const copies = [];
+    for (const o of list) {
+      if (this.file.objects.length >= MAX_OBJECTS) break;
+      const copy = { ...o, id: newObject(o.type).id, x: this._snap(o.x + 1.5), z: this._snap(o.z + 1.5) };
+      this.file.objects.push(copy);
+      copies.push(copy);
+    }
+    this.multi = new Set(copies.map((c) => c.id));
+    this.sel = copies[copies.length - 1].id;
     this._rebuild();
     this._renderPanel();
     this.commit();
   }
 
   deleteSelected() {
-    const o = this._selected();
-    if (!o) return;
-    this.file.objects = this.file.objects.filter((x) => x.id !== o.id);
+    const ids = this._selectedIds();
+    if (!ids.length) return;
+    this.file.objects = this.file.objects.filter((x) => !ids.includes(x.id));
     this.sel = null;
+    this.multi = new Set();
     this._rebuild();
     this._renderPanel();
     this.commit();
   }
 
   rotateSelected(dir = 1) {
-    const o = this._selected();
-    if (!o) return;
-    o.ry = this._snapAngle(o.ry + dir * 90);
-    this._updateObjectPreview(o);
+    const ids = this._selectedIds();
+    if (!ids.length) return;
+    for (const id of ids) {
+      const ob = this.file.objects.find((x) => x.id === id);
+      if (!ob) continue;
+      ob.ry = this._snapAngle(ob.ry + dir * 90);
+      this._applyTransform(this._objectGroup(id), ob);
+    }
+    this._updateOutline();
     this._renderPanel();
     this.commit();
   }
 
   nudge(dx, dz) {
-    const o = this._selected();
-    if (!o) return;
-    o.x = this._snap(o.x + dx);
-    o.z = this._snap(o.z + dz);
-    this._updateObjectPreview(o);
+    const ids = this._selectedIds();
+    if (!ids.length) return;
+    for (const id of ids) {
+      const ob = this.file.objects.find((x) => x.id === id);
+      if (!ob) continue;
+      ob.x = this._snap(ob.x + dx);
+      ob.z = this._snap(ob.z + dz);
+      this._applyTransform(this._objectGroup(id), ob);
+    }
+    this._updateOutline();
     this.commit();
   }
 
-  /** Raise or lower the selected object — the editor's vertical axis. */
+  /** Raise or lower the selected objects — the editor's vertical axis. */
   nudgeY(dy) {
-    const o = this._selected();
-    if (!o) return;
-    o.y = Math.min(12, Math.max(0, (o.y || 0) + dy));
-    o.y = Math.round(o.y * 100) / 100;
-    this._updateObjectPreview(o);
+    const ids = this._selectedIds();
+    if (!ids.length) return;
+    for (const id of ids) {
+      const ob = this.file.objects.find((x) => x.id === id);
+      if (!ob) continue;
+      ob.y = clamp((ob.y || 0) + dy, 0, 12);
+      ob.y = Math.round(ob.y * 100) / 100;
+      this._applyTransform(this._objectGroup(id), ob);
+    }
+    this._updateOutline();
     this.commit();
   }
 
@@ -721,6 +1137,7 @@ export class ParkDesigner {
 
   _restore() {
     this.sel = null;
+    this.multi = new Set();
     this._rebuild();
     this._renderPanel();
     this._updateUndoButtons();
@@ -743,6 +1160,7 @@ export class ParkDesigner {
   _setMode(m) {
     this.mode = m;
     this._drag = null;
+    this._updateGizmo();
     this._renderModeButtons();
   }
 
@@ -831,9 +1249,7 @@ export class ParkDesigner {
       case 'boundary':
       case 'spawn':
         this._closeDrawer();
-        this.sel = null;
-        this._updateOutline();
-        this._renderPanel();
+        this.clearSelection();
         this._openRail('panel');
         if (name === 'boundary') {
           requestAnimationFrame(() => this.panelEl?.querySelector('#dg-boundary')?.scrollIntoView({ block: 'nearest' }));
@@ -867,9 +1283,11 @@ export class ParkDesigner {
 
   _renderPanel() {
     if (!this.panelEl) return;
-    const o = this._selected();
-    this.panelEl.innerHTML = o ? this._objectPanel(o) : this._parkPanel();
-    this._bindPanel(o);
+    const list = this._selectedList();
+    const single = list.length === 1;
+    const o = single ? list[0] : null;
+    this.panelEl.innerHTML = list.length === 0 ? this._parkPanel() : o ? this._objectPanel(o) : this._multiPanel(list);
+    this._bindPanel(o, list.length > 1);
     this._drawPanelWheels();
   }
 
@@ -934,8 +1352,6 @@ export class ParkDesigner {
 
   _objectPanel(o) {
     const t = objectType(o.type);
-    const { x: ex, z: ez } = extentOf(this.file);
-    const maxR = Math.max(ex, ez);
     const range = (label, value, { min, max, step, unit }, data) => {
       const v = Number(value);
       const text = unit === '' ? Math.round(v) : v.toFixed(step >= 0.1 ? 1 : 2);
@@ -946,20 +1362,8 @@ export class ParkDesigner {
       );
     };
     let html = `<h3>${t.label}</h3><p class="dg-note">${t.hint}</p>`;
-    html += `<div class="dg-field dg-pos">X<input type="range" min="${-maxR - 8}" max="${maxR + 8}" step="0.1" value="${o.x}" data-pos="x"><output>${o.x.toFixed(2)}</output></div>`;
-    html += `<div class="dg-field dg-pos">Z<input type="range" min="${-maxR - 8}" max="${maxR + 8}" step="0.1" value="${o.z}" data-pos="z"><output>${o.z.toFixed(2)}</output></div>`;
-    html += `<div class="dg-field dg-pos dg-elev">Y<input type="range" min="0" max="12" step="0.1" value="${o.y || 0}" data-pos="y"><output>${(o.y || 0).toFixed(2)}</output></div>`;
-    html +=
-      `<div class="dg-row"><button type="button" data-rot="-1" class="dg-btn">⟲ 90°</button>` +
-      `<button type="button" data-rot="1" class="dg-btn">⟳ 90°</button>` +
-      `<span class="dg-yaw">${this._snapAngle(Math.round(o.ry / 90) * 90)}°</span></div>`;
+    html += this._transformSection(o, false);
     for (const prop of t.props) html += range(prop.label, o[prop.key], prop, `prop`);
-    html += `<div class="dg-row"><span>Scale X</span>` + range('', o.sx, { min: 0.5, max: 3, step: 0.05, unit: '' }, 'sx') + `</div>`;
-    html += `<div class="dg-row"><span>Scale Z</span>` + range('', o.sz, { min: 0.5, max: 3, step: 0.05, unit: '' }, 'sz') + `</div>`;
-    html +=
-      `<label class="dg-switch dg-uniform">Uniform scale ` +
-      `<input type="checkbox" data-uniform ${o.sx === o.sz ? 'checked' : ''}></label>` +
-      `<div class="dg-field dg-pos">Scale<input type="range" min="0.5" max="3" step="0.05" value="${o.sx}" data-scale="1"><output>${o.sx.toFixed(2)}</output></div>`;
     if ('color' in t.defaults) {
       html += this._colorPicker('color', SURFACES, objectColor(o.color));
     }
@@ -971,7 +1375,62 @@ export class ParkDesigner {
     return html;
   }
 
-  _bindPanel(o) {
+  /** The group panel: one set of shared transforms over every selected object,
+   * without the per-object sliders that only make sense one at a time. */
+  _multiPanel(list) {
+    let html =
+      `<h3>${list.length} objects</h3>` +
+      `<p class="dg-note">Editing the group: position, rotation and scale apply to every selected object. Shift-click adds and removes members; drag a handle to transform them together.</p>`;
+    html += this._transformSection(list[0], true);
+    html +=
+      `<div class="dg-row">` +
+      `<button type="button" data-dup class="dg-btn">Duplicate</button>` +
+      `<button type="button" data-del class="dg-btn danger">Delete</button>` +
+      `</div>`;
+    return html;
+  }
+
+  /** The transform controls shared by the single-object and group panels:
+   * position sliders, quarter-turn buttons, the scale slider, the vertical
+   * (height) scale, and the mode buttons that reroute the gizmo. */
+  _transformSection(o, multi) {
+    const { x: ex, z: ez } = extentOf(this.file);
+    const maxR = Math.max(ex, ez);
+    const range = (label, value, min, max, step, unit, data) => {
+      const v = Number(value);
+      const text = unit === '' ? Math.round(v) : v.toFixed(step >= 0.1 ? 1 : 2);
+      return (
+        `<label class="dg-field">${label}` +
+        `<input type="range" min="${min}" max="${max}" step="${step}" value="${v}" data-${data}="1">` +
+        `<output>${text}${unit ? ` ${unit}` : ''}</output></label>`
+      );
+    };
+    let html = `<div class="dg-field dg-pos">X<input type="range" min="${-maxR - 8}" max="${maxR + 8}" step="0.1" value="${o.x}" data-pos="x"><output>${o.x.toFixed(2)}</output></div>`;
+    html += `<div class="dg-field dg-pos">Z<input type="range" min="${-maxR - 8}" max="${maxR + 8}" step="0.1" value="${o.z}" data-pos="z"><output>${o.z.toFixed(2)}</output></div>`;
+    html += `<div class="dg-field dg-pos dg-elev">Y<input type="range" min="0" max="12" step="0.1" value="${o.y || 0}" data-pos="y"><output>${(o.y || 0).toFixed(2)}</output></div>`;
+    html +=
+      `<div class="dg-row"><button type="button" data-rot="-1" class="dg-btn">⟲ 90°</button>` +
+      `<button type="button" data-rot="1" class="dg-btn">⟳ 90°</button>` +
+      `<span class="dg-yaw">${this._snapAngle(Math.round(o.ry / 90) * 90)}°</span></div>`;
+    html += `<div class="dg-field dg-pos dg-scale">Scale<input type="range" min="0.5" max="3" step="0.05" value="${o.sx}" data-scale="1"><output>${o.sx.toFixed(2)}</output></div>`;
+    if (!multi) {
+      html += `<div class="dg-row"><span>Scale X</span>` + range('', o.sx, 0.5, 3, 0.05, '', 'sx') + `</div>`;
+      html += `<div class="dg-row"><span>Scale Z</span>` + range('', o.sz, 0.5, 3, 0.05, '', 'sz') + `</div>`;
+      html +=
+        `<label class="dg-switch dg-uniform">Uniform scale ` +
+        `<input type="checkbox" data-uniform ${o.sx === o.sz ? 'checked' : ''}></label>`;
+      html += `<div class="dg-field dg-pos dg-scale">Height scale<input type="range" min="0.5" max="3" step="0.05" value="${o.sy || 1}" data-sy="1"><output>${(o.sy || 1).toFixed(2)}</output></div>`;
+    }
+    html +=
+      `<div class="dg-gizmo-row">` +
+      [['move', 'Move'], ['rotate', 'Rotate'], ['scale', 'Scale']]
+        .map(([m, label]) => `<button type="button" data-gizmo="${m}" class="dg-btn${this.mode === m ? ' on' : ''}">${label}</button>`)
+        .join('') +
+      `</div>`;
+    return html;
+  }
+
+  _bindPanel(o, multi) {
     if (!this.panelEl) return;
     const uniform = () => this.panelEl.querySelector('[data-uniform]')?.checked === true;
     // Park-level controls (shown when nothing is selected).
@@ -1064,17 +1523,54 @@ export class ParkDesigner {
       slider.addEventListener('change', () => this.commit());
     });
     this.panelEl.querySelector('[data-rename]')?.addEventListener('click', () => this.nameInput?.select());
-    // Object controls.
-    if (!o) return;
+    // The transform controls shared by one object or a group. Every slider
+    // sets the same value on all selected objects, so a group stays in shape.
+    if (!o && !multi) return;
+    const applyToAll = (fn) => {
+      for (const id of this._selectedIds()) {
+        const ob = this.file.objects.find((x) => x.id === id);
+        if (ob) fn(ob);
+      }
+    };
     this.panelEl.querySelectorAll('[data-pos]').forEach((el) => {
       el.addEventListener('input', (e) => {
-        o[el.dataset.pos] = this._snap(Number(e.target.value));
-        e.target.nextElementSibling.textContent = o[el.dataset.pos].toFixed(2);
-        this._updateObjectPreview(o);
+        const key = el.dataset.pos;
+        const v = key === 'y' ? this._snapY(Number(e.target.value)) : this._snap(Number(e.target.value));
+        applyToAll((ob) => (ob[key] = v));
+        e.target.nextElementSibling.textContent = v.toFixed(2);
+        this._applyTransformList(this._selectedIds());
+        this._placeSelection();
         this._scheduleSave();
       });
       el.addEventListener('change', () => this.commit());
     });
+    this.panelEl.querySelectorAll('[data-rot]').forEach((el) => {
+      el.addEventListener('click', () => this.rotateSelected(Number(el.dataset.rot)));
+    });
+    this.panelEl.querySelectorAll('[data-scale]').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const v = Number(e.target.value);
+        applyToAll((ob) => {
+          ob.sx = v;
+          ob.sz = v;
+        });
+        e.target.nextElementSibling.textContent = v.toFixed(2);
+        this._applyTransformList(this._selectedIds());
+        this._placeSelection();
+        this._scheduleSave();
+      });
+      el.addEventListener('change', () => this.commit());
+    });
+    this.panelEl.querySelectorAll('[data-gizmo]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._setMode(btn.dataset.gizmo);
+        this._renderPanel();
+      });
+    });
+    this.panelEl.querySelector('[data-dup]')?.addEventListener('click', () => this.duplicateSelected());
+    this.panelEl.querySelector('[data-del]')?.addEventListener('click', () => this.deleteSelected());
+    // Single-object controls only.
+    if (!o) return;
     this.panelEl.querySelectorAll('[data-prop]').forEach((el) => {
       el.addEventListener('input', (e) => {
         o[el.dataset.prop] = Number(e.target.value);
@@ -1103,16 +1599,6 @@ export class ParkDesigner {
       });
       el.addEventListener('change', () => this.commit());
     });
-    this.panelEl.querySelectorAll('[data-scale]').forEach((el) => {
-      el.addEventListener('input', (e) => {
-        o.sx = Number(e.target.value);
-        o.sz = o.sx;
-        this._applyTransform(this._objectGroup(o.id), o);
-        e.target.nextElementSibling.textContent = o.sx.toFixed(2);
-        this._scheduleSave();
-      });
-      el.addEventListener('change', () => this.commit());
-    });
     this.panelEl.querySelector('[data-uniform]')?.addEventListener('change', () => {
       if (uniform()) {
         o.sz = o.sx;
@@ -1121,8 +1607,14 @@ export class ParkDesigner {
       this._renderPanel();
       this.commit();
     });
-    this.panelEl.querySelectorAll('[data-rot]').forEach((el) => {
-      el.addEventListener('click', () => this.rotateSelected(Number(el.dataset.rot)));
+    this.panelEl.querySelectorAll('[data-sy]').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        o.sy = Number(e.target.value);
+        e.target.nextElementSibling.textContent = o.sy.toFixed(2);
+        this._updateObjectPreview(o);
+        this._scheduleSave();
+      });
+      el.addEventListener('change', () => this.commit());
     });
     this.panelEl.querySelectorAll('[data-color]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1132,8 +1624,6 @@ export class ParkDesigner {
         this.commit();
       });
     });
-    this.panelEl.querySelector('[data-dup]')?.addEventListener('click', () => this.duplicateSelected());
-    this.panelEl.querySelector('[data-del]')?.addEventListener('click', () => this.deleteSelected());
   }
 
   _setBoundary(part) {
@@ -1162,8 +1652,21 @@ export class ParkDesigner {
     if (e.key === 'r' || e.key === 'R') {
       this.rotateSelected(e.shiftKey ? -1 : 1);
       e.preventDefault();
+    } else if (e.key === 't' || e.key === 'T') {
+      // Cycle the transform mode without touching the mouse.
+      this._setMode(this.mode === 'move' ? 'rotate' : this.mode === 'rotate' ? 'scale' : 'move');
+      e.preventDefault();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       this.deleteSelected();
+      e.preventDefault();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+      if (this.file?.objects.length) {
+        this.multi = new Set(this.file.objects.map((x) => x.id));
+        this.sel = this.file.objects[this.file.objects.length - 1].id;
+        this._updateOutline();
+        this._renderPanel();
+        this._renderModeButtons();
+      }
       e.preventDefault();
     } else if (e.key.startsWith('Arrow')) {
       const d = e.shiftKey ? 0.5 : 2;

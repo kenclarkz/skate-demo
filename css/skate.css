@@ -1540,6 +1540,38 @@ button:disabled.primary {
   font-size: 13px;
 }
 
+/* The transform-mode buttons in the panel mirror the action bar's modes and
+   re-route the gizmo without leaving the properties. */
+#dg-panel .dg-gizmo-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  margin: 8px 4px 2px;
+}
+
+#dg-panel .dg-gizmo-row button {
+  min-height: 36px;
+  padding: 8px 6px;
+  font-size: 12px;
+}
+
+#dg-panel .dg-gizmo-row button.on {
+  background: rgba(255, 201, 63, 0.18);
+  color: var(--hot);
+  border-color: var(--hot);
+}
+
+/* The marquee rectangle: shift-drag over empty ground box-selects whatever
+   its footprint covers. The view canvas sits behind it, so it floats above. */
+#dg-marquee {
+  position: absolute;
+  z-index: 3;
+  border: 1.5px solid var(--hot);
+  background: rgba(255, 201, 63, 0.12);
+  pointer-events: none;
+  touch-action: none;
+}
+
 /* The editor menu: slides in from the right over the park view. */
 #dg-drawer {
   position: absolute;
