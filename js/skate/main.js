@@ -3,7 +3,8 @@
 
 import * as THREE from '../game/three.js';
 import * as C from './config.js';
-import { Park, PARKS, ROUGH } from './park.js';
+import { Park, ROUGH } from './park.js';
+import { PARKS } from './parkLayouts.js';
 import { ParkDesigner } from './parkDesigner.js';
 import { newFile, buildDef } from './parkFile.js';
 import { listFiles, removeFile } from './parkStorage.js';
