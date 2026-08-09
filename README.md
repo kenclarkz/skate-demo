@@ -24,8 +24,11 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
   edit the same primitives the shipped parks are made of (slabs, banks,
   quarters, stairs, rails, ledges, and funboxes, up to 64 per park) on the
   ground of your choice, in a WYSIWYG editor whose preview rides exactly like
-  the real thing. Parks save in the browser and can be played, edited, or
-  deleted from the menu at any time.
+  the real thing. Every object — and the pad itself — can be painted from the
+  surface swatches or any colour you dial in on a colour wheel, so a custom
+  park reads as your own and not a retread of the same grey shapes. Parks save
+  in the browser and can be played, edited, or deleted from the menu at any
+  time.
 - **A day/night toggle** on the park screen — the same parks ride under a full
   daylight sky or a floodlit night one, with the sun giving way to the moon,
   floodlights, street-lamp glow, and lit signage.

@@ -16,7 +16,7 @@
 
 import * as THREE from '../game/three.js';
 import { box, merge } from '../game/geo.js';
-import { OBJECTS, SURFACES, GROUNDS, newObject, objectType, boundsOf, groundColor } from './parkObjects.js';
+import { OBJECTS, SURFACES, GROUNDS, newObject, objectType, boundsOf, objectColor, padColor, cssColor, cssColorOf } from './parkObjects.js';
 import { newFile, serialize, deserialize, validate, buildDef, spawnFor, boundaryOf, extentOf, PARK_X, PARK_Z, MAX_OBJECTS } from './parkFile.js';
 import { putFile } from './parkStorage.js';
 
@@ -228,7 +228,7 @@ export class ParkDesigner {
     this._disposeGroup(this.root);
     this.root.clear();
     const { x: ex, z: ez } = extentOf(this.file);
-    this._pad = new THREE.Mesh(new THREE.BoxGeometry(ex * 2, 0.55, ez * 2), this._mat(groundColor(this.file.ground)));
+    this._pad = new THREE.Mesh(new THREE.BoxGeometry(ex * 2, 0.55, ez * 2), this._mat(padColor(this.file)));
     this._pad.position.y = -0.275;
     this.root.add(this._pad);
 
@@ -868,11 +868,49 @@ export class ParkDesigner {
     const o = this._selected();
     this.panelEl.innerHTML = o ? this._objectPanel(o) : this._parkPanel();
     this._bindPanel(o);
+    this._drawPanelWheels();
+  }
+
+  /** The swatches plus the colour wheel: the swatches are the quick presets,
+   * the wheel (with its brightness slider) is the "any colour at all" escape
+   * hatch. `data` is the preset buttons' own attribute, so the object panel
+   * and the park panel can each use their own without colliding. */
+  _colorPicker(data, presets, curHex) {
+    curHex = cssColorOf(curHex);
+    const { v } = hexToHsv(curHex);
+    const cur = curHex.toLowerCase();
+    const activeId = presets.find((s) => cssColor(s.color).toLowerCase() === cur)?.id || '';
+    const swatches = presets
+      .map(
+        (s) =>
+          `<button type="button" data-${data}="${s.id}" class="dg-swatch${s.id === activeId ? ' on' : ''}" style="--sw:${cssColor(s.color)}" title="${s.label}" aria-label="${s.label}"></button>`
+      )
+      .join('');
+    return (
+      `<div class="dg-group"><span>Surface</span><div class="dg-swatches">${swatches}</div></div>` +
+      `<div class="dg-color">` +
+      `<canvas data-wheel="${data}" class="dg-wheel" width="140" height="140" aria-label="Colour wheel"></canvas>` +
+      `<label class="dg-field dg-brightness">Brightness` +
+      `<input type="range" data-brightness="${data}" min="0" max="100" step="1" value="${Math.round(v * 100)}">` +
+      `<output data-brightout="${data}">${Math.round(v * 100)}</output></label>` +
+      `<div class="dg-hexrow"><span class="dg-hex-chip" style="--chip:${curHex}"></span><output class="dg-hex" data-hexout="${data}">${curHex.toUpperCase()}</output></div>` +
+      `</div>`
+    );
+  }
+
+  /** Paint every wheel in the panel to match the colour it currently stands
+   * for — run whenever the panel (re)renders. */
+  _drawPanelWheels() {
+    if (!this.panelEl) return;
+    this.panelEl.querySelectorAll('[data-wheel]').forEach((canvas) => {
+      const target = canvas.dataset.wheel;
+      const hex = target === 'ground' ? padColor(this.file) : objectColor(this._selected()?.color);
+      drawWheel(canvas, cssColorOf(hex));
+    });
   }
 
   _parkPanel() {
     const { x: ex, z: ez } = extentOf(this.file);
-    const ground = this.file.ground;
     const spawn = spawnFor(this.file);
     const b = boundaryOf(this.file);
     return (
@@ -886,9 +924,7 @@ export class ParkDesigner {
       `<label class="dg-field">Depth` +
       `<input type="range" data-park="depth" min="12" max="120" step="1" value="${Math.round(ez * 2)}">` +
       `<output>${Math.round(ez * 2)} m</output></label>` +
-      `<div class="dg-group"><span>Surface</span><div class="dg-swatches">` +
-      GROUNDS.map((g) => `<button type="button" data-ground="${g.id}" class="dg-swatch${g.id === ground ? ' on' : ''}" style="--sw:${g.color}" title="${g.label}" aria-label="${g.label}"></button>`).join('') +
-      `</div></div>` +
+      this._colorPicker('ground', GROUNDS, padColor(this.file)) +
       `<p class="dg-note">Spawn sits at (${spawn.x.toFixed(1)}, ${spawn.z.toFixed(1)}) — inside the boundary, clear of the fence — and moves itself if an object blocks it. The AI patrol keeps clear of your objects.</p>` +
       `<button type="button" data-rename class="dg-btn">Rename park…</button>`
     );
@@ -922,11 +958,8 @@ export class ParkDesigner {
       `<label class="dg-switch dg-uniform">Uniform scale ` +
       `<input type="checkbox" data-uniform ${o.sx === o.sz ? 'checked' : ''}></label>` +
       `<div class="dg-field dg-pos">Scale<input type="range" min="0.5" max="3" step="0.05" value="${o.sx}" data-scale="1"><output>${o.sx.toFixed(2)}</output></div>`;
-    if (t.id === 'slab' || t.id === 'bank' || t.id === 'quarter' || t.id === 'ledge' || t.id === 'funbox') {
-      html +=
-        `<div class="dg-group"><span>Surface</span><div class="dg-swatches">` +
-        SURFACES.map((s) => `<button type="button" data-color="${s.id}" class="dg-swatch${s.id === o.color ? ' on' : ''}" style="--sw:${s.color}" title="${s.label}" aria-label="${s.label}"></button>`).join('') +
-        `</div></div>`;
+    if ('color' in t.defaults) {
+      html += this._colorPicker('color', SURFACES, objectColor(o.color));
     }
     html +=
       `<div class="dg-row">` +
@@ -959,10 +992,74 @@ export class ParkDesigner {
     this.panelEl.querySelectorAll('[data-ground]').forEach((btn) => {
       btn.addEventListener('click', () => {
         this.file.ground = btn.dataset.ground;
+        this.file.groundHex = undefined;
         this._rebuild();
         this._renderPanel();
         this.commit();
       });
+    });
+    // The colour wheels (the selected object's surface, or the pad) and their
+    // brightness sliders. Dragging a wheel picks hue and saturation together;
+    // the slider then keeps the chosen brightness. Both update the preview
+    // live and commit when the gesture lets go.
+    const wheelApply = (target) => (hex) => {
+      if (target === 'ground') {
+        this.file.groundHex = hex;
+        if (this._pad) this._pad.material.color.set(hex);
+      } else {
+        const sel = this._selected();
+        if (!sel) return;
+        sel.color = hex;
+        this._updateObjectPreview(sel);
+      }
+      const canvas = this.panelEl.querySelector(`[data-wheel="${target}"]`);
+      const slider = this.panelEl.querySelector(`[data-brightness="${target}"]`);
+      const out = this.panelEl.querySelector(`[data-hexout="${target}"]`);
+      if (canvas) drawWheel(canvas, hex);
+      if (slider) slider.value = String(Math.round(hexToHsv(hex).v * 100));
+      if (out) out.textContent = hex.toUpperCase();
+      this._scheduleSave();
+    };
+    this.panelEl.querySelectorAll('[data-wheel]').forEach((canvas) => {
+      const target = canvas.dataset.wheel;
+      const apply = wheelApply(target);
+      const pick = (e) => {
+        const r = canvas.getBoundingClientRect();
+        const size = r.width || 140;
+        const R = size / 2 - 3;
+        const dx = e.clientX - (r.left + size / 2);
+        const dy = e.clientY - (r.top + size / 2);
+        const hue = (Math.atan2(dy, dx) / (Math.PI * 2) + 1) % 1;
+        const sat = Math.min(1, Math.sqrt(dx * dx + dy * dy) / R);
+        const slider = this.panelEl.querySelector(`[data-brightness="${target}"]`);
+        const v = slider ? Number(slider.value) / 100 : 1;
+        apply(hsvToHex(hue, sat, v));
+      };
+      canvas.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        canvas.setPointerCapture?.(e.pointerId);
+        pick(e);
+      });
+      canvas.addEventListener('pointermove', (e) => {
+        if (canvas.hasPointerCapture?.(e.pointerId)) pick(e);
+      });
+      canvas.addEventListener('pointerup', (e) => {
+        if (!canvas.hasPointerCapture?.(e.pointerId)) return;
+        canvas.releasePointerCapture?.(e.pointerId);
+        this.commit();
+        this._renderPanel();
+      });
+    });
+    this.panelEl.querySelectorAll('[data-brightness]').forEach((slider) => {
+      const target = slider.dataset.brightness;
+      slider.addEventListener('input', () => {
+        const cur = target === 'ground' ? padColor(this.file) : objectColor(this._selected()?.color);
+        const { h, s } = hexToHsv(cssColorOf(cur));
+        wheelApply(target)(hsvToHex(h, s, Number(slider.value) / 100));
+        const out = this.panelEl.querySelector(`[data-brightout="${target}"]`);
+        if (out) out.textContent = slider.value;
+      });
+      slider.addEventListener('change', () => this.commit());
     });
     this.panelEl.querySelector('[data-rename]')?.addEventListener('click', () => this.nameInput?.select());
     // Object controls.
@@ -1085,6 +1182,129 @@ export class ParkDesigner {
 
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
+}
+
+// --- the colour wheel -------------------------------------------------------
+// Painting a park is not limited to the surface swatches any more: the wheel
+// picks hue and saturation in one drag and a brightness slider sets the value,
+// so every object (and the pad itself) can be any colour at all. The wheel's
+// full-colour face is drawn once into a shared offscreen canvas and cheaply
+// composited on each redraw, so dragging stays smooth.
+
+function hsvRgb(h, s, v) {
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  let r = v;
+  let g = t;
+  let b = p;
+  switch (i % 6) {
+    case 0: break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    default: r = v; g = p; b = q; break;
+  }
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
+function hsvToHex(h, s, v) {
+  const [r, g, b] = hsvRgb(h, s, v);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+function hexToHsv(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+    if (h < 0) h += 1;
+  }
+  return { h, s: max ? d / max : 0, v: max };
+}
+
+/** The wheel's face, drawn once per resolution: hue around the rim, saturation
+ * toward the centre, at full brightness. Brightness is applied on top per draw
+ * because a value change should not have to recompute the whole disc. */
+let _wheelSource = null;
+function wheelSource(px) {
+  if (_wheelSource && _wheelSource.width === px) return _wheelSource;
+  const c = document.createElement('canvas');
+  c.width = c.height = px;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(px, px);
+  const R = px / 2 - 3;
+  const cx = px / 2;
+  const cy = px / 2;
+  for (let y = 0; y < px; y++) {
+    for (let x = 0; x < px; x++) {
+      const dx = x + 0.5 - cx;
+      const dy = y + 0.5 - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const i = (y * px + x) * 4;
+      if (dist > R) continue;
+      const hue = (Math.atan2(dy, dx) / (Math.PI * 2) + 1) % 1;
+      const [r, g, b] = hsvRgb(hue, dist / R, 1);
+      img.data[i] = r;
+      img.data[i + 1] = g;
+      img.data[i + 2] = b;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  _wheelSource = c;
+  return c;
+}
+
+/** Paint `canvas` as the colour wheel for `hex`, with a handle at the colour
+ * and a darkened disc if the brightness is below full. */
+function drawWheel(canvas, hex) {
+  const { h, s, v } = hexToHsv(hex);
+  const size = canvas.clientWidth || 140;
+  const dpr = window.devicePixelRatio || 1;
+  const px = Math.round(size * dpr);
+  canvas.width = px;
+  canvas.height = px;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(wheelSource(px), 0, 0);
+  if (v < 1) {
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = `rgba(0, 0, 0, ${(1 - v).toFixed(4)})`;
+    ctx.fillRect(0, 0, px, px);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const R = size / 2 - 3;
+  const cx = size / 2;
+  const cy = size / 2;
+  const ang = h * Math.PI * 2;
+  const rad = s * R;
+  const hx = cx + Math.cos(ang) * rad;
+  const hy = cy + Math.sin(ang) * rad;
+  ctx.beginPath();
+  ctx.arc(hx, hy, 7, 0, Math.PI * 2);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+  ctx.fillStyle = hex;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.fill();
+  ctx.stroke();
 }
 
 export { newFile, buildDef, MAX_OBJECTS };
