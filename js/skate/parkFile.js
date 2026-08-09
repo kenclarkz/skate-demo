@@ -139,7 +139,10 @@ export function validate(raw) {
       for (const prop of type.props) {
         clean[prop.key] = clampNum(o[prop.key], prop.min, prop.max, clean[prop.key]);
       }
-      if (type.id === 'slab' || type.id === 'bank' || type.id === 'quarter' || type.id === 'ledge' || type.id === 'funbox') {
+      // The surface color lives in each object type's defaults (it is picked
+      // from the paint swatches, not the property sliders), so a type that
+      // carries one keeps it across a save/load round trip.
+      if ('color' in type.defaults) {
         clean.color = SURFACE_IDS.includes(o.color) ? o.color : clean.color;
       }
       file.objects.push(clean);

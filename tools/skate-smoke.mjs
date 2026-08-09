@@ -3481,7 +3481,7 @@ section('The park editor');
   const palette = await run(() => {
     const g = window.__skate;
     const results = [];
-    for (const type of ['bank', 'rail', 'ledge', 'funbox']) {
+    for (const type of ['bank', 'rail', 'ledge', 'funbox', 'mini', 'rollin', 'spine', 'vert']) {
       let ok = true;
       try {
         g.designer.addObject(type);
@@ -3497,7 +3497,7 @@ section('The park editor');
     };
   });
   ok(palette.results.every((r) => r.endsWith(':ok')), `every palette type builds its preview (${palette.results.join(', ')})`);
-  ok(palette.objects === 7 && palette.pickables === 7, `and each one lands in the file and the scene (${palette.objects} objects)`);
+  ok(palette.objects === 11 && palette.pickables === 11, `and each one lands in the file and the scene (${palette.objects} objects)`);
 
   // Save writes the file to storage.
   const saved = await run(() => {
@@ -3568,6 +3568,151 @@ section('The park editor');
   ok(afterDelete.current === 'myparks', 'and the screen stays put');
 
   await run(() => window.__skate.showStart());
+}
+
+// --------------------------------------------------------------------------
+section('Park Suite ramp transitions: real rideable surfaces');
+{
+  // The four new ramp-family objects (mini, roll-in, spine, vert — the quarter
+  // pipe is the palette's existing `quarter`) have to paint curved transition
+  // surfaces a rider can actually climb, drop in on, and transfer over, not
+  // invisible boxes. Build a park holding all of them, then prove each one is
+  // the real thing: continuous arcs, lips at their declared height, copings on
+  // the lips, and colors that survive a save/load round trip.
+  const open = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1, id: 'user-ramps', name: 'Ramp suite', blurb: 'The five ramp transitions.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'm1', type: 'mini', x: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 4, R: 1.8, H: 1.25, flat: 4, deck: 1.2, color: 'wood' },
+        { id: 's1', type: 'spine', x: 12, z: 8, ry: 0, sx: 1, sz: 1, w: 4, R: 2.0, H: 1.4, gap: 1.0, color: 'dark' },
+        { id: 'r1', type: 'rollin', x: -10, z: 10, ry: 0, sx: 1, sz: 1, w: 4, R: 2.8, H: 1.8, deck: 4, color: 'wood' },
+        { id: 'v1', type: 'vert', x: 12, z: -8, ry: 0, sx: 1, sz: 1, w: 6, R: 3.5, H: 3.0, flat: 5, deck: 2.5, color: 'paint' },
+      ],
+    });
+    g.designer.on.test();
+    for (let i = 0; i < 120; i++) g.drive(1 / 120, { push: true });
+    return {
+      park: g.park.id,
+      features: g.park.features.length,
+      grinds: g.park.grinds.length,
+      finite: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z].every(Number.isFinite),
+    };
+  });
+  ok(open.park === 'user-ramps', 'the ramp-suite park builds and starts');
+  ok(open.features === 14, `with all four ramps' surfaces in the height field (${open.features} surfaces)`);
+  ok(open.grinds === 7, `and coping on every lip (${open.grinds} grindable lines)`);
+  ok(open.finite, 'and the rider is a finite point in it');
+
+  // The mini ramp's north transition is a circular arc from the flat up to its
+  // deck — walk it and check both the height and the slope stay continuous, so
+  // the join from floor to wall to deck reads as one smooth curve.
+  const walk = await run(() => {
+    const g = window.__skate;
+    const out = [];
+    // Base at z = 2, lip at z = 3.714, deck out to z = 4.914; stop before the
+    // deck's far edge, which is a real step and would drown the rest.
+    for (let z = 1.9; z <= 4.9; z += 0.01) out.push(+g.park.heightAt(0, z).toFixed(6));
+    return out;
+  });
+  let maxStep = 0;
+  for (let i = 1; i < walk.length; i++) maxStep = Math.max(maxStep, Math.abs(walk[i] - walk[i - 1]));
+  ok(maxStep < 0.05, `a mini-ramp wall is a smooth curve, not a box (biggest ${maxStep.toFixed(4)} m per cm)`);
+
+  // A rider rolls up that same wall, crests the lip, and comes down without a
+  // slam — the geometry has to be rideable, not just visually curved.
+  const climb = await run(() => {
+    const g = window.__skate;
+    g.place(0, 0, 0, 6);
+    let apex = 0;
+    let bailed = false;
+    for (let i = 0; i < 1500; i++) {
+      g.drive(1 / 120, {});
+      if (g.ride.mode === 3) bailed = true;
+      apex = Math.max(apex, g.ride.pos.y);
+    }
+    return { apex, bailed, mode: g.ride.mode, pos: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z] };
+  });
+  ok(climb.apex > 1.1, `and a rider can climb and crest the mini ramp (apex ${climb.apex.toFixed(2)} of 1.25 m)`);
+  ok(!climb.bailed && climb.mode !== 3, 'and ride it away without slamming');
+
+  // A spine face is a transition you transfer over: riding down the one face,
+  // across the flat, and up the far face has to build into a climb of the lip.
+  const spine = await run(() => {
+    const g = window.__skate;
+    // Start on the north face (z = 9) heading south, so the run goes: down the
+    // north face, across the flat, up the south face to its lip at 1.4 m.
+    g.place(12, 9, Math.PI, 6);
+    let apex = 0;
+    for (let i = 0; i < 900; i++) {
+      g.drive(1 / 120, {});
+      apex = Math.max(apex, g.ride.pos.y);
+    }
+    return { apex, mode: g.ride.mode, pos: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z] };
+  });
+  ok(spine.apex > 0.6, `a rider can pump and climb a spine face (apex ${spine.apex.toFixed(2)} of 1.4 m)`);
+  ok([spine.pos[0], spine.pos[1], spine.pos[2]].every(Number.isFinite), 'without leaving the world');
+
+  // Roll in from the platform on top: a 1.8 m drop down the transition to the
+  // flat, which has to be a landing that builds speed, not a slam.
+  const dropin = await run(() => {
+    const g = window.__skate;
+    g.place(-10, 15, Math.PI, 1.5);
+    let bailed = false;
+    let fastest = 0;
+    let reachedFlat = false;
+    for (let i = 0; i < 700; i++) {
+      g.drive(1 / 120, {});
+      if (g.ride.mode === 3) bailed = true;
+      if (g.ride.mode === 0) fastest = Math.max(fastest, Math.abs(g.ride.speed));
+      if (g.ride.pos.y < 0.1) reachedFlat = true;
+    }
+    return { bailed, fastest, reachedFlat };
+  });
+  ok(!dropin.bailed, 'rolling in off the platform is not a slam');
+  ok(dropin.fastest > 3.5, `and the drop-in gains real speed (${dropin.fastest.toFixed(2)} m/s)`);
+  ok(dropin.reachedFlat, 'and reaches the flat below');
+
+  // The vert ramp's wall is near-vertical but still a true arc — it has to
+  // climb smoothly rather than step, and rise all the way to the deck behind
+  // its lip.
+  const vert = await run(() => {
+    const g = window.__skate;
+    let maxY = 0;
+    const out = [];
+    // Continuity up the arc, stopping short of the lip (past it the deck
+    // starts, and the lip itself is a clean vertical edge).
+    for (let z = -5.6; z <= -2.1; z += 0.01) {
+      const y = g.park.heightAt(12, z);
+      maxY = Math.max(maxY, y);
+      out.push(+y.toFixed(6));
+    }
+    let maxStep = 0;
+    for (let i = 1; i < out.length; i++) maxStep = Math.max(maxStep, Math.abs(out[i] - out[i - 1]));
+    // The wall's full height is only reached exactly at the lip; walk a window
+    // that crosses it onto the deck, where the surface sits at H = 3.0 m.
+    let lipY = 0;
+    for (let z = -2.12; z <= -1.88; z += 0.005) lipY = Math.max(lipY, g.park.heightAt(12, z));
+    return { maxStep, lipY };
+  });
+  ok(vert.lipY > 2.94 && vert.lipY < 3.06, `a vert wall rises to its full height at the lip (${vert.lipY.toFixed(2)} of 3.0 m)`);
+  ok(vert.maxStep < 0.07, `and climbs as a steep but continuous arc (biggest ${vert.maxStep.toFixed(4)} m per cm)`);
+
+  // Every object's color has to survive Save & Test (which writes a validated
+  // copy) and a reload, so a park keeps its look across sessions.
+  const colors = await run(() => {
+    const files = JSON.parse(localStorage.getItem('skate.parks') || '[]');
+    const file = files.find((f) => f.id === 'user-ramps');
+    return file ? file.objects.map((o) => `${o.type}:${o.color}`) : [];
+  });
+  ok(colors.includes('mini:wood') && colors.includes('spine:dark') && colors.includes('rollin:wood') && colors.includes('vert:paint'), `the ramp colors survive save and validate (${colors.join(', ')})`);
+
+  // Clean the saved park up so later sections start with empty storage.
+  await run(() => {
+    localStorage.removeItem('skate.parks');
+    window.__skate.showStart();
+  });
 }
 
 // --------------------------------------------------------------------------
