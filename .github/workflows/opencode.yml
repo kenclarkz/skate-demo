@@ -38,17 +38,6 @@ steps:
     run: |
       git config --global user.name "OpenCode"
       git config --global user.email "opencode@users.noreply.github.com"
-  - name: Create OpenCode branch
-    run: |
-      if [ "${{ github.event_name }}" = "issue_comment" ]; then
-        BRANCH="opencode/issue-${{ github.event.issue.number }}-${{ github.run_id }}"
-      else
-        BRANCH="opencode/manual-${{ github.run_id }}"
-      fi
-      echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
-      git checkout -b "$BRANCH"
-      echo "Created branch:"
-      git branch --show-current
   - name: Run OpenCode
     uses: anomalyco/opencode/github@latest
     with:
@@ -57,63 +46,68 @@ steps:
       use_github_token: true
     env:
       GITHUB_TOKEN: ${{ github.token }}
-  - name: Check OpenCode changes
+  - name: Check for OpenCode changes
+    id: changes
     run: |
       echo "===== GIT STATUS ====="
       git status --short
       echo "===== CHANGED FILES ====="
       git diff --name-only
-      echo "===== DIFF SUMMARY ====="
-      git diff --stat
-  - name: Commit OpenCode changes
+      if [ -n "$(git status --porcelain)" ]; then
+        echo "changed=true" >> "$GITHUB_OUTPUT"
+      else
+        echo "changed=false" >> "$GITHUB_OUTPUT"
+      fi
+  - name: Create branch and commit changes
+    if: steps.changes.outputs.changed == 'true'
     id: commit
     run: |
-      if [ -z "$(git status --porcelain)" ]; then
-        echo "No changes were produced by OpenCode."
-        echo "changed=false" >> "$GITHUB_OUTPUT"
-        exit 0
+      if [ "${{ github.event_name }}" = "issue_comment" ]; then
+        BRANCH="opencode/issue-${{ github.event.issue.number }}-${{ github.run_id }}"
+      else
+        BRANCH="opencode/run-${{ github.run_id }}"
       fi
+      echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+      git checkout -b "$BRANCH"
       git add -A
-      git commit \
-        -m "OpenCode: update repository"
-      echo "changed=true" >> "$GITHUB_OUTPUT"
-  - name: Push OpenCode branch
-    if: steps.commit.outputs.changed == 'true'
+      git commit -m "OpenCode: update repository"
+      echo "Created commit:"
+      git log -1 --oneline
+  - name: Push branch
+    if: steps.changes.outputs.changed == 'true'
     run: |
       git push --set-upstream origin "$BRANCH"
-      echo "Successfully pushed branch:"
+      echo "Successfully pushed:"
       echo "$BRANCH"
   - name: Create Pull Request
-    if: steps.commit.outputs.changed == 'true'
+    if: steps.changes.outputs.changed == 'true' && github.event_name == 'issue_comment'
     env:
       GH_TOKEN: ${{ github.token }}
     run: |
-      EXISTING_PR=$(gh pr list \
+      PR_URL=$(gh pr list \
+        --repo "${{ github.repository }}" \
         --head "$BRANCH" \
         --base main \
         --json url \
         --jq '.[0].url')
-      if [ -n "$EXISTING_PR" ]; then
+      if [ -n "$PR_URL" ]; then
         echo "Pull request already exists:"
-        echo "$EXISTING_PR"
+        echo "$PR_URL"
         exit 0
       fi
-      if [ "${{ github.event_name }}" = "issue_comment" ]; then
-        gh pr create \
-          --base main \
-          --head "$BRANCH" \
-          --title "OpenCode: update issue #${{ github.event.issue.number }}" \
-          --body "OpenCode implementation for issue #${{ github.event.issue.number }}."
-      else
-        gh pr create \
-          --base main \
-          --head "$BRANCH" \
-          --title "OpenCode: repository update" \
-          --body "OpenCode implementation generated from workflow_dispatch."
-      fi
-  - name: Final repository state
+      PR_URL=$(gh pr create \
+        --repo "${{ github.repository }}" \
+        --base main \
+        --head "$BRANCH" \
+        --title "OpenCode: issue #${{ github.event.issue.number }}" \
+        --body "Automated OpenCode implementation for issue #${{ github.event.issue.number }}.")
+      echo "========================================"
+      echo "PULL REQUEST CREATED"
+      echo "$PR_URL"
+      echo "========================================"
+  - name: Final status
     run: |
-      echo "===== FINAL STATUS ====="
+      echo "===== FINAL GIT STATUS ====="
       git status --short
       echo "===== FINAL COMMIT ====="
       git log -1 --oneline
