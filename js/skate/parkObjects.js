@@ -545,6 +545,26 @@ export const OBJECTS = [
   },
 
   {
+    id: 'hoop',
+    label: 'Hoop',
+    hint: 'A decorative ring to jump through — no collision or grind, just style.',
+    defaults: { r: 1.6, tube: 0.12, color: '#e0552f' },
+    props: [
+      { key: 'r', label: 'Radius', min: 0.8, max: 5, step: 0.1, unit: 'm' },
+      { key: 'tube', label: 'Tube', min: 0.05, max: 0.4, step: 0.01, unit: 'm' },
+    ],
+    build(p, o) {
+      p.hoop(o.x, o.y, o.z, o.r, o.tube, o.ry || 0);
+    },
+    footprint() {
+      return { x0: 0, x1: 0, z0: 0, z1: 0 };
+    },
+    preview(o) {
+      return new THREE.Mesh(new THREE.TorusGeometry(o.r, o.tube, 10, 28), mat(objectColor(o.color)));
+    },
+  },
+
+  {
     id: 'funbox',
     label: 'Funbox',
     hint: 'A box of quarterpipes on every side, with a coping on each lip.',

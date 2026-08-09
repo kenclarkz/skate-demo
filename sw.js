@@ -48,6 +48,7 @@ const ASSETS = [
   'js/skate/lighting.js',
   'js/skate/radio.js',
   'js/skate/parkObjects.js',
+  'js/skate/parkLayouts.js',
   'js/skate/parkFile.js',
   'js/skate/parkStorage.js',
   'js/skate/parkDesigner.js',
