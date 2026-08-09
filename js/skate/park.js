@@ -299,6 +299,92 @@ export class Quarter {
   }
 }
 
+/** The lip radius of a bowl whose transition arc is R and whose lip is H up
+ * the arc — the bowl analogue of a Quarter's uTop. */
+export function bowlU(R, H) {
+  return Math.sqrt(Math.max(0, 2 * R * H - H * H));
+}
+
+/** The (radius, height) profile a bowl is a surface of revolution of: the flat
+ * centre, the quarterpipe arc out to the lip, the flat rim deck beyond it, then
+ * down the outside skirt to a closed base. Shared by the real mesh (Bowl.build)
+ * and the editor preview (parkObjects.js) so the two can never disagree. */
+export function bowlProfile(R, H, rim, baseY = 0) {
+  const uTop = bowlU(R, H);
+  const pts = [
+    [0, -0.6],
+    [0, baseY],
+  ];
+  const STEPS = 18;
+  for (let i = 0; i <= STEPS; i++) {
+    const u = (uTop * i) / STEPS;
+    pts.push([u, baseY + R - Math.sqrt(Math.max(0, R * R - u * u))]);
+  }
+  pts.push([uTop, baseY + H], [uTop + rim, baseY + H], [uTop + rim, -0.6], [0, -0.6]);
+  return pts;
+}
+
+/**
+ * A bowl: a quarterpipe's transition made into a surface of revolution, so
+ * every wall of a round pool climbs out of a shared flat floor. The centre is
+ * flat (the arc is tangent to it, exactly as a Quarter is to the flat), the
+ * surface rises as y = R - sqrt(R² - u²) with u the radius, and past the lip a
+ * flat rim deck carries on at height H — the rim a skater drops in from, the
+ * same job the deck behind a quarterpipe's lip does. sx/sz are the object's own
+ * horizontal scale, so a non-uniform scale makes a genuinely elliptical bowl
+ * whose collision is still the same surface the mesh shows.
+ */
+export class Bowl {
+  constructor(cx, cz, sx, sz, R, H, rim, color = RAMP, baseY = 0) {
+    Object.assign(this, { cx, cz, sx, sz, R, H, rim, color, baseY });
+    this.uTop = bowlU(R, H);
+  }
+
+  at(x, z, out) {
+    const p = x - this.cx;
+    const q = z - this.cz;
+    const u = Math.hypot(p / this.sx, q / this.sz);
+    if (u <= this.uTop) {
+      const root = Math.sqrt(Math.max(1e-6, this.R * this.R - u * u));
+      out.y = this.baseY + this.R - root;
+      // The normal is the surface gradient (-∂y/∂x, 1, -∂y/∂z) normalised. At
+      // unit scale it collapses to the same (-u/R, root/R, ...) a Quarter gives.
+      const dx = p / (this.sx * this.sx * root);
+      const dz = q / (this.sz * this.sz * root);
+      const inv = 1 / Math.hypot(dx, 1, dz);
+      out.nx = -dx * inv;
+      out.ny = inv;
+      out.nz = -dz * inv;
+      out.kind = TRANSITION;
+      return true;
+    }
+    if (u <= this.uTop + this.rim) {
+      out.y = this.baseY + this.H;
+      out.nx = 0;
+      out.ny = 1;
+      out.nz = 0;
+      out.kind = SMOOTH;
+      return true;
+    }
+    return false;
+  }
+
+  build(entries) {
+    const pts = bowlProfile(this.R, this.H, this.rim, this.baseY).map(([u, y]) => new THREE.Vector2(u, y));
+    const geo = new THREE.LatheGeometry(pts, 32);
+    entries.push(piece(geo, this.color, this.sx, 1, this.sz, this.cx, 0, this.cz));
+  }
+
+  /** The arc (R, H and the uTop it produces) is a real physical curve and
+   * stays put; only where the bowl sits and how wide the rim deck runs are
+   * stretched, exactly as a Quarter's deck is. */
+  scaleXZ(s) {
+    this.cx *= s;
+    this.cz *= s;
+    this.rim *= s;
+  }
+}
+
 /** A stair set. Riding it is a bail; the handrail beside it is the point. */
 export class Stairs {
   constructor(c0, c1, top, axis, sign, steps, rise, run, baseY = 0, color = CONCRETE_DARK) {

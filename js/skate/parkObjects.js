@@ -13,7 +13,7 @@
 // height field to ride it correctly, and nothing else in the game has one.
 
 import * as THREE from '../game/three.js';
-import { Slab, Bank, Quarter, Stairs, SMOOTH, CONCRETE, CONCRETE_DARK, RAMP, STEEL, PAINT, DIRT } from './park.js';
+import { Slab, Bank, Quarter, Stairs, Bowl, bowlU, bowlProfile, SMOOTH, CONCRETE, CONCRETE_DARK, RAMP, STEEL, PAINT, DIRT } from './park.js';
 
 // --- palettes -------------------------------------------------------------
 
@@ -388,6 +388,34 @@ export const OBJECTS = [
     },
     preview(o) {
       return halfPipePreview(o);
+    },
+  },
+
+  {
+    id: 'bowl',
+    label: 'Small Bowl',
+    hint: 'A round pool of transition — drop in, pump around the walls, launch airs from any side.',
+    defaults: { R: 2.0, H: 1.2, rim: 1.0, color: 'wood' },
+    props: [
+      { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
+      { key: 'H', label: 'Height', min: 0.3, max: 5, step: 0.05, unit: 'm' },
+      { key: 'rim', label: 'Deck', min: 0.2, max: 4, step: 0.1, unit: 'm' },
+    ],
+    build(p, o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      p.add(new Bowl(o.x, o.z, o.sx, o.sz, o.R, H, o.rim, objectColor(o.color), o.y));
+    },
+    footprint(o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      const r = bowlU(o.R, H) + o.rim;
+      // A quarter-turn is the only rotation that exists, so the circle's
+      // axis-aligned box is the same square of corners under any of them.
+      return worldRect(o, -r, r, -r, r);
+    },
+    preview(o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      const pts = bowlProfile(o.R, H, o.rim).map(([u, y]) => new THREE.Vector2(u, y));
+      return new THREE.Mesh(new THREE.LatheGeometry(pts, 32), mat(objectColor(o.color)));
     },
   },
 
