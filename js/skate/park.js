@@ -235,8 +235,8 @@ export class Bank {
  * skater would actually ride up.
  */
 export class Quarter {
-  constructor(c0, c1, base, axis, sign, R, H, deck = 0, color = RAMP) {
-    Object.assign(this, { c0, c1, base, axis, sign, R, H, deck, color });
+  constructor(c0, c1, base, axis, sign, R, H, deck = 0, color = RAMP, baseY = 0) {
+    Object.assign(this, { c0, c1, base, axis, sign, R, H, deck, color, baseY });
     // Where the arc reaches deck height, from y = R - sqrt(R² - u²).
     this.uTop = Math.sqrt(Math.max(0, 2 * R * H - H * H));
     // Cross extent, named as x0/x1 or z0/z1 depending on which way it runs.
@@ -255,7 +255,7 @@ export class Quarter {
     const u = this.sign * ((this.axis === 'z' ? z : x) - this.base);
     if (u < 0 || u > this.uTop) return false;
     const root = Math.sqrt(Math.max(1e-6, this.R * this.R - u * u));
-    out.y = this.R - root;
+    out.y = this.baseY + this.R - root;
     // The normal points from the surface back towards the arc's centre, so it
     // rolls from straight up at the base to nearly horizontal at the lip.
     const nu = (-u / this.R) * this.sign;
@@ -271,12 +271,12 @@ export class Quarter {
     const STEPS = 18;
     for (let i = 0; i <= STEPS; i++) {
       const u = (this.uTop * i) / STEPS;
-      p.push([u, this.R - Math.sqrt(Math.max(0, this.R * this.R - u * u))]);
+      p.push([u, this.baseY + this.R - Math.sqrt(Math.max(0, this.R * this.R - u * u))]);
     }
     // `deck` extends the top as a platform. Kickers set it to zero, so the lip
     // is a clean edge with nothing behind it to walk on that the height field
     // does not know about.
-    if (this.deck > 0) p.push([this.uTop + this.deck, this.H]);
+    if (this.deck > 0) p.push([this.uTop + this.deck, this.baseY + this.H]);
     p.push([this.uTop + this.deck, -0.6]);
     profile(entries, p, this.axis, this.base, this.sign, this.c0, this.c1, this.color);
   }
@@ -301,8 +301,8 @@ export class Quarter {
 
 /** A stair set. Riding it is a bail; the handrail beside it is the point. */
 export class Stairs {
-  constructor(c0, c1, top, axis, sign, steps, rise, run) {
-    Object.assign(this, { c0, c1, top, axis, sign, steps, rise, run });
+  constructor(c0, c1, top, axis, sign, steps, rise, run, baseY = 0) {
+    Object.assign(this, { c0, c1, top, axis, sign, steps, rise, run, baseY });
     this.yTop = steps * rise;
     this.len = steps * run;
   }
@@ -313,7 +313,7 @@ export class Stairs {
     const u = this.sign * ((this.axis === 'z' ? z : x) - this.top);
     if (u < 0 || u > this.len) return false;
     const i = Math.min(this.steps - 1, Math.floor(u / this.run));
-    out.y = this.yTop - (i + 1) * this.rise;
+    out.y = this.baseY + this.yTop - (i + 1) * this.rise;
     out.nx = 0;
     out.ny = 1;
     out.nz = 0;
@@ -322,9 +322,9 @@ export class Stairs {
   }
 
   build(entries) {
-    const p = [[0, -0.6], [0, this.yTop]];
+    const p = [[0, -0.6], [0, this.baseY + this.yTop]];
     for (let i = 0; i < this.steps; i++) {
-      const y = this.yTop - (i + 1) * this.rise;
+      const y = this.baseY + this.yTop - (i + 1) * this.rise;
       p.push([i * this.run, y], [(i + 1) * this.run, y]);
     }
     p.push([this.len, -0.6]);

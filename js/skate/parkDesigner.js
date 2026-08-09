@@ -321,7 +321,7 @@ export class ParkDesigner {
   }
 
   _applyTransform(g, o) {
-    g.position.set(o.x, 0, o.z);
+    g.position.set(o.x, o.y || 0, o.z);
     g.rotation.y = o.ry * DEG;
     g.scale.set(o.sx, 1, o.sz);
   }
@@ -380,7 +380,7 @@ export class ParkDesigner {
       edges,
       new THREE.LineBasicMaterial({ color: 0xff3d6e, transparent: true, opacity: 0.9 })
     );
-    line.position.set((b.x0 + b.x1) / 2, (h + 0.12) / 2, (b.z0 + b.z1) / 2);
+    line.position.set((b.x0 + b.x1) / 2, (h + 0.12) / 2 + (o.y || 0), (b.z0 + b.z1) / 2);
     line.raycast = () => null;
     this._outline = line;
     this.root.add(line);
@@ -644,6 +644,16 @@ export class ParkDesigner {
     this.commit();
   }
 
+  /** Raise or lower the selected object — the editor's vertical axis. */
+  nudgeY(dy) {
+    const o = this._selected();
+    if (!o) return;
+    o.y = Math.min(12, Math.max(0, (o.y || 0) + dy));
+    o.y = Math.round(o.y * 100) / 100;
+    this._updateObjectPreview(o);
+    this.commit();
+  }
+
   // --- history ------------------------------------------------------------
 
   commit() {
@@ -862,6 +872,7 @@ export class ParkDesigner {
     let html = `<h3>${t.label}</h3><p class="dg-note">${t.hint}</p>`;
     html += `<div class="dg-field dg-pos">X<input type="range" min="${-maxR - 8}" max="${maxR + 8}" step="0.1" value="${o.x}" data-pos="x"><output>${o.x.toFixed(2)}</output></div>`;
     html += `<div class="dg-field dg-pos">Z<input type="range" min="${-maxR - 8}" max="${maxR + 8}" step="0.1" value="${o.z}" data-pos="z"><output>${o.z.toFixed(2)}</output></div>`;
+    html += `<div class="dg-field dg-pos dg-elev">Y<input type="range" min="0" max="12" step="0.1" value="${o.y || 0}" data-pos="y"><output>${(o.y || 0).toFixed(2)}</output></div>`;
     html +=
       `<div class="dg-row"><button type="button" data-rot="-1" class="dg-btn">⟲ 90°</button>` +
       `<button type="button" data-rot="1" class="dg-btn">⟳ 90°</button>` +
@@ -1022,6 +1033,9 @@ export class ParkDesigner {
       const dx = e.key === 'ArrowRight' ? d : e.key === 'ArrowLeft' ? -d : 0;
       const dz = e.key === 'ArrowDown' ? d : e.key === 'ArrowUp' ? -d : 0;
       this.nudge(dx, dz);
+      e.preventDefault();
+    } else if (e.key === 'PageUp' || e.key === 'PageDown') {
+      this.nudgeY((e.key === 'PageUp' ? 1 : -1) * (e.shiftKey ? 0.1 : 0.25));
       e.preventDefault();
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
       if (e.shiftKey) this.redo();
