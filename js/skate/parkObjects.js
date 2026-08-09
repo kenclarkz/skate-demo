@@ -211,6 +211,146 @@ export const OBJECTS = [
   },
 
   {
+    id: 'mini',
+    label: 'Mini Ramp',
+    hint: 'A half-pipe: two quarterpipes facing off over a flat, coping on both lips.',
+    defaults: { w: 4, R: 1.8, H: 1.25, flat: 4, deck: 1.2, color: 'wood' },
+    props: [
+      { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
+      { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
+      { key: 'H', label: 'Height', min: 0.3, max: 5, step: 0.05, unit: 'm' },
+      { key: 'flat', label: 'Flat', min: 0.5, max: 14, step: 0.1, unit: 'm' },
+      { key: 'deck', label: 'Deck', min: 0, max: 6, step: 0.1, unit: 'm' },
+    ],
+    build(p, o) {
+      halfPipe(p, o);
+    },
+    footprint(o) {
+      return halfPipeBounds(o);
+    },
+    preview(o) {
+      return halfPipePreview(o);
+    },
+  },
+
+  {
+    id: 'rollin',
+    label: 'Roll-In Ramp',
+    hint: 'A tall transition up to a deep platform — stand on it and drop to the flat.',
+    defaults: { w: 4, R: 2.8, H: 1.8, deck: 4, color: 'wood' },
+    props: [
+      { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
+      { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
+      { key: 'H', label: 'Height', min: 0.3, max: 5, step: 0.05, unit: 'm' },
+      { key: 'deck', label: 'Platform', min: 0, max: 10, step: 0.1, unit: 'm' },
+    ],
+    build(p, o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      const uTop = quarterU(o.R, H);
+      const color = surfaceColor(o.color);
+      const base = worldPoint(o, 0, 0);
+      const cross = worldRect(o, -o.w / 2, o.w / 2, 0, 0);
+      const f = frame(o);
+      const axis = forwardAxis(o);
+      const sign = axis === 'z' ? (f.fz > 0 ? 1 : -1) : f.fx > 0 ? 1 : -1;
+      p.add(new Quarter(axis === 'z' ? cross.x0 : cross.z0, axis === 'z' ? cross.x1 : cross.z1, axis === 'z' ? base[1] : base[0], axis, sign, o.R, H, 0, color, o.y));
+      if (o.deck > 0) {
+        const plat = worldRect(o, -o.w / 2, o.w / 2, uTop, uTop + o.deck);
+        p.add(new Slab(plat.x0, plat.x1, plat.z0, plat.z1, H + o.y, SMOOTH, color, slabDepth(H)));
+      }
+      lineCoping(p, worldPoint(o, -o.w / 2, uTop), worldPoint(o, o.w / 2, uTop), H + o.y);
+    },
+    footprint(o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      return worldRect(o, -o.w / 2, o.w / 2, 0, quarterU(o.R, H) + o.deck);
+    },
+    preview(o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      const uTop = quarterU(o.R, H);
+      const color = surfaceColor(o.color);
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(quarterGeo(o.w, o.R, H, 0), mat(color)));
+      if (o.deck > 0) {
+        const depth = slabDepth(H);
+        g.add(box(o.w, depth, o.deck, 0, H - depth / 2, uTop + o.deck / 2, color));
+      }
+      return g;
+    },
+  },
+
+  {
+    id: 'spine',
+    label: 'Spine Ramp',
+    hint: 'Two transitions back to back — the only way across is a transfer over the top.',
+    defaults: { w: 4, R: 2.0, H: 1.4, gap: 1.0, color: 'wood' },
+    props: [
+      { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
+      { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
+      { key: 'H', label: 'Height', min: 0.3, max: 5, step: 0.05, unit: 'm' },
+      { key: 'gap', label: 'Gap', min: 0, max: 8, step: 0.1, unit: 'm' },
+    ],
+    build(p, o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      const uTop = quarterU(o.R, H);
+      const half = o.gap / 2;
+      const color = surfaceColor(o.color);
+      const f = frame(o);
+      const axis = forwardAxis(o);
+      const dir = axis === 'z' ? f.fz : f.fx;
+      const signN = dir > 0 ? 1 : -1;
+      const cross = worldRect(o, -o.w / 2, o.w / 2, 0, 0);
+      const c0 = axis === 'z' ? cross.x0 : cross.z0;
+      const c1 = axis === 'z' ? cross.x1 : cross.z1;
+      p.add(new Quarter(c0, c1, axis === 'z' ? worldPoint(o, 0, half)[1] : worldPoint(o, 0, half)[0], axis, signN, o.R, H, 0, color, o.y));
+      p.add(new Quarter(c0, c1, axis === 'z' ? worldPoint(o, 0, -half)[1] : worldPoint(o, 0, -half)[0], axis, -signN, o.R, H, 0, color, o.y));
+      lineCoping(p, worldPoint(o, -o.w / 2, half + uTop), worldPoint(o, o.w / 2, half + uTop), H + o.y);
+      lineCoping(p, worldPoint(o, -o.w / 2, -half - uTop), worldPoint(o, o.w / 2, -half - uTop), H + o.y);
+    },
+    footprint(o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      const half = o.gap / 2 + quarterU(o.R, H);
+      return worldRect(o, -o.w / 2, o.w / 2, -half, half);
+    },
+    preview(o) {
+      const H = Math.min(o.H, o.R - 0.05);
+      const half = o.gap / 2;
+      const color = surfaceColor(o.color);
+      const g = new THREE.Group();
+      const n = quarterGeo(o.w, o.R, H, 0);
+      n.translate(0, 0, half);
+      g.add(new THREE.Mesh(n, mat(color)));
+      const s = quarterGeo(o.w, o.R, H, 0);
+      s.rotateY(Math.PI);
+      s.translate(0, 0, -half);
+      g.add(new THREE.Mesh(s, mat(color)));
+      return g;
+    },
+  },
+
+  {
+    id: 'vert',
+    label: 'Vert Ramp',
+    hint: 'A big half-pipe with near-vertical walls — the classic big-air ramp.',
+    defaults: { w: 6, R: 3.5, H: 3.0, flat: 5, deck: 2.5, color: 'wood' },
+    props: [
+      { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
+      { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
+      { key: 'H', label: 'Height', min: 0.3, max: 5, step: 0.05, unit: 'm' },
+      { key: 'flat', label: 'Flat', min: 0.5, max: 14, step: 0.1, unit: 'm' },
+      { key: 'deck', label: 'Deck', min: 0, max: 6, step: 0.1, unit: 'm' },
+    ],
+    build(p, o) {
+      halfPipe(p, o);
+    },
+    footprint(o) {
+      return halfPipeBounds(o);
+    },
+    preview(o) {
+      return halfPipePreview(o);
+    },
+  },
+
+  {
     id: 'stairs',
     label: 'Stairs',
     hint: 'Steps up to a deck. The tall end meets whatever you place behind it.',
@@ -553,4 +693,68 @@ function lineCoping(p, a, b, h) {
   } else {
     p.coping(Math.min(a[0], b[0]), Math.max(a[0], b[0]), a[1], h);
   }
+}
+
+// --- the ramp family -------------------------------------------------------
+// The mini ramp and the vert ramp are the same object at different sizes — two
+// quarterpipes facing each other over a flat bottom, each with a deck behind
+// its lip — so they share one builder, one footprint and one preview.
+
+/** Paint a half-pipe onto the park. The floor between the two transitions only
+ * needs its own slab when the object is raised off the pad; at ground level the
+ * pad itself is the floor, and it sits at exactly the transitions' base height
+ * either way, so the join reads as a curve, not a kink. */
+function halfPipe(p, o) {
+  const H = Math.min(o.H, o.R - 0.05);
+  const uTop = quarterU(o.R, H);
+  const half = o.flat / 2;
+  const color = surfaceColor(o.color);
+  const f = frame(o);
+  const axis = forwardAxis(o);
+  const dir = axis === 'z' ? f.fz : f.fx;
+  const signN = dir > 0 ? 1 : -1;
+  const cross = worldRect(o, -o.w / 2, o.w / 2, half, half);
+  const c0 = axis === 'z' ? cross.x0 : cross.z0;
+  const c1 = axis === 'z' ? cross.x1 : cross.z1;
+  if (o.y > 0.001) {
+    const flat = worldRect(o, -o.w / 2, o.w / 2, -half, half);
+    p.add(new Slab(flat.x0, flat.x1, flat.z0, flat.z1, o.y, SMOOTH, color, 0.55));
+  }
+  p.add(new Quarter(c0, c1, axis === 'z' ? worldPoint(o, 0, half)[1] : worldPoint(o, 0, half)[0], axis, signN, o.R, H, 0, color, o.y));
+  p.add(new Quarter(c0, c1, axis === 'z' ? worldPoint(o, 0, -half)[1] : worldPoint(o, 0, -half)[0], axis, -signN, o.R, H, 0, color, o.y));
+  if (o.deck > 0) {
+    const dN = worldRect(o, -o.w / 2, o.w / 2, half + uTop, half + uTop + o.deck);
+    p.add(new Slab(dN.x0, dN.x1, dN.z0, dN.z1, H + o.y, SMOOTH, color, slabDepth(H)));
+    const dS = worldRect(o, -o.w / 2, o.w / 2, -half - uTop - o.deck, -half - uTop);
+    p.add(new Slab(dS.x0, dS.x1, dS.z0, dS.z1, H + o.y, SMOOTH, color, slabDepth(H)));
+  }
+  lineCoping(p, worldPoint(o, -o.w / 2, half + uTop), worldPoint(o, o.w / 2, half + uTop), H + o.y);
+  lineCoping(p, worldPoint(o, -o.w / 2, -half - uTop), worldPoint(o, o.w / 2, -half - uTop), H + o.y);
+}
+
+function halfPipeBounds(o) {
+  const H = Math.min(o.H, o.R - 0.05);
+  const half = o.flat / 2 + quarterU(o.R, H) + o.deck;
+  return worldRect(o, -o.w / 2, o.w / 2, -half, half);
+}
+
+function halfPipePreview(o) {
+  const H = Math.min(o.H, o.R - 0.05);
+  const uTop = quarterU(o.R, H);
+  const color = surfaceColor(o.color);
+  const g = new THREE.Group();
+  g.add(box(o.w, 0.55, o.flat, 0, -0.275, 0, color));
+  const n = quarterGeo(o.w, o.R, H, 0);
+  n.translate(0, 0, o.flat / 2);
+  g.add(new THREE.Mesh(n, mat(color)));
+  const s = quarterGeo(o.w, o.R, H, 0);
+  s.rotateY(Math.PI);
+  s.translate(0, 0, -o.flat / 2);
+  g.add(new THREE.Mesh(s, mat(color)));
+  if (o.deck > 0) {
+    const depth = slabDepth(H);
+    g.add(box(o.w, depth, o.deck, 0, H - depth / 2, o.flat / 2 + uTop, color));
+    g.add(box(o.w, depth, o.deck, 0, H - depth / 2, -o.flat / 2 - uTop, color));
+  }
+  return g;
 }
