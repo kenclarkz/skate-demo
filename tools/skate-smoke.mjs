@@ -2251,6 +2251,112 @@ section('Camera distance setting');
 }
 
 // --------------------------------------------------------------------------
+section('Camera modes: chase, first person, board view');
+{
+  // Cycling has to be a closed loop back to the camera the game shipped with,
+  // and a bogus saved value must not be able to break the save.
+  const cycle = await run(() => {
+    const g = window.__skate;
+    const c = g.config;
+    c.setCameraMode(c.CAMERA_CHASE);
+    const a = c.CAMERA_MODE;
+    c.setCameraMode(c.CAMERA_FIRST);
+    const b = c.CAMERA_MODE;
+    c.setCameraMode(c.CAMERA_BOARD);
+    const d = c.CAMERA_MODE;
+    c.setCameraMode(c.CAMERA_CHASE);
+    const e = c.CAMERA_MODE;
+    c.setCameraMode('garbage');
+    const f = c.CAMERA_MODE;
+    return { a, b, d, e, f };
+  });
+  ok(cycle.a === 'chase' && cycle.b === 'first' && cycle.d === 'board' && cycle.e === 'chase',
+    `the camera mode cycles chase → first → board → chase (${cycle.a} → ${cycle.b} → ${cycle.d} → ${cycle.e})`);
+  ok(cycle.f === 'chase', 'and a garbage value falls back to chase, never breaking the save');
+
+  // The real thing: in first person the lens has to sit at the head and the
+  // rider has to be hidden; in board view the lens has to sit low behind the
+  // board and the rider has to be hidden too. The camera coming back to chase
+  // is what puts the rider on screen again.
+  const shots = await run(() => {
+    const g = window.__skate;
+    g.place(0, -14, 0, 5);
+    // A couple of driven frames so the rider is posed standing on the board
+    // before we read the head's height off it.
+    g.hold(0.2);
+    const step = () => {
+      for (let i = 0; i < 120; i++) g.chase.update(g.ride, null, 1 / 60);
+    };
+    const read = () => ({
+      y: g.camera.position.y,
+      dx: g.camera.position.x - g.ride.pos.x,
+      dz: g.camera.position.z - g.ride.pos.z,
+      riderVisible: g.ride.skater.visible,
+    });
+
+    g.config.setCameraMode(g.config.CAMERA_CHASE);
+    step();
+    const chase = read();
+
+    g.config.setCameraMode(g.config.CAMERA_FIRST);
+    g.chase.setMode(g.config.CAMERA_FIRST);
+    step();
+    const first = read();
+
+    g.config.setCameraMode(g.config.CAMERA_BOARD);
+    g.chase.setMode(g.config.CAMERA_BOARD);
+    step();
+    const board = read();
+
+    g.config.setCameraMode(g.config.CAMERA_CHASE);
+    g.chase.setMode(g.config.CAMERA_CHASE);
+    step();
+    const back = read();
+
+    return { chase, first, board, back };
+  });
+  ok(
+    shots.first.y > 1.2 && shots.first.y < 2.0,
+    `first person sits at the rider's head (y=${shots.first.y.toFixed(2)})`
+  );
+  ok(!shots.first.riderVisible, 'and hides the rider so the head never fills the lens');
+  ok(
+    Math.hypot(shots.board.dx, shots.board.dz) > 0.8 &&
+      Math.hypot(shots.board.dx, shots.board.dz) < 2.2,
+    `board view stays close behind the board (${Math.hypot(shots.board.dx, shots.board.dz).toFixed(2)} m)`
+  );
+  ok(shots.board.y < shots.chase.y, 'and drops lower than the chase camera');
+  ok(!shots.board.riderVisible, 'hiding the rider there too');
+  ok(
+    shots.back.riderVisible && shots.back.y > shots.first.y - 0.5,
+    'and coming back to chase puts the rider back in the frame'
+  );
+
+  // The settings button and the in-game camcycle button both announce the
+  // live mode, so a tap never lands on a mystery camera.
+  const labels = await run(() => {
+    const g = window.__skate;
+    g.hud.setCameraMode('first');
+    const settings = document.getElementById('opt-cameramode').textContent;
+    const camcycle = document.getElementById('btn-camcycle').textContent;
+    const cycHidden = document.getElementById('btn-camcycle').hidden;
+    g.hud.setCameraMode('chase');
+    return { settings, camcycle, cycHidden };
+  });
+  ok(labels.settings === 'Camera: First' && labels.camcycle === 'Cam: First',
+    `both camera buttons name the live mode (${labels.settings} / ${labels.camcycle})`);
+  ok(labels.cycHidden, 'and the in-game camcycle button starts hidden on the menus');
+
+  // Leave the config as the rest of the suite expects it: chase.
+  await run(() => {
+    const g = window.__skate;
+    g.config.setCameraMode(g.config.CAMERA_CHASE);
+    g.chase.setMode(g.config.CAMERA_CHASE);
+    g.hud.setCameraMode('chase');
+  });
+}
+
+// --------------------------------------------------------------------------
 section('Board shop and coins');
 {
   const initial = await run(() => {

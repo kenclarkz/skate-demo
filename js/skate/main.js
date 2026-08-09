@@ -266,6 +266,7 @@ hud.setSpeedValue(save.speed);
 hud.setCamZoomValue(save.camZoom);
 hud.setMusicVolumeValue(save.musicVolume);
 hud.setHoldToPush(save.holdToPush);
+hud.setCameraMode(save.cameraMode);
 hud.setStats(save);
 hud.setCurrentPark(park.name);
 hud.setCoins(save.coins);
@@ -273,6 +274,7 @@ hud.setPreviewLook(startLook.palette, startLook.style);
 C.setTopSpeed(save.speed);
 C.setCamZoom(save.camZoom);
 C.setHoldToPush(save.holdToPush);
+C.setCameraMode(save.cameraMode);
 // audio.musicGain does not exist until the first unlock() — setMusicVolume()
 // stores the number on the Audio instance regardless, and startMusic() reads
 // it back when the track actually starts, so the saved level still applies to
@@ -560,6 +562,18 @@ hud.on.holdToPush = () => {
   C.setHoldToPush(save.holdToPush);
   hud.setHoldToPush(save.holdToPush);
 };
+// The settings button and the in-game camcycle button share this cycling. The
+// next mode after board loops back to chase, which is the camera the game
+// shipped with and the one the camera setting in the same menu describes.
+const nextCameraMode = (mode) => (mode === 'chase' ? 'first' : mode === 'first' ? 'board' : 'chase');
+const setCameraMode = (mode) => {
+  save.setCameraMode(mode);
+  C.setCameraMode(mode);
+  chase.setMode(mode);
+  hud.setCameraMode(mode);
+};
+hud.on.cameraMode = () => setCameraMode(nextCameraMode(save.cameraMode));
+hud.on.camcycle = () => setCameraMode(nextCameraMode(save.cameraMode));
 hud.on.reset = () => {
   save.reset();
   hud.setBest(save.best);
@@ -572,6 +586,9 @@ hud.on.reset = () => {
   audio.setMusicVolume(save.musicVolume);
   hud.setHoldToPush(save.holdToPush);
   C.setHoldToPush(save.holdToPush);
+  hud.setCameraMode(save.cameraMode);
+  C.setCameraMode(save.cameraMode);
+  chase.setMode(save.cameraMode);
   hud.setCoins(save.coins);
   board.build(boardById[save.boardId].palette, boardTypeById[boardById[save.boardId].type].shape);
   const look = currentLook();
@@ -909,6 +926,9 @@ function updateHud(dt) {
   // Keyboard already has Escape/P for this — the button exists for mobile,
   // where a pause has no key to fall back on.
   hud.setPauseButtonVisible(state === PLAYING || state === WALKING);
+  // The camera-cycle button has the same rhythm: pointless on menus, useful
+  // the moment there is a camera to cycle.
+  hud.setCamcycleVisible(state === PLAYING || state === WALKING);
 
   if (state === PLAYING) {
     hud.setSpeed(ride.groundSpeed);

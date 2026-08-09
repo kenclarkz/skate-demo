@@ -1,9 +1,13 @@
-// The chase camera.
+// The gameplay camera: the chase camera it shipped with, plus a first-person
+// lens on the rider's head and a close board-only view. All three share one
+// class — one spring-set, one mode switch — because the two extra views are
+// the same problem (put the lens somewhere, point it at the board) with a
+// different anchor.
 //
-// Low, close, and behind — a skate game's camera sits at about the height of the
-// rider's hips, because that is the angle from which a board's rotation is
-// readable and an ollie looks like it left the ground. A camera up at head height
-// makes every trick look flat.
+// The chase camera is low, close, and behind — a skate game's camera sits at
+// about the height of the rider's hips, because that is the angle from which a
+// board's rotation is readable and an ollie looks like it left the ground. A
+// camera up at head height makes every trick look flat.
 //
 // Two rules make it feel like a camera rather than a boom arm. It follows the
 // direction of *travel* rather than the direction the board is pointing, so a
@@ -17,6 +21,7 @@ import * as C from './config.js';
 const _want = new THREE.Vector3();
 const _look = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+const _eye = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
 /**
@@ -47,6 +52,14 @@ export class ChaseCamera {
     this.dist = C.CAM_DIST;
     this.height = C.CAM_HEIGHT;
     this.ready = false;
+    this.mode = C.CAMERA_CHASE;
+  }
+
+  /** Which camera is live: chase (third person), first person, or board view. */
+  setMode(mode) {
+    C.setCameraMode(mode);
+    this.mode = C.CAMERA_MODE;
+    this.ready = false;
   }
 
   /** Drop the camera straight onto its mark, for a respawn or the first frame. */
@@ -57,7 +70,113 @@ export class ChaseCamera {
     this.update(ride, null, 1 / 60);
   }
 
-  update(ride, ragdoll, dt) {
+  update(ride, ragdoll, dt, mode = this.mode) {
+    // The walking stand-in has no skater or board to attach to — if a caller
+    // ever asks for first person or board view against it, fall back to the
+    // chase camera rather than dereferencing nothing.
+    if ((mode === C.CAMERA_FIRST || mode === C.CAMERA_BOARD) && (!ride.skater || !ride.board)) {
+      mode = C.CAMERA_CHASE;
+    }
+    if (ride.skater) ride.skater.visible = mode === C.CAMERA_CHASE;
+    switch (mode) {
+      case C.CAMERA_FIRST:
+        this.updateFirst(ride, ragdoll, dt);
+        break;
+      case C.CAMERA_BOARD:
+        this.updateBoard(ride, ragdoll, dt);
+        break;
+      default:
+        this.updateChase(ride, ragdoll, dt);
+        break;
+    }
+    this.ready = true;
+  }
+
+  /**
+   * First person: the lens sits on the rider's head and looks where the board
+   * is going, so every jump, trick, carve and slam happens in front of it. The
+   * body is hidden (main.js's caller decides that, via `ride.skater.visible`),
+   * so the head geometry never ends up inside the near plane.
+   *
+   * The eye is read off the posed head mesh rather than computed, which is
+   * what makes it follow a ragdoll too: after a bail the head is posed in
+   * world space and this reads exactly where it ended up.
+   */
+  updateFirst(ride, ragdoll, dt) {
+    const bailing = ride.bailed && ragdoll && ragdoll.active;
+    ride.skater.head.getWorldPosition(_eye);
+
+    // Look along the board's heading in the surface plane — the head's own
+    // quaternion would point over the shoulder (that is what the rider does),
+    // which is not where a first-person lens should aim.
+    _dir.set(Math.sin(ride.yaw), 0, Math.cos(ride.yaw));
+    _dir.addScaledVector(bailing ? _up : ride.up, -_dir.dot(bailing ? _up : ride.up));
+    if (_dir.lengthSq() < 1e-8) _dir.set(0, 0, 1);
+    _dir.normalize();
+
+    // A touch of pitch off the vertical velocity, so a launch reads as looking
+    // up its arc and a drop as looking down it. On the flat there is none.
+    const pitch = bailing ? 0 : C.clamp(ride.vel.y * 0.05, -0.5, 0.5);
+    _look.copy(_eye).addScaledVector(_dir, 3);
+    _look.y += pitch * 3;
+
+    // Never under the concrete: a camera that clips through a deck is the one
+    // bug nobody forgives, and a ragdoll head can easily be mid-floor.
+    const floor = this.park.heightAt(_eye.x, _eye.z) + 0.3;
+    if (_eye.y < floor) _eye.y = floor;
+
+    this.cam.position.copy(_eye);
+    this.cam.up.copy(bailing ? _up : ride.up);
+    this.cam.lookAt(_look);
+    this.cam.rotation.z = 0;
+    this.setFov(ride, dt);
+  }
+
+  /**
+   * Board view: the rider is hidden and the lens rides a fixed offset behind
+   * the board, following its position exactly and looking at the deck. The
+   * target is read off the board's own group, so it stays on the board through
+   * a ragdoll toss as well as through a flip.
+   */
+  updateBoard(ride, ragdoll, dt) {
+    const bailing = ride.bailed && ragdoll && ragdoll.active;
+    ride.board.group.getWorldPosition(_want);
+    this.target.copy(_want);
+    _want.y += 0.05; // aim at the deck, not the wheels
+
+    _dir.set(Math.sin(ride.yaw), 0, Math.cos(ride.yaw));
+    _dir.addScaledVector(bailing ? _up : ride.up, -_dir.dot(bailing ? _up : ride.up));
+    if (_dir.lengthSq() < 1e-8) _dir.set(0, 0, 1);
+    _dir.normalize();
+
+    // Close and low: this is a board shot, not a chase shot.
+    _eye.copy(this.target).addScaledVector(_dir, -1.75).addScaledVector(bailing ? _up : ride.up, 0.75);
+    const floor = this.park.heightAt(_eye.x, _eye.z) + 0.45;
+    if (_eye.y < floor) _eye.y = floor;
+
+    this.cam.position.copy(_eye);
+    this.cam.up.copy(bailing ? _up : ride.up);
+    this.cam.lookAt(this.target);
+
+    // A little roll into the carve, like the chase camera's, so a lean reads
+    // as a lean even with nobody in the shot.
+    const wantRoll = bailing ? 0 : -ride.lean * 0.12;
+    this.roll += (wantRoll - this.roll) * (1 - Math.exp(-5 * dt));
+    this.cam.rotateZ(this.roll);
+    this.setFov(ride, dt);
+  }
+
+  /** The one piece of fov behaviour every mode shares. */
+  setFov(ride, dt) {
+    const t = Math.min(1, ride.groundSpeed / C.CAM_SPEED_REF);
+    const fov = C.CAM_FOV + t * C.CAM_FOV_GAIN;
+    if (Math.abs(this.cam.fov - fov) > 0.02) {
+      this.cam.fov += (fov - this.cam.fov) * (1 - Math.exp(-2.2 * dt));
+      this.cam.updateProjectionMatrix();
+    }
+  }
+
+  updateChase(ride, ragdoll, dt) {
     const bailing = ride.bailed && ragdoll && ragdoll.active;
 
     // --- where to look ----------------------------------------------------
@@ -111,7 +230,6 @@ export class ChaseCamera {
     this.yaw += delta * (this.ready ? 1 - Math.exp(-C.CAM_YAW_LAG * dt) : 1);
 
     // --- how far back -----------------------------------------------------
-    const speed = ride.groundSpeed;
     const air = Math.max(0, ride.airHeight);
     // On a transition the board is tipped back towards the coping, and a camera
     // that stays at hip height ends up staring at the ramp. Lifting with the
@@ -179,13 +297,6 @@ export class ChaseCamera {
     // wider lens shrinks the rider on screen just as surely as moving the camera
     // back does — the eye cannot tell the two apart. With CAM_FOV_GAIN at 0 this
     // holds still; raise it there if the speed rush is ever wanted back.
-    const t = Math.min(1, speed / C.CAM_SPEED_REF);
-    const fov = C.CAM_FOV + t * C.CAM_FOV_GAIN;
-    if (Math.abs(this.cam.fov - fov) > 0.02) {
-      this.cam.fov += (fov - this.cam.fov) * (1 - Math.exp(-2.2 * dt));
-      this.cam.updateProjectionMatrix();
-    }
-
-    this.ready = true;
+    this.setFov(ride, dt);
   }
 }

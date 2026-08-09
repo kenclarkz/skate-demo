@@ -278,3 +278,17 @@ export let HOLD_TO_PUSH = true;
 export function setHoldToPush(v) {
   HOLD_TO_PUSH = !!v;
 }
+
+// --- camera mode -----------------------------------------------------------
+// Which gameplay camera is live: the original chase camera, a first-person
+// lens bolted to the rider's head, or a close board-only view. camera.js reads
+// this directly in its update() dispatch; main.js is what turns a player
+// choice into the setting below and back into the save.
+export const CAMERA_CHASE = 'chase';   // third person — the camera this game shipped with
+export const CAMERA_FIRST = 'first';   // attached to the rider's head, body hidden
+export const CAMERA_BOARD = 'board';   // the board alone, rider hidden
+
+export let CAMERA_MODE = CAMERA_CHASE;
+export function setCameraMode(v) {
+  CAMERA_MODE = v === CAMERA_FIRST || v === CAMERA_BOARD ? v : CAMERA_CHASE;
+}
