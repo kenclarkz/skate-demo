@@ -134,7 +134,7 @@ export function validate(raw) {
       const clean = newObject(type.id);
       clean.id = typeof o.id === 'string' ? o.id : clean.id;
       for (const key of ['x', 'z']) clean[key] = clampNum(o[key], -200, 200, clean[key]);
-      clean.y = clampNum(o.y, 0, 12, 0);
+      clean.y = clampNum(o.y, -20, 20, 0);
       clean.ry = clampNum(o.ry, -10000, 10000, 0);
       clean.sx = clampNum(o.sx, 0.05, 10, 1);
       clean.sy = clampNum(o.sy, 0.05, 10, 1);

@@ -671,7 +671,7 @@ export class ParkDesigner {
         const ob = get(id);
         const st = this._drag.starts[id];
         if (!ob || !st) continue;
-        if (this._drag.axis === 'y') ob.y = clamp(this._snapY(st.y + d), 0, 12);
+        if (this._drag.axis === 'y') ob.y = clamp(this._snapY(st.y + d), -20, 20);
         else {
           ob.x = this._snap(st.x + dir.x * d);
           ob.z = this._snap(st.z + dir.z * d);
@@ -1102,7 +1102,7 @@ export class ParkDesigner {
     for (const id of ids) {
       const ob = this.file.objects.find((x) => x.id === id);
       if (!ob) continue;
-      ob.y = clamp((ob.y || 0) + dy, 0, 12);
+      ob.y = clamp((ob.y || 0) + dy, -20, 20);
       ob.y = Math.round(ob.y * 100) / 100;
       this._applyTransform(this._objectGroup(id), ob);
     }
@@ -1407,7 +1407,7 @@ export class ParkDesigner {
     };
     let html = `<div class="dg-field dg-pos">X<input type="range" min="${-maxR - 8}" max="${maxR + 8}" step="0.1" value="${o.x}" data-pos="x"><output>${o.x.toFixed(2)}</output></div>`;
     html += `<div class="dg-field dg-pos">Z<input type="range" min="${-maxR - 8}" max="${maxR + 8}" step="0.1" value="${o.z}" data-pos="z"><output>${o.z.toFixed(2)}</output></div>`;
-    html += `<div class="dg-field dg-pos dg-elev">Y<input type="range" min="0" max="12" step="0.1" value="${o.y || 0}" data-pos="y"><output>${(o.y || 0).toFixed(2)}</output></div>`;
+    html += `<div class="dg-field dg-pos dg-elev">Y<input type="range" min="-20" max="20" step="0.1" value="${o.y || 0}" data-pos="y"><output>${(o.y || 0).toFixed(2)}</output></div>`;
     html +=
       `<div class="dg-row"><button type="button" data-rot="-1" class="dg-btn">⟲ 90°</button>` +
       `<button type="button" data-rot="1" class="dg-btn">⟳ 90°</button>` +
