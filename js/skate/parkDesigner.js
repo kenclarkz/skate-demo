@@ -398,6 +398,8 @@ export class ParkDesigner {
         return o.h;
       case 'quarter':
         return Math.min(o.H, o.R - 0.05);
+      case 'bowl':
+        return Math.min(o.H, o.R - 0.05);
       case 'stairs':
         return o.steps * o.rise;
       case 'rail':

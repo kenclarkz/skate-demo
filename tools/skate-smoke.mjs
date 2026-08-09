@@ -3716,6 +3716,134 @@ section('Park Suite ramp transitions: real rideable surfaces');
 }
 
 // --------------------------------------------------------------------------
+section('Park Suite small bowl: a round pool of real transition');
+{
+  // The palette's bowl has to be a genuine surface of revolution — a rider
+  // drops in over the rim, rides a quarterpipe arc in every direction, pumps
+  // back up the far wall, and can carry enough speed to leave the lip — not a
+  // decorative dish with a box underneath. Build a park holding one and prove
+  // the geometry is the real thing before riding it.
+  const open = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1, id: 'user-bowl', name: 'Bowl smoke', blurb: 'The small bowl.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'b1', type: 'bowl', x: 0, z: 0, ry: 0, sx: 1, sz: 1, R: 2.0, H: 1.2, rim: 1.0, color: 'wood' },
+      ],
+    });
+    g.designer.on.test();
+    for (let i = 0; i < 120; i++) g.drive(1 / 120, { push: true });
+    // R 2.0, H 1.2: uTop = sqrt(2*2*1.2 - 1.44) = sqrt(3.36) ≈ 1.833.
+    return {
+      park: g.park.id,
+      features: g.park.features.length,
+      finite: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z].every(Number.isFinite),
+      uTop: Math.sqrt(3.36),
+    };
+  });
+  ok(open.park === 'user-bowl', 'the bowl park builds and starts');
+  ok(open.finite, 'and the rider is a finite point in it');
+
+  // The surface follows the arc y = R - sqrt(R² - u²) exactly where the
+  // physics will ride it, reaches H at the lip, holds a flat rim deck past it,
+  // and lets go of the deck back to the pad — one smooth curve, then the drop.
+  const walk = await run((state) => {
+    const g = window.__skate;
+    const R = 2.0, H = 1.2, uTop = state.uTop;
+    const out = [];
+    // From the centre out across the lip and onto the rim, stopping just
+    // short of the rim's outer edge — that edge is a real drop to the pad,
+    // and would drown the continuity check the same way a deck's far edge
+    // does on the mini ramp.
+    for (let u = 0; u <= uTop + 1.0 - 0.05; u += 0.01) out.push(+g.park.heightAt(u, 0).toFixed(6));
+    return out.map((y, i) => {
+      const u = i * 0.01;
+      if (u <= uTop) return { u, y, want: R - Math.sqrt(Math.max(0, R * R - u * u)), deck: false };
+      return { u, y, want: H, deck: true };
+    });
+  }, open);
+  let maxArcOff = 0;
+  let maxStep = 0;
+  let deckH = 0;
+  for (const s of walk) {
+    if (!s.deck) maxArcOff = Math.max(maxArcOff, Math.abs(s.y - s.want));
+    else deckH = Math.max(deckH, s.y);
+  }
+  for (let i = 1; i < walk.length; i++) {
+    maxStep = Math.max(maxStep, Math.abs(walk[i].y - walk[i - 1].y));
+  }
+  // The rim's far edge, sampled separately, has to fall back off the deck to
+  // the pad at ground level.
+  const offRim = await run((state) => {
+    const g = window.__skate;
+    return g.park.heightAt(state.uTop + 1.0 + 0.15, 0);
+  }, open);
+  ok(maxArcOff < 0.01, `the bowl wall is the real arc y = R - sqrt(R²-u²) (worst ${maxArcOff.toFixed(4)} m)`);
+  ok(Math.abs(deckH - 1.2) < 0.01, `with a flat rim deck at the lip height (deck ${deckH.toFixed(2)} of 1.2 m)`);
+  ok(maxStep < 0.05, `and it climbs as one continuous curve (biggest ${maxStep.toFixed(4)} m per cm)`);
+  ok(offRim < 0.02, `then drops back to the pad past the rim edge (off-rim height ${offRim.toFixed(3)} m)`);
+
+  // Drop in over the rim: from the deck, heading for the centre, the run falls
+  // into the pool, crosses the flat floor and pumps up the far wall — the apex
+  // has to climb a good fraction of the 1.2 m lip, and the whole run has to
+  // stay on the board.
+  const dropin = await run(() => {
+    const g = window.__skate;
+    // Deck sits at radius 2.833, just inside its outer edge.
+    g.place(0, 2.7, Math.PI, 1);
+    let apex = 0;
+    let bailed = false;
+    let fastest = 0;
+    for (let i = 0; i < 2000; i++) {
+      g.drive(1 / 120, {});
+      if (g.ride.mode === 3) bailed = true;
+      apex = Math.max(apex, g.ride.pos.y);
+      if (g.ride.mode === 0) fastest = Math.max(fastest, Math.abs(g.ride.speed));
+    }
+    return { apex, bailed, fastest, pos: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z] };
+  });
+  ok(!dropin.bailed, 'dropping in over the rim is not a slam');
+  ok(dropin.fastest > 2.5, `and the drop-in builds real speed on the way down (${dropin.fastest.toFixed(2)} m/s)`);
+  ok(dropin.apex > 0.7, `and pumps back up the far wall to a real apex (${dropin.apex.toFixed(2)} of 1.2 m)`);
+  ok([dropin.pos[0], dropin.pos[1], dropin.pos[2]].every(Number.isFinite), 'while staying a finite, rideable point');
+
+  // With enough speed the wall launches a genuine air over the lip, and the
+  // flight comes back down inside the bowl without a slam.
+  const air = await run(() => {
+    const g = window.__skate;
+    g.place(0, 0, 0, 8);
+    let apex = 0;
+    let bailed = false;
+    let airFrames = 0;
+    for (let i = 0; i < 2400; i++) {
+      g.drive(1 / 120, {});
+      if (g.ride.mode === 3) bailed = true;
+      if (g.ride.mode === 1) airFrames++;
+      apex = Math.max(apex, g.ride.pos.y);
+    }
+    return { apex, bailed, airFrames, pos: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z] };
+  });
+  ok(air.airFrames > 15, 'riding the wall at speed leaves the lip into a real air');
+  ok(air.apex > 1.35, `with the board cresting past the 1.2 m lip (apex ${air.apex.toFixed(2)} m)`);
+  ok(!air.bailed && air.pos[1] < 1.3, 'and lands back in the pool to roll on, no slam');
+
+  // The bowl's color and shape survive Save & Test's validated round trip.
+  const saved = await run(() => {
+    const files = JSON.parse(localStorage.getItem('skate.parks') || '[]');
+    const file = files.find((f) => f.id === 'user-bowl');
+    return file ? file.objects.map((o) => `${o.type}:${o.color}:R${o.R}:H${o.H}`) : [];
+  });
+  ok(saved.includes('bowl:wood:R2:H1.2'), `the bowl's color and geometry survive save and validate (${saved.join(', ')})`);
+
+  // Clean the saved park up so later sections start with empty storage.
+  await run(() => {
+    localStorage.removeItem('skate.parks');
+    window.__skate.showStart();
+  });
+}
+
+// --------------------------------------------------------------------------
 section('The park editor camera: two-finger pan, pinch zoom, and orbit');
 {
   // Two fingers on the canvas take over the camera: they never transform the
@@ -3934,7 +4062,7 @@ section('The park editor shows what you ride');
     const g = window.__skate;
     const THREE = await import('./js/game/three.js');
     const { boundsOf, newObject } = await import('./js/skate/parkObjects.js');
-    const TYPES = ['slab', 'bank', 'quarter', 'mini', 'rollin', 'spine', 'vert', 'stairs', 'rail', 'ledge', 'funbox'];
+    const TYPES = ['slab', 'bank', 'quarter', 'mini', 'rollin', 'spine', 'vert', 'bowl', 'stairs', 'rail', 'ledge', 'funbox'];
     const out = [];
     for (const type of TYPES) {
       for (const ry of [0, 90, 180, 270]) {
@@ -3975,7 +4103,7 @@ section('The park editor shows what you ride');
     }
     return out;
   });
-  ok(aligned.length === 0, `every palette preview sits on its own collision footprint (${aligned.length || 'all 44'} aligned)`);
+  ok(aligned.length === 0, `every palette preview sits on its own collision footprint (${aligned.length || 'all 48'} aligned)`);
 
   await run(() => window.__skate.showStart());
 }
