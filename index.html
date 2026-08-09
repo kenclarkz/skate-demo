@@ -46,6 +46,11 @@
              Shown only while playing or walking; main.js drives .hidden. -->
         <button id="btn-pause" type="button" aria-label="Pause" hidden>&#9208;</button>
 
+        <!-- Same live-only logic as the pause button, but this one flips the
+             camera: chase, first person, board view, back to chase. main.js
+             labels it with whichever mode it is about to show. -->
+        <button id="btn-camcycle" type="button" hidden>Cam: Chase</button>
+
         <!-- On the board: step off and go explore on foot. On foot, near the
              board: get back on. Both are one tap, never both at once. -->
         <div id="action-buttons">
@@ -158,6 +163,7 @@
             </div>
             <button id="opt-sound" type="button">Sound: On</button>
             <button id="opt-holdpush" type="button">Hold to push: On</button>
+            <button id="opt-cameramode" type="button">Camera: Chase</button>
 
             <!-- The radio settings: sign in to Spotify here, pick a playlist
                  (or search a song), and it plays over the park. The little

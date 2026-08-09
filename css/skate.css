@@ -421,6 +421,22 @@ body {
   border-radius: 50%;
 }
 
+/* The camera-cycle button keeps the same right-hand corner as the pause
+   button, stacked just below it. It carries a label rather than an icon —
+   the point is that you always know which mode the next tap lands on. */
+#btn-camcycle {
+  position: absolute;
+  top: calc(104px + var(--pad-t));
+  right: calc(14px + var(--pad-r));
+  pointer-events: auto;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
 #debug {
   position: absolute;
   left: calc(14px + var(--pad-l));

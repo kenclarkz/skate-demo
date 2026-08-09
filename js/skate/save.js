@@ -34,6 +34,7 @@ const DEFAULTS = {
   camZoom: 1, // chase camera distance, 0.5 (close) .. 1 (default) — see CAM_ZOOM
   musicVolume: 0.5, // 0..1, independent of the sound on/off toggle
   holdToPush: true, // holding the push key/thumb repeats pushes — see HOLD_TO_PUSH
+  cameraMode: 'chase', // 'chase', 'first' or 'board' — see CAMERA_MODE
   radioPlaylistId: 'builtin', // the last station picked — see js/skate/radio.js
   radioVisible: true, // whether the in-game radio bar shows at all
   radioEnabled: true, // master switch for the whole Skate Radio — see js/skate/radio.js
@@ -76,6 +77,7 @@ function read() {
     const mv = Number(s.musicVolume);
     s.musicVolume = Number.isFinite(mv) ? Math.min(1, Math.max(0, mv)) : DEFAULTS.musicVolume;
     s.holdToPush = s.holdToPush !== false;
+    s.cameraMode = s.cameraMode === 'first' || s.cameraMode === 'board' ? s.cameraMode : DEFAULTS.cameraMode;
     s.radioPlaylistId = typeof s.radioPlaylistId === 'string' ? s.radioPlaylistId : 'builtin';
     s.radioVisible = s.radioVisible !== false;
     s.radioEnabled = s.radioEnabled !== false;
@@ -324,6 +326,11 @@ export const save = {
 
   setHoldToPush(on) {
     state.holdToPush = !!on;
+    flush();
+  },
+
+  setCameraMode(mode) {
+    state.cameraMode = mode === 'first' || mode === 'board' ? mode : DEFAULTS.cameraMode;
     flush();
   },
 

@@ -311,7 +311,9 @@ export class Hud {
     for (const n of SCREENS) this.screens[n] = document.getElementById(`screen-${n}`);
     this.soundBtn = document.getElementById('opt-sound');
     this.holdPushBtn = document.getElementById('opt-holdpush');
+    this.cameraModeBtn = document.getElementById('opt-cameramode');
     this.pauseBtn = document.getElementById('btn-pause');
+    this.camcycleBtn = document.getElementById('btn-camcycle');
     this.statLines = document.getElementById('stat-lines');
     this.parkNow = document.getElementById('park-now');
     this.parkGrid = document.getElementById('park-grid');
@@ -372,6 +374,8 @@ export class Hud {
       camZoom: null,
       musicVolume: null,
       holdToPush: null,
+      cameraMode: null,
+      camcycle: null,
       pause: null,
       settings: null,
       lighting: null,
@@ -436,6 +440,8 @@ export class Hud {
     click('btn-pause-menu', () => this.on.back?.());
     click('opt-sound', () => this.on.sound?.());
     click('opt-holdpush', () => this.on.holdToPush?.());
+    click('opt-cameramode', () => this.on.cameraMode?.());
+    click('btn-camcycle', () => this.on.camcycle?.());
     click('opt-reset', () => this.on.reset?.());
     click('btn-tut-prev', () => this.showTutStep(this.tutStep - 1));
     click('btn-tut-next', () => {
@@ -689,11 +695,32 @@ export class Hud {
     }
   }
 
+  /** The live camera: chase, first person or board. The settings button names
+   * it and the in-game camcycle button announces what it is — cycling is
+   * self-explanatory, but the mode it lands on should never be a secret. */
+  setCameraMode(mode) {
+    const label = { chase: 'Chase', first: 'First', board: 'Board' }[mode] || 'Chase';
+    if (this.cameraModeBtn) {
+      this.cameraModeBtn.textContent = `Camera: ${label}`;
+      this.cameraModeBtn.classList.toggle('off', mode !== 'chase');
+    }
+    if (this.camcycleBtn) {
+      this.camcycleBtn.textContent = `Cam: ${label}`;
+      this.camcycleBtn.classList.toggle('off', mode !== 'chase');
+    }
+  }
+
   /** The pause button only makes sense mid-run — shown while playing or
    * walking, hidden the rest of the time (menus already have their own way
    * back, and there is nothing to pause from them). */
   setPauseButtonVisible(visible) {
     if (this.pauseBtn) this.pauseBtn.hidden = !visible;
+  }
+
+  /** The camera-cycle button only makes sense mid-run too, and rides along
+   * with the pause button's visibility. */
+  setCamcycleVisible(visible) {
+    if (this.camcycleBtn) this.camcycleBtn.hidden = !visible;
   }
 
   /** The speed slider and its live label — set from outside on boot and reset,
