@@ -334,6 +334,7 @@
         <div id="dg-actions" aria-label="Editor actions">
           <button id="dg-add" type="button">+ Object</button>
           <div id="dg-modes" role="group" aria-label="Transform mode">
+            <button type="button" data-mode="select" title="Select" aria-label="Select">&#8981;</button>
             <button type="button" data-mode="move" class="on" title="Move">Move</button>
             <button type="button" data-mode="rotate" title="Rotate">Rotate</button>
             <button type="button" data-mode="scale" title="Scale">Scale</button>
@@ -341,7 +342,11 @@
           <button id="dg-props" type="button" aria-label="Properties" title="Properties">&#9881;</button>
         </div>
 
-        <p id="dg-hint" class="designer-hint">Drag an object to move it &middot; drag the ground to look around &middot; scroll to zoom &middot; R rotates &middot; PageUp/PageDown raises and lowers &middot; Del deletes &middot; Ctrl+Z undoes</p>
+        <p id="dg-hint" class="designer-hint">Drag an object to move it &middot; drag the ground to look around &middot; scroll to zoom &middot; R rotates &middot; PageUp/PageDown raises and lowers &middot; Del deletes &middot; Ctrl+Z undoes &middot; shift-drag a box to select many</p>
+
+        <!-- The marquee: a shift-drag over empty ground draws a rectangle and
+             selects every object whose footprint it covers. -->
+        <div id="dg-marquee" hidden></div>
 
         <!-- Taps anywhere else close the sheet or the menu. -->
         <div id="dg-scrim" hidden></div>

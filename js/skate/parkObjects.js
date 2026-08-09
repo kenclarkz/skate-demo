@@ -84,6 +84,14 @@ export function padColor(file) {
 
 const DEG = Math.PI / 180;
 
+/** The object's own vertical stretch: every height a builder or a preview
+ * uses is scaled by `sy` so the collision a player rides rises exactly as
+ * far as the mesh the editor shows. A missing sy (an older saved file) reads
+ * as 1, so nothing that exists today changes shape. */
+export function sh(o, v) {
+  return v * (o.sy || 1);
+}
+
 /** The object's frame: which way it faces and which way is right, snapped to
  * a quarter turn. `fx/fz` is the world vector one unit of local z becomes,
  * `rx/rz` the same for local x — so a plain linear map places any local point,
@@ -157,14 +165,15 @@ export const OBJECTS = [
     ],
     build(p, o) {
       const r = worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
-      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, objectColor(o.color), slabDepth(o.h)));
+      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, sh(o, o.h) + o.y, SMOOTH, objectColor(o.color), slabDepth(sh(o, o.h))));
     },
     footprint(o) {
       return worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
     },
     preview(o) {
-      const depth = slabDepth(o.h);
-      return box(o.w, depth, o.d, 0, o.h - depth / 2, 0, objectColor(o.color));
+      const h = sh(o, o.h);
+      const depth = slabDepth(h);
+      return box(o.w, depth, o.d, 0, h - depth / 2, 0, objectColor(o.color));
     },
   },
 
@@ -183,21 +192,22 @@ export const OBJECTS = [
       const high = worldPoint(o, 0, o.len / 2);
       const cross = worldRect(o, -o.w / 2, o.w / 2, 0, 0);
       const axis = low[0] !== high[0] ? 'x' : 'z';
+      const rise = sh(o, o.h);
       let x0, x1, z0, z1, y0, y1;
       if (axis === 'x') {
         x0 = Math.min(low[0], high[0]);
         x1 = Math.max(low[0], high[0]);
         z0 = Math.min(cross.z0, cross.z1);
         z1 = Math.max(cross.z0, cross.z1);
-        y0 = low[0] < high[0] ? o.y : o.h + o.y;
-        y1 = low[0] < high[0] ? o.h + o.y : o.y;
+        y0 = low[0] < high[0] ? o.y : rise + o.y;
+        y1 = low[0] < high[0] ? rise + o.y : o.y;
       } else {
         x0 = Math.min(cross.x0, cross.x1);
         x1 = Math.max(cross.x0, cross.x1);
         z0 = Math.min(low[1], high[1]);
         z1 = Math.max(low[1], high[1]);
-        y0 = low[1] < high[1] ? o.y : o.h + o.y;
-        y1 = low[1] < high[1] ? o.h + o.y : o.y;
+        y0 = low[1] < high[1] ? o.y : rise + o.y;
+        y1 = low[1] < high[1] ? rise + o.y : o.y;
       }
       p.add(new Bank(x0, x1, z0, z1, axis, y0, y1, objectColor(o.color)));
     },
@@ -208,7 +218,7 @@ export const OBJECTS = [
       const pts = [
         [0, -0.6],
         [o.len, -0.6],
-        [o.len, o.h],
+        [o.len, sh(o, o.h)],
         [0, 0],
       ];
       // The bank's footprint is centred on the origin (low end at -len/2,
@@ -229,7 +239,7 @@ export const OBJECTS = [
       { key: 'deck', label: 'Deck', min: 0, max: 6, step: 0.1, unit: 'm' },
     ],
     build(p, o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const base = worldPoint(o, 0, 0);
       const cross = worldRect(o, -o.w / 2, o.w / 2, 0, 0);
       const f = frame(o);
@@ -241,12 +251,12 @@ export const OBJECTS = [
       p.add(new Quarter(c0, c1, baseC, axis, sign, o.R, H, o.deck, objectColor(o.color), o.y));
     },
     footprint(o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const u = quarterU(o.R, H);
       return worldRect(o, -o.w / 2, o.w / 2, 0, u + o.deck);
     },
     preview(o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       return new THREE.Mesh(quarterGeo(o.w, o.R, H, o.deck), mat(objectColor(o.color)));
     },
   },
@@ -286,7 +296,7 @@ export const OBJECTS = [
       { key: 'deck', label: 'Platform', min: 0, max: 10, step: 0.1, unit: 'm' },
     ],
     build(p, o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const uTop = quarterU(o.R, H);
       const color = objectColor(o.color);
       const base = worldPoint(o, 0, 0);
@@ -302,11 +312,11 @@ export const OBJECTS = [
       lineCoping(p, worldPoint(o, -o.w / 2, uTop), worldPoint(o, o.w / 2, uTop), H + o.y);
     },
     footprint(o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       return worldRect(o, -o.w / 2, o.w / 2, 0, quarterU(o.R, H) + o.deck);
     },
     preview(o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const uTop = quarterU(o.R, H);
       const color = objectColor(o.color);
       const g = new THREE.Group();
@@ -331,7 +341,7 @@ export const OBJECTS = [
       { key: 'gap', label: 'Gap', min: 0, max: 8, step: 0.1, unit: 'm' },
     ],
     build(p, o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const uTop = quarterU(o.R, H);
       const half = o.gap / 2;
       const color = objectColor(o.color);
@@ -348,12 +358,12 @@ export const OBJECTS = [
       lineCoping(p, worldPoint(o, -o.w / 2, -half - uTop), worldPoint(o, o.w / 2, -half - uTop), H + o.y);
     },
     footprint(o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const half = o.gap / 2 + quarterU(o.R, H);
       return worldRect(o, -o.w / 2, o.w / 2, -half, half);
     },
     preview(o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const half = o.gap / 2;
       const color = objectColor(o.color);
       const g = new THREE.Group();
@@ -402,18 +412,18 @@ export const OBJECTS = [
       { key: 'rim', label: 'Deck', min: 0.2, max: 4, step: 0.1, unit: 'm' },
     ],
     build(p, o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       p.add(new Bowl(o.x, o.z, o.sx, o.sz, o.R, H, o.rim, objectColor(o.color), o.y));
     },
     footprint(o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const r = bowlU(o.R, H) + o.rim;
       // A quarter-turn is the only rotation that exists, so the circle's
       // axis-aligned box is the same square of corners under any of them.
       return worldRect(o, -r, r, -r, r);
     },
     preview(o) {
-      const H = Math.min(o.H, o.R - 0.05);
+      const H = Math.min(sh(o, o.H), o.R - 0.05);
       const pts = bowlProfile(o.R, H, o.rim).map(([u, y]) => new THREE.Vector2(u, y));
       return new THREE.Mesh(new THREE.LatheGeometry(pts, 32), mat(objectColor(o.color)));
     },
@@ -440,7 +450,7 @@ export const OBJECTS = [
       const sign = axis === 'z' ? (f.fz > 0 ? -1 : 1) : f.fx > 0 ? -1 : 1;
       const c0 = axis === 'z' ? cross.x0 : cross.z0;
       const c1 = axis === 'z' ? cross.x1 : cross.z1;
-      p.add(new Stairs(c0, c1, topC, axis, sign, Math.max(1, Math.round(o.steps)), o.rise, o.run, o.y, objectColor(o.color)));
+      p.add(new Stairs(c0, c1, topC, axis, sign, Math.max(1, Math.round(o.steps)), sh(o, o.rise), o.run, o.y, objectColor(o.color)));
     },
     footprint(o) {
       const len = o.steps * o.run;
@@ -448,13 +458,14 @@ export const OBJECTS = [
     },
     preview(o) {
       const len = o.steps * o.run;
-      const yTop = o.steps * o.rise;
+      const rise = sh(o, o.rise);
+      const yTop = o.steps * rise;
       const pts = [
         [0, -0.6],
         [0, yTop],
       ];
       for (let i = 0; i < o.steps; i++) {
-        const y = yTop - (i + 1) * o.rise;
+        const y = yTop - (i + 1) * rise;
         pts.push([i * o.run, y], [(i + 1) * o.run, y]);
       }
       pts.push([len, -0.6]);
@@ -476,7 +487,8 @@ export const OBJECTS = [
     build(p, o) {
       const a = worldPoint(o, -o.len / 2, 0);
       const b = worldPoint(o, o.len / 2, 0);
-      p.rail(a[0], o.h + o.y, a[1], b[0], o.h + o.y, b[1], o.r, objectColor(o.color));
+      const h = sh(o, o.h);
+      p.rail(a[0], h + o.y, a[1], b[0], h + o.y, b[1], o.r, objectColor(o.color));
     },
     footprint(o) {
       return worldRect(o, -o.len / 2, o.len / 2, -0.4, 0.4);
@@ -484,14 +496,15 @@ export const OBJECTS = [
     preview(o) {
       const color = objectColor(o.color);
       const g = new THREE.Group();
+      const h = sh(o, o.h);
       const bar = new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r, o.len, 10), mat(color));
       bar.rotation.z = Math.PI / 2;
-      bar.position.y = o.h;
+      bar.position.y = h;
       g.add(bar);
       const posts = Math.max(2, Math.round(o.len / 2.2));
       for (let i = 0; i < posts; i++) {
         const x = -o.len / 2 + (o.len * i) / (posts - 1);
-        const ph = Math.max(0.05, o.h - o.r);
+        const ph = Math.max(0.05, h - o.r);
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, ph, 0.05), mat(color));
         post.position.set(x, ph / 2, 0);
         g.add(post);
@@ -511,20 +524,22 @@ export const OBJECTS = [
       { key: 'h', label: 'Height', min: 0.2, max: 2, step: 0.05, unit: 'm' },
     ],
     build(p, o) {
+      const h = sh(o, o.h);
       const r = worldRect(o, -o.len / 2, o.len / 2, -o.w / 2, o.w / 2);
-      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, objectColor(o.color), slabDepth(o.h)));
+      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, h + o.y, SMOOTH, objectColor(o.color), slabDepth(h)));
       const a = worldPoint(o, -o.len / 2, o.w / 2);
       const b = worldPoint(o, o.len / 2, o.w / 2);
-      p.ledge(a[0], o.h + o.y, a[1], b[0], o.h + o.y, b[1]);
+      p.ledge(a[0], h + o.y, a[1], b[0], h + o.y, b[1]);
     },
     footprint(o) {
       return worldRect(o, -o.len / 2, o.len / 2, -o.w / 2, o.w / 2);
     },
     preview(o) {
-      const depth = slabDepth(o.h);
+      const h = sh(o, o.h);
+      const depth = slabDepth(h);
       const g = new THREE.Group();
-      g.add(box(o.len, depth, o.w, 0, o.h - depth / 2, 0, objectColor(o.color)));
-      g.add(box(o.len, 0.07, 0.07, 0, o.h + 0.035, o.w / 2, STEEL));
+      g.add(box(o.len, depth, o.w, 0, h - depth / 2, 0, objectColor(o.color)));
+      g.add(box(o.len, 0.07, 0.07, 0, h + 0.035, o.w / 2, STEEL));
       return g;
     },
   },
@@ -541,10 +556,11 @@ export const OBJECTS = [
       { key: 'R', label: 'Radius', min: 0.6, max: 4, step: 0.05, unit: 'm' },
     ],
     build(p, o) {
-      const H = Math.min(o.h, o.R - 0.05);
+      const h = sh(o, o.h);
+      const H = Math.min(h, o.R - 0.05);
       const color = objectColor(o.color);
       const r = worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
-      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, color, slabDepth(o.h)));
+      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, h + o.y, SMOOTH, color, slabDepth(h)));
       const f = frame(o);
       const axis = forwardAxis(o);
       // Forward and back faces.
@@ -617,20 +633,21 @@ export const OBJECTS = [
         )
       );
       // Coping sunk into each lip, the way the real maps set theirs.
-      lineCoping(p, worldPoint(o, -o.w / 2, o.d / 2), worldPoint(o, o.w / 2, o.d / 2), o.h + o.y);
-      lineCoping(p, worldPoint(o, -o.w / 2, -o.d / 2), worldPoint(o, o.w / 2, -o.d / 2), o.h + o.y);
-      lineCoping(p, worldPoint(o, o.w / 2, -o.d / 2), worldPoint(o, o.w / 2, o.d / 2), o.h + o.y);
-      lineCoping(p, worldPoint(o, -o.w / 2, -o.d / 2), worldPoint(o, -o.w / 2, o.d / 2), o.h + o.y);
+      lineCoping(p, worldPoint(o, -o.w / 2, o.d / 2), worldPoint(o, o.w / 2, o.d / 2), h + o.y);
+      lineCoping(p, worldPoint(o, -o.w / 2, -o.d / 2), worldPoint(o, o.w / 2, -o.d / 2), h + o.y);
+      lineCoping(p, worldPoint(o, o.w / 2, -o.d / 2), worldPoint(o, o.w / 2, o.d / 2), h + o.y);
+      lineCoping(p, worldPoint(o, -o.w / 2, -o.d / 2), worldPoint(o, -o.w / 2, o.d / 2), h + o.y);
     },
     footprint(o) {
       return worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
     },
     preview(o) {
-      const H = Math.min(o.h, o.R - 0.05);
+      const h = sh(o, o.h);
+      const H = Math.min(h, o.R - 0.05);
       const color = objectColor(o.color);
       const g = new THREE.Group();
-      const depth = slabDepth(o.h);
-      g.add(box(o.w, depth, o.d, 0, o.h - depth / 2, 0, color));
+      const depth = slabDepth(h);
+      g.add(box(o.w, depth, o.d, 0, h - depth / 2, 0, color));
       const fwd = quarterGeo(o.w, o.R, H, 0);
       const back = fwd.clone();
       // The side quarters run along the other axis, so their cross extent is
@@ -669,7 +686,7 @@ export function boundsOf(o) {
  * so a park can stack decks and raise ramps, exactly like the built-in maps. */
 export function newObject(type) {
   const t = objectType(type);
-  return { id: uid(), type: t.id, x: 0, y: 0, z: 0, ry: 0, sx: 1, sz: 1, ...t.defaults };
+  return { id: uid(), type: t.id, x: 0, y: 0, z: 0, ry: 0, sx: 1, sy: 1, sz: 1, ...t.defaults };
 }
 
 let _uid = 0;
@@ -780,7 +797,7 @@ function lineCoping(p, a, b, h) {
  * pad itself is the floor, and it sits at exactly the transitions' base height
  * either way, so the join reads as a curve, not a kink. */
 function halfPipe(p, o) {
-  const H = Math.min(o.H, o.R - 0.05);
+  const H = Math.min(sh(o, o.H), o.R - 0.05);
   const uTop = quarterU(o.R, H);
   const half = o.flat / 2;
   const color = objectColor(o.color);
@@ -808,13 +825,13 @@ function halfPipe(p, o) {
 }
 
 function halfPipeBounds(o) {
-  const H = Math.min(o.H, o.R - 0.05);
+  const H = Math.min(sh(o, o.H), o.R - 0.05);
   const half = o.flat / 2 + quarterU(o.R, H) + o.deck;
   return worldRect(o, -o.w / 2, o.w / 2, -half, half);
 }
 
 function halfPipePreview(o) {
-  const H = Math.min(o.H, o.R - 0.05);
+  const H = Math.min(sh(o, o.H), o.R - 0.05);
   const uTop = quarterU(o.R, H);
   const color = objectColor(o.color);
   const g = new THREE.Group();
