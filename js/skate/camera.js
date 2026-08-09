@@ -23,6 +23,10 @@ const _look = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+// The board's up eased back to the world: what a first-person or board-view
+// lens actually rides on. Full strength on the flat, gone the moment the deck
+// stops being upright, so a flip turns the board and not the horizon.
+const _upv = new THREE.Vector3(0, 1, 0);
 
 /**
  * How far ahead to aim a first-order spring so it settles *on* a target moving
@@ -77,7 +81,16 @@ export class ChaseCamera {
     if ((mode === C.CAMERA_FIRST || mode === C.CAMERA_BOARD) && (!ride.skater || !ride.board)) {
       mode = C.CAMERA_CHASE;
     }
-    if (ride.skater) ride.skater.visible = mode === C.CAMERA_CHASE;
+    if (ride.skater) {
+      // In first person the lens rides the head, so the head is the only
+      // part that has to come off the rig (it would fill the lens from here) —
+      // the arms, the chest and the nose of the deck stay in shot, which is
+      // what makes the view read as "on a skateboard".
+      // Board view takes the whole rider out of frame so the deck has the
+      // shot to itself.
+      ride.skater.head.visible = mode !== C.CAMERA_FIRST;
+      ride.skater.group.visible = mode !== C.CAMERA_BOARD;
+    }
     switch (mode) {
       case C.CAMERA_FIRST:
         this.updateFirst(ride, ragdoll, dt);
@@ -93,32 +106,65 @@ export class ChaseCamera {
   }
 
   /**
+   * The up vector these two lens-on-the-rider cameras ride on: the board's own
+   * up while it is upright, eased back to the world the moment it is not.
+   *
+   * Following the board's up is what tilts the view onto a transition the way
+   * riding up a ramp really feels. But the deck rolls all the way round on a
+   * kickflip and flips over on an air, and a camera whose up is the board's up
+   * on those turns the whole world upside down. Clamping the blend weight to
+   * `up.y >= 0` keeps the ramp tilt while locking the horizon the instant the
+   * board stops being right-side up — the deck spins, the view does not.
+   *
+   * Returns the shared scratch `_upv`, so it must be used before any other
+   * camera scratch is written — the callers both do.
+   */
+  camUp(ride, bailing) {
+    _upv.set(0, 1, 0);
+    if (!bailing) _upv.lerp(ride.up, C.clamp(ride.up.y, 0, 1)).normalize();
+    return _upv;
+  }
+
+  /**
    * First person: the lens sits on the rider's head and looks where the board
-   * is going, so every jump, trick, carve and slam happens in front of it. The
-   * body is hidden (main.js's caller decides that, via `ride.skater.visible`),
-   * so the head geometry never ends up inside the near plane.
+   * is going, so every jump, trick, carve and slam happens in front of it.
    *
    * The eye is read off the posed head mesh rather than computed, which is
    * what makes it follow a ragdoll too: after a bail the head is posed in
-   * world space and this reads exactly where it ended up.
+   * world space and this reads exactly where it ended up. The head mesh
+   * itself is hidden (update() decides that) so it never ends up inside the
+   * near plane — but the rest of the rider stays, so the shot shows the front
+   * arm and the nose of the deck the way a real first-person ride would.
    */
   updateFirst(ride, ragdoll, dt) {
     const bailing = ride.bailed && ragdoll && ragdoll.active;
     ride.skater.head.getWorldPosition(_eye);
+    const upv = this.camUp(ride, bailing);
 
-    // Look along the board's heading in the surface plane — the head's own
-    // quaternion would point over the shoulder (that is what the rider does),
+    // Look along the board's heading in the camera's own plane — the rider's
+    // own facing would point over the shoulder (that is what the rider does),
     // which is not where a first-person lens should aim.
     _dir.set(Math.sin(ride.yaw), 0, Math.cos(ride.yaw));
-    _dir.addScaledVector(bailing ? _up : ride.up, -_dir.dot(bailing ? _up : ride.up));
+    _dir.addScaledVector(upv, -_dir.dot(upv));
     if (_dir.lengthSq() < 1e-8) _dir.set(0, 0, 1);
     _dir.normalize();
 
     // A touch of pitch off the vertical velocity, so a launch reads as looking
     // up its arc and a drop as looking down it. On the flat there is none.
     const pitch = bailing ? 0 : C.clamp(ride.vel.y * 0.05, -0.5, 0.5);
-    _look.copy(_eye).addScaledVector(_dir, 3);
-    _look.y += pitch * 3;
+    // Aim down into the shot, in the camera's own plane. From eye height the
+    // front arm hangs ~50° below the horizon and the nose of the deck ~65° —
+    // both underneath a level lens's bottom edge — while the ground a few
+    // metres ahead is only ~12° below. The base look-down is what puts the
+    // front arm and the nose of the deck in the lower half of the frame with
+    // the ground ahead still in the upper half, and the velocity pitch rides
+    // on top of it: a launch reads as looking up its arc, a drop as looking
+    // down it. Clamped so neither extreme turns the view into a stare at the
+    // deck or the sky.
+    const down = C.clamp(C.CAM_FIRST_DOWN - pitch, 0.2, 1.05);
+    _look.copy(_eye)
+      .addScaledVector(_dir, Math.cos(down) * 3)
+      .addScaledVector(upv, -Math.sin(down) * 3);
 
     // Never under the concrete: a camera that clips through a deck is the one
     // bug nobody forgives, and a ragdoll head can easily be mid-floor.
@@ -126,43 +172,60 @@ export class ChaseCamera {
     if (_eye.y < floor) _eye.y = floor;
 
     this.cam.position.copy(_eye);
-    this.cam.up.copy(bailing ? _up : ride.up);
+    this.cam.up.copy(upv);
     this.cam.lookAt(_look);
     this.cam.rotation.z = 0;
     this.setFov(ride, dt);
   }
 
   /**
-   * Board view: the rider is hidden and the lens rides a fixed offset behind
-   * the board, following its position exactly and looking at the deck. The
-   * target is read off the board's own group, so it stays on the board through
-   * a ragdoll toss as well as through a flip.
+   * Board view: the lens rides a fixed offset behind the board, following its
+   * position exactly and looking at the deck. The target is read off the
+   * board's own group, so it stays on the board through a ragdoll toss as
+   * well as through a flip.
+   *
+   * What the lens does *not* follow is the board's rotation. Which way is
+   * behind is the direction of travel rather than the board's heading, so a
+   * spin whips the deck round in front of the lens instead of swinging the
+   * camera around it, and the up is the eased world up — the perspective
+   * stays fixed like the game that inspired it (Touch Grind), with the deck
+   * doing the moving.
    */
   updateBoard(ride, ragdoll, dt) {
     const bailing = ride.bailed && ragdoll && ragdoll.active;
     ride.board.group.getWorldPosition(_want);
     this.target.copy(_want);
     _want.y += 0.05; // aim at the deck, not the wheels
+    const upv = this.camUp(ride, bailing);
 
-    _dir.set(Math.sin(ride.yaw), 0, Math.cos(ride.yaw));
-    _dir.addScaledVector(bailing ? _up : ride.up, -_dir.dot(bailing ? _up : ride.up));
+    // Which way is "behind": the direction of travel, so a spin turns the
+    // board in front of the lens rather than rotating the camera with it.
+    let want = this.yaw;
+    const planar = Math.hypot(ride.vel.x, ride.vel.z);
+    if (planar > 1.1) want = Math.atan2(ride.vel.x, ride.vel.z);
+    // Too slow for the velocity to mean anything: sit behind the board, and
+    // behind whichever end of it is leading if the rider is rolling fakie.
+    else if (ride.grounded) want = ride.yaw + (ride.speed < -0.2 ? Math.PI : 0);
+    const delta = C.angleDelta(this.yaw, want);
+    this.yaw += delta * (this.ready ? 1 - Math.exp(-C.CAM_YAW_LAG * dt) : 1);
+
+    _dir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+    _dir.addScaledVector(upv, -_dir.dot(upv));
     if (_dir.lengthSq() < 1e-8) _dir.set(0, 0, 1);
     _dir.normalize();
 
     // Close and low: this is a board shot, not a chase shot.
-    _eye.copy(this.target).addScaledVector(_dir, -1.75).addScaledVector(bailing ? _up : ride.up, 0.75);
+    _eye.copy(this.target).addScaledVector(_dir, -1.75).addScaledVector(upv, 0.75);
     const floor = this.park.heightAt(_eye.x, _eye.z) + 0.45;
     if (_eye.y < floor) _eye.y = floor;
 
     this.cam.position.copy(_eye);
-    this.cam.up.copy(bailing ? _up : ride.up);
+    this.cam.up.copy(upv);
     this.cam.lookAt(this.target);
 
-    // A little roll into the carve, like the chase camera's, so a lean reads
-    // as a lean even with nobody in the shot.
-    const wantRoll = bailing ? 0 : -ride.lean * 0.12;
-    this.roll += (wantRoll - this.roll) * (1 - Math.exp(-5 * dt));
-    this.cam.rotateZ(this.roll);
+    // No roll into the carve here: any camera roll during a trick reads as
+    // the camera doing the trick, and this shot is meant to be the steady
+    // hand holding the deck in frame.
     this.setFov(ride, dt);
   }
 

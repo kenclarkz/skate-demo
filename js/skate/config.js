@@ -213,6 +213,13 @@ export const CAM_FOV = 62;
 // the old speed rush, at the cost of the rider drifting away as they push.
 export const CAM_FOV_GAIN = 0;
 export const CAM_SPEED_REF = 14.0;   // m/s that counts as flat out
+// How far below the horizon the first-person lens sits, in radians. From eye
+// height the front arm hangs ~50° below the horizon and the nose of the deck
+// ~65°, while the ground a few metres ahead is only ~12° below — so a level
+// aim frames nothing but the far bank. ~0.74 rad puts the front arm and the
+// nose of the board in the lower half of the shot with the ground ahead still
+// clearing the top.
+export const CAM_FIRST_DOWN = 0.74;
 
 // --- rendering ------------------------------------------------------------
 export const SKY_TOP = 0x2f6ba8;
@@ -285,7 +292,7 @@ export function setHoldToPush(v) {
 // this directly in its update() dispatch; main.js is what turns a player
 // choice into the setting below and back into the save.
 export const CAMERA_CHASE = 'chase';   // third person — the camera this game shipped with
-export const CAMERA_FIRST = 'first';   // attached to the rider's head, body hidden
+export const CAMERA_FIRST = 'first';   // attached to the rider's head, which stays hidden — the rest of the rider and the deck stay in shot
 export const CAMERA_BOARD = 'board';   // the board alone, rider hidden
 
 export let CAMERA_MODE = CAMERA_CHASE;
