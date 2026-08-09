@@ -183,6 +183,9 @@ export const save = {
   get holdToPush() {
     return state.holdToPush;
   },
+  get cameraMode() {
+    return state.cameraMode;
+  },
   get radioPlaylistId() {
     return state.radioPlaylistId;
   },

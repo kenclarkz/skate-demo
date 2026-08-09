@@ -414,6 +414,10 @@ export class Skater {
     };
   }
 
+  get visible() {
+    return this.group.visible;
+  }
+
   set visible(v) {
     this.group.visible = v;
   }
