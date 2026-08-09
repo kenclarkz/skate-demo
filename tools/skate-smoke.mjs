@@ -25,6 +25,7 @@ const SHOTS = process.env.SMOKE_SHOTS || join(ROOT, '.smoke');
 
 let failures = 0;
 let checks = 0;
+let lastSection = '';
 
 function ok(cond, msg) {
   checks++;
@@ -39,6 +40,7 @@ function near(actual, expected, tol, msg) {
 }
 
 function section(name) {
+  lastSection = name;
   console.log(`\n${name}`);
 }
 
@@ -81,7 +83,7 @@ const context = await browser.newContext({ viewport: { width: 900, height: 560 }
 const errors = [];
 const page = await context.newPage();
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-page.on('console', (m) => m.type() === 'error' && errors.push(`console.error: ${m.text()}`));
+page.on('console', (m) => m.type() === 'error' && errors.push(`console.error: ${m.text()} @ ${lastSection}`));
 page.on('requestfailed', (r) => errors.push(`requestfailed: ${r.url()} ${r.failure()?.errorText}`));
 await page.goto(`${BASE}/index.html?debug=1`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.__skate, null, { timeout: 20000 });
@@ -3564,6 +3566,103 @@ section('The park editor');
   }));
   ok(!afterDelete.grid.includes('Smoke ramp') && afterDelete.files === 0, 'Delete removes it from the grid and from storage');
   ok(afterDelete.current === 'myparks', 'and the screen stays put');
+
+  await run(() => window.__skate.showStart());
+}
+
+// --------------------------------------------------------------------------
+section('The park editor is vertical');
+{
+  // Every palette object has a third axis: an elevation above the pad, so a
+  // park can stack decks and raise ramps the way the built-in maps do. The
+  // collision built when the park is tested has to rise with the preview the
+  // editor shows — this section checks both.
+  const open = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1, id: 'user-vert', name: 'Vert smoke', blurb: 'Vertical smoke.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'v1', type: 'slab', x: 0, y: 2, z: 0, ry: 0, sx: 1, sz: 1, w: 8, d: 4, h: 0.25, color: 'concrete' },
+        { id: 'v2', type: 'rail', x: -6, y: 0, z: 0, ry: 0, sx: 1, sz: 1, len: 4, h: 0.9, r: 0.045 },
+      ],
+    });
+    g.designer.select('v1');
+    const v1 = g.designer.file.objects.find((o) => o.id === 'v1');
+    const group = g.designer.pickables.find((gr) => gr.userData.parkObjId === 'v1');
+    const rail = g.designer.file.objects.find((o) => o.id === 'v2');
+    return {
+      slabY: v1.y,
+      slabPreviewY: group.position.y,
+      railY: rail.y,
+      panelHasY: !!document.querySelector('#dg-panel [data-pos="y"]'),
+      panelText: document.getElementById('dg-panel')?.textContent || '',
+    };
+  });
+  ok(open.slabY === 2 && open.railY === 0, 'a park file carries an elevation per object (slab raised, rail on the pad)');
+  ok(Math.abs(open.slabPreviewY - 2) < 1e-6, `and the editor renders the raised object up off the pad (y ${open.slabPreviewY})`);
+  ok(open.panelHasY && open.panelText.length > 40, 'with the elevation control in the properties panel');
+  ok(open.panelHasY, 'and it is wired as a position control like X and Z');
+
+  // Raising an object through the slider's own handler moves both the file
+  // and the preview together.
+  const raised = await run(() => {
+    const g = window.__skate;
+    const slider = document.querySelector('#dg-panel [data-pos="y"]');
+    slider.value = '3.5';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    const v1 = g.designer.file.objects.find((o) => o.id === 'v1');
+    const group = g.designer.pickables.find((gr) => gr.userData.parkObjId === 'v1');
+    return { y: v1.y, previewY: group.position.y };
+  });
+  ok(raised.y === 3.5, 'dragging the Elevation slider moves the object up');
+  ok(Math.abs(raised.previewY - 3.5) < 1e-6, 'and its preview rises with it');
+
+  // PageUp nudges up in the same grid the panel uses; the lower bound of the
+  // pad keeps a nudge-down from sinking an object through the floor.
+  const nudged = await run(() => {
+    const g = window.__skate;
+    g.designer.nudgeY(-10);
+    const v1 = g.designer.file.objects.find((o) => o.id === 'v1');
+    return { y: v1.y };
+  });
+  ok(nudged.y === 0, 'nudging down clamps at the pad top, never below');
+
+  // Save & Test: the collision the park actually builds has to sit at the
+  // raised height, and the raised slab's deck must be rideable at that height.
+  const tested = await run(() => {
+    const g = window.__skate;
+    g.designer.file.objects.find((o) => o.id === 'v1').y = 2;
+    g.designer.on.test();
+    const slab = g.designer.file.objects.find((o) => o.id === 'v1');
+    for (let i = 0; i < 120; i++) g.drive(1 / 120, { push: true });
+    return {
+      park: g.park.id,
+      slabY: slab.y,
+      deck: g.park.sample(0, 0, { y: 0 }).y,
+    };
+  });
+  ok(tested.park === 'user-vert', 'Save & Test rides the vertical park');
+  ok(Math.abs(tested.deck - (2 + 0.25)) < 0.02, `the raised deck's collision sits 2.25 m up (got ${tested.deck.toFixed(2)})`);
+
+  // An elevated quarterpipe carries its base with it, so its transition still
+  // starts tangent to a raised flat — the same shape the mega ramp uses.
+  const quarter = await run(() => {
+    const g = window.__skate;
+    g.freeze();
+    g.openDesigner({
+      v: 1, id: 'user-vertq', name: 'Vert Q smoke', blurb: 'Vertical smoke.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [{ id: 'q1', type: 'quarter', x: 0, y: 1, z: 0, ry: 0, sx: 1, sz: 1, w: 4, R: 2.4, H: 1.8, deck: 0.6, color: 'wood' }],
+    });
+    g.designer.on.test();
+    return {
+      base: g.park.sample(0, 0, { y: 0 }).y,
+      mid: g.park.sample(0, 1.5, { y: 0 }).y,
+    };
+  });
+  ok(Math.abs(quarter.base - 1) < 0.02, `an elevated quarter starts its arc at its base height (base ${quarter.base.toFixed(2)})`);
+  ok(Math.abs(quarter.mid - 1.5265) < 0.03, `and the arc rises from there, not from the pad (mid ${quarter.mid.toFixed(2)})`);
 
   await run(() => window.__skate.showStart());
 }

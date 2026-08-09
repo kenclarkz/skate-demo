@@ -118,7 +118,7 @@ export const OBJECTS = [
     ],
     build(p, o) {
       const r = worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
-      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h, SMOOTH, surfaceColor(o.color), slabDepth(o.h)));
+      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, surfaceColor(o.color), slabDepth(o.h)));
     },
     footprint(o) {
       return worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
@@ -150,15 +150,15 @@ export const OBJECTS = [
         x1 = Math.max(low[0], high[0]);
         z0 = Math.min(cross.z0, cross.z1);
         z1 = Math.max(cross.z0, cross.z1);
-        y0 = low[0] < high[0] ? 0 : o.h;
-        y1 = low[0] < high[0] ? o.h : 0;
+        y0 = low[0] < high[0] ? o.y : o.h + o.y;
+        y1 = low[0] < high[0] ? o.h + o.y : o.y;
       } else {
         x0 = Math.min(cross.x0, cross.x1);
         x1 = Math.max(cross.x0, cross.x1);
         z0 = Math.min(low[1], high[1]);
         z1 = Math.max(low[1], high[1]);
-        y0 = low[1] < high[1] ? 0 : o.h;
-        y1 = low[1] < high[1] ? o.h : 0;
+        y0 = low[1] < high[1] ? o.y : o.h + o.y;
+        y1 = low[1] < high[1] ? o.h + o.y : o.y;
       }
       p.add(new Bank(x0, x1, z0, z1, axis, y0, y1, surfaceColor(o.color)));
     },
@@ -197,7 +197,7 @@ export const OBJECTS = [
       const baseC = axis === 'z' ? base[1] : base[0];
       const c0 = axis === 'z' ? cross.x0 : cross.z0;
       const c1 = axis === 'z' ? cross.x1 : cross.z1;
-      p.add(new Quarter(c0, c1, baseC, axis, sign, o.R, H, o.deck, surfaceColor(o.color)));
+      p.add(new Quarter(c0, c1, baseC, axis, sign, o.R, H, o.deck, surfaceColor(o.color), o.y));
     },
     footprint(o) {
       const H = Math.min(o.H, o.R - 0.05);
@@ -231,7 +231,7 @@ export const OBJECTS = [
       const sign = axis === 'z' ? (f.fz > 0 ? -1 : 1) : f.fx > 0 ? -1 : 1;
       const c0 = axis === 'z' ? cross.x0 : cross.z0;
       const c1 = axis === 'z' ? cross.x1 : cross.z1;
-      p.add(new Stairs(c0, c1, topC, axis, sign, Math.max(1, Math.round(o.steps)), o.rise, o.run));
+      p.add(new Stairs(c0, c1, topC, axis, sign, Math.max(1, Math.round(o.steps)), o.rise, o.run, o.y));
     },
     footprint(o) {
       const len = o.steps * o.run;
@@ -267,7 +267,7 @@ export const OBJECTS = [
     build(p, o) {
       const a = worldPoint(o, -o.len / 2, 0);
       const b = worldPoint(o, o.len / 2, 0);
-      p.rail(a[0], o.h, a[1], b[0], o.h, b[1], o.r);
+      p.rail(a[0], o.h + o.y, a[1], b[0], o.h + o.y, b[1], o.r);
     },
     footprint(o) {
       return worldRect(o, -o.len / 2, o.len / 2, -0.4, 0.4);
@@ -302,10 +302,10 @@ export const OBJECTS = [
     ],
     build(p, o) {
       const r = worldRect(o, -o.len / 2, o.len / 2, -o.w / 2, o.w / 2);
-      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h, SMOOTH, surfaceColor(o.color), slabDepth(o.h)));
+      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, surfaceColor(o.color), slabDepth(o.h)));
       const a = worldPoint(o, -o.len / 2, o.w / 2);
       const b = worldPoint(o, o.len / 2, o.w / 2);
-      p.ledge(a[0], o.h, a[1], b[0], o.h, b[1]);
+      p.ledge(a[0], o.h + o.y, a[1], b[0], o.h + o.y, b[1]);
     },
     footprint(o) {
       return worldRect(o, -o.len / 2, o.len / 2, -o.w / 2, o.w / 2);
@@ -334,7 +334,7 @@ export const OBJECTS = [
       const H = Math.min(o.h, o.R - 0.05);
       const color = surfaceColor(o.color);
       const r = worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
-      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h, SMOOTH, color, slabDepth(o.h)));
+      p.add(new Slab(r.x0, r.x1, r.z0, r.z1, o.h + o.y, SMOOTH, color, slabDepth(o.h)));
       const f = frame(o);
       const axis = forwardAxis(o);
       // Forward and back faces.
@@ -353,7 +353,8 @@ export const OBJECTS = [
           o.R,
           H,
           0,
-          color
+          color,
+          o.y
         )
       );
       p.add(
@@ -366,7 +367,8 @@ export const OBJECTS = [
           o.R,
           H,
           0,
-          color
+          color,
+          o.y
         )
       );
       // Right and left faces run along the cross axis.
@@ -386,7 +388,8 @@ export const OBJECTS = [
           o.R,
           H,
           0,
-          color
+          color,
+          o.y
         )
       );
       p.add(
@@ -399,14 +402,15 @@ export const OBJECTS = [
           o.R,
           H,
           0,
-          color
+          color,
+          o.y
         )
       );
       // Coping sunk into each lip, the way the real maps set theirs.
-      lineCoping(p, worldPoint(o, -o.w / 2, o.d / 2), worldPoint(o, o.w / 2, o.d / 2), o.h);
-      lineCoping(p, worldPoint(o, -o.w / 2, -o.d / 2), worldPoint(o, o.w / 2, -o.d / 2), o.h);
-      lineCoping(p, worldPoint(o, o.w / 2, -o.d / 2), worldPoint(o, o.w / 2, o.d / 2), o.h);
-      lineCoping(p, worldPoint(o, -o.w / 2, -o.d / 2), worldPoint(o, -o.w / 2, o.d / 2), o.h);
+      lineCoping(p, worldPoint(o, -o.w / 2, o.d / 2), worldPoint(o, o.w / 2, o.d / 2), o.h + o.y);
+      lineCoping(p, worldPoint(o, -o.w / 2, -o.d / 2), worldPoint(o, o.w / 2, -o.d / 2), o.h + o.y);
+      lineCoping(p, worldPoint(o, o.w / 2, -o.d / 2), worldPoint(o, o.w / 2, o.d / 2), o.h + o.y);
+      lineCoping(p, worldPoint(o, -o.w / 2, -o.d / 2), worldPoint(o, -o.w / 2, o.d / 2), o.h + o.y);
     },
     footprint(o) {
       return worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
@@ -448,10 +452,12 @@ export function boundsOf(o) {
   return objectType(o.type).footprint(o);
 }
 
-/** A fresh, fully-defaulted object of a type, ready to place. */
+/** A fresh, fully-defaulted object of a type, ready to place. `y` is the
+ * object's elevation above the pad — the vertical axis the editor exposes —
+ * so a park can stack decks and raise ramps, exactly like the built-in maps. */
 export function newObject(type) {
   const t = objectType(type);
-  return { id: uid(), type: t.id, x: 0, z: 0, ry: 0, sx: 1, sz: 1, ...t.defaults };
+  return { id: uid(), type: t.id, x: 0, y: 0, z: 0, ry: 0, sx: 1, sz: 1, ...t.defaults };
 }
 
 let _uid = 0;
@@ -463,7 +469,11 @@ function uid() {
  * surfaces overlap at the same height, which the height field resolves by
  * keeping the tallest — so drawing objects in file order is fine. */
 export function buildObjects(p, objects) {
-  for (const o of objects) objectType(o.type).build(p, o);
+  for (const o of objects) {
+    const clean = { ...newObject(o.type), ...o };
+    if (!Number.isFinite(clean.y)) clean.y = 0;
+    objectType(o.type).build(p, clean);
+  }
 }
 
 /** Whether a point on the pad is clear of every object, for spawning and for
