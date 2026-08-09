@@ -2274,6 +2274,32 @@ section('Camera modes: chase, first person, board view');
     `the camera mode cycles chase → first → board → chase (${cycle.a} → ${cycle.b} → ${cycle.d} → ${cycle.e})`);
   ok(cycle.f === 'chase', 'and a garbage value falls back to chase, never breaking the save');
 
+  // The same loop through the path the player actually uses: the save is what
+  // the camcycle button reads to pick the next mode, and what a reload restores.
+  // A saved mode that never reads back is a cycle that can only ever land on
+  // chase no matter how many times it is pressed.
+  const uiCycle = await run(() => {
+    const g = window.__skate;
+    g.save.setCameraMode('chase');
+    const read = () => ({ saved: g.save.cameraMode, chase: g.chase.mode });
+    const a = read();
+    g.hud.on.camcycle();
+    const b = read();
+    g.hud.on.camcycle();
+    const c = read();
+    g.hud.on.camcycle();
+    const d = read();
+    return { a, b, c, d };
+  });
+  ok(
+    uiCycle.a.saved === 'chase' && uiCycle.b.saved === 'first' && uiCycle.c.saved === 'board' && uiCycle.d.saved === 'chase',
+    `the camcycle button reaches every mode through the save (${uiCycle.a.saved} → ${uiCycle.b.saved} → ${uiCycle.c.saved} → ${uiCycle.d.saved})`
+  );
+  ok(
+    uiCycle.a.chase === 'chase' && uiCycle.b.chase === 'first' && uiCycle.c.chase === 'board' && uiCycle.d.chase === 'chase',
+    'and the live camera follows each press'
+  );
+
   // The real thing: in first person the lens has to sit at the head and the
   // rider has to be hidden; in board view the lens has to sit low behind the
   // board and the rider has to be hidden too. The camera coming back to chase
@@ -2339,13 +2365,23 @@ section('Camera modes: chase, first person, board view');
     g.hud.setCameraMode('first');
     const settings = document.getElementById('opt-cameramode').textContent;
     const camcycle = document.getElementById('btn-camcycle').textContent;
-    const cycHidden = document.getElementById('btn-camcycle').hidden;
     g.hud.setCameraMode('chase');
-    return { settings, camcycle, cycHidden };
+    return { settings, camcycle };
   });
   ok(labels.settings === 'Camera: First' && labels.camcycle === 'Cam: First',
     `both camera buttons name the live mode (${labels.settings} / ${labels.camcycle})`);
-  ok(labels.cycHidden, 'and the in-game camcycle button starts hidden on the menus');
+
+  // The camcycle button rides the same visibility as the pause button:
+  // pointless on the menus, useful the moment there is a camera to cycle.
+  // Everything above drove the camera by hand, so updateHud() has not set the
+  // button's visibility since an earlier section left the game mid-run — go to
+  // the start screen and let a real frame hide it, the way a boot would.
+  await run(() => window.__skate.showStart());
+  const cycHidden = await page
+    .waitForFunction(() => document.getElementById('btn-camcycle').hidden, null, { timeout: 4000 })
+    .then(() => true)
+    .catch(() => false);
+  ok(cycHidden, 'and the in-game camcycle button starts hidden on the menus');
 
   // Leave the config as the rest of the suite expects it: chase.
   await run(() => {

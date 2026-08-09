@@ -275,6 +275,7 @@ C.setTopSpeed(save.speed);
 C.setCamZoom(save.camZoom);
 C.setHoldToPush(save.holdToPush);
 C.setCameraMode(save.cameraMode);
+chase.setMode(save.cameraMode);
 // audio.musicGain does not exist until the first unlock() — setMusicVolume()
 // stores the number on the Audio instance regardless, and startMusic() reads
 // it back when the track actually starts, so the saved level still applies to
@@ -1189,6 +1190,18 @@ window.__skate = {
   },
   /** Put the board somewhere, at a speed, pointing a way. */
   place(x, z, yaw = 0, speed = 0) {
+    if (skater.group.parent !== ride.frame) {
+      // A bail or a walk off the board leaves the rider and board posed loose
+      // in the world; the cameras that attach to them read their world position
+      // (head, deck), so "place the board somewhere" has to bring the whole rig
+      // back under the frame the way respawn() does, or the lens goes looking
+      // for bodies where the previous fall threw them.
+      ride.frame.add(skater.group);
+      ride.frame.add(board.group);
+      board.group.position.set(0, 0, 0);
+      board.group.quaternion.identity();
+      skater.settle();
+    }
     ride.reset({ x, y: 0, z, yaw });
     ride.speed = speed;
     // The velocity has to be set too, not just the rolling speed: it is what a
