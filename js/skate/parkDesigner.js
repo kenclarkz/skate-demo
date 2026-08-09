@@ -143,7 +143,9 @@ export class ParkDesigner {
     }
 
     // Pointer handling lives on the canvas: drag an object to transform it,
-    // drag empty ground to orbit, pinch or wheel to zoom.
+    // drag empty ground to orbit, pinch to zoom, and two fingers together to
+    // pan the camera. A second finger always takes over from whatever a single
+    // finger was doing, so two-finger movement can never transform a prop.
     const canvas = this.canvas;
     canvas?.addEventListener('pointerdown', (e) => this._down(e));
     canvas?.addEventListener('pointermove', (e) => this._move(e));
@@ -466,9 +468,11 @@ export class ParkDesigner {
     const entry = { x: e.clientX, y: e.clientY };
     this._pointers.set(e.pointerId, entry);
     if (this._pointers.size === 2) {
-      // A second finger lands: stop whatever the first was doing and zoom.
+      // A second finger lands: stop whatever the first was doing and take over
+      // the camera. Pinch zooms, and the two fingers moving together pan.
       this._drag = null;
       this._pinch = this._pointerDist();
+      this._pan = this._pointerMid();
       return;
     }
     const hit = this._pick(e.clientX, e.clientY);
@@ -506,9 +510,17 @@ export class ParkDesigner {
       const d = this._pointerDist();
       if (this._pinch) {
         this.orbit.dist = clamp(this.orbit.dist * (this._pinch / Math.max(1, d)), 4, 120);
-        this._applyCamera();
       }
       this._pinch = d;
+      // The two fingers moving together pan the camera target. The pinch's
+      // own distance change contributes nothing to the midpoint, so zoom and
+      // pan never fight each other.
+      const mid = this._pointerMid();
+      if (this._pan) {
+        this._panCamera(mid.x - this._pan.x, mid.y - this._pan.y);
+      }
+      this._pan = mid;
+      this._applyCamera();
       return;
     }
     if (!this._drag) return;
@@ -555,7 +567,10 @@ export class ParkDesigner {
     if (this._pointers.has(e.pointerId)) {
       this._pointers.delete(e.pointerId);
     }
-    if (this._pointers.size < 2) this._pinch = null;
+    if (this._pointers.size < 2) {
+      this._pinch = null;
+      this._pan = null;
+    }
     if (this._drag && this._drag.kind !== 'orbit' && this._drag.moved) this.commit();
     if (this._pointers.size === 0) this._drag = null;
   }
@@ -564,6 +579,29 @@ export class ParkDesigner {
     const pts = [...this._pointers.values()];
     if (pts.length < 2) return 0;
     return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+
+  _pointerMid() {
+    const pts = [...this._pointers.values()];
+    return {
+      x: (pts[0].x + pts[1].x) / 2,
+      y: (pts[0].y + pts[1].y) / 2,
+    };
+  }
+
+  /** Pan the orbit target so the ground follows the fingers. A screen delta
+   * is scaled into world units at the target depth, then applied along the
+   * camera's own right and screen-up axes (kept to the ground plane) — the
+   * same view-relative feel as a one-finger orbit, but a translation instead
+   * of a turn. */
+  _panCamera(dx, dy) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.camera.updateMatrixWorld();
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+    const worldPerPx = (2 * this.orbit.dist * Math.tan((this.camera.fov * DEG) / 2)) / Math.max(1, rect.height);
+    this.orbit.tx += (-dx * right.x + dy * up.x) * worldPerPx;
+    this.orbit.tz += (-dx * right.z + dy * up.z) * worldPerPx;
   }
 
   _snap(v) {
