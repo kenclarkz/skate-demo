@@ -1,115 +1,49 @@
 name: opencode
 
 on:
-issue_comment:
-types: [created]
+  issue_comment:
+    types: [created]
 
-workflow_dispatch:
-inputs:
-prompt:
-description: “What should OpenCode do?”
-required: true
-default: “Analyze this repository”
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "What should OpenCode do?"
+        required: true
+        default: "Analyze this repository"
 
 permissions:
-contents: write
-issues: write
-pull-requests: write
-id-token: write
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
 
 jobs:
-opencode:
-runs-on: ubuntu-latest
+  opencode:
+    runs-on: ubuntu-latest
 
-steps:
-  - name: Show event information
-    run: |
-      echo "Event: ${{ github.event_name }}"
-      echo "Actor: ${{ github.actor }}"
-      if [ "${{ github.event_name }}" = "issue_comment" ]; then
-        echo "Comment: ${{ github.event.comment.body }}"
-      fi
-  - name: Checkout repository
-    uses: actions/checkout@v6
-    with:
-      fetch-depth: 0
-      persist-credentials: true
-  - name: Configure Git identity
-    run: |
-      git config --global user.name "OpenCode"
-      git config --global user.email "opencode@users.noreply.github.com"
-  - name: Run OpenCode
-    uses: anomalyco/opencode/github@latest
-    with:
-      model: opencode/big-pickle
-      prompt: ${{ github.event_name == 'workflow_dispatch' && inputs.prompt || github.event.comment.body }}
-      use_github_token: true
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
-  - name: Check for OpenCode changes
-    id: changes
-    run: |
-      echo "===== GIT STATUS ====="
-      git status --short
-      echo "===== CHANGED FILES ====="
-      git diff --name-only
-      if [ -n "$(git status --porcelain)" ]; then
-        echo "changed=true" >> "$GITHUB_OUTPUT"
-      else
-        echo "changed=false" >> "$GITHUB_OUTPUT"
-      fi
-  - name: Create branch and commit changes
-    if: steps.changes.outputs.changed == 'true'
-    id: commit
-    run: |
-      if [ "${{ github.event_name }}" = "issue_comment" ]; then
-        BRANCH="opencode/issue-${{ github.event.issue.number }}-${{ github.run_id }}"
-      else
-        BRANCH="opencode/run-${{ github.run_id }}"
-      fi
-      echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
-      git checkout -b "$BRANCH"
-      git add -A
-      git commit -m "OpenCode: update repository"
-      echo "Created commit:"
-      git log -1 --oneline
-  - name: Push branch
-    if: steps.changes.outputs.changed == 'true'
-    run: |
-      git push --set-upstream origin "$BRANCH"
-      echo "Successfully pushed:"
-      echo "$BRANCH"
-  - name: Create Pull Request
-    if: steps.changes.outputs.changed == 'true' && github.event_name == 'issue_comment'
-    env:
-      GH_TOKEN: ${{ github.token }}
-    run: |
-      PR_URL=$(gh pr list \
-        --repo "${{ github.repository }}" \
-        --head "$BRANCH" \
-        --base main \
-        --json url \
-        --jq '.[0].url')
-      if [ -n "$PR_URL" ]; then
-        echo "Pull request already exists:"
-        echo "$PR_URL"
-        exit 0
-      fi
-      PR_URL=$(gh pr create \
-        --repo "${{ github.repository }}" \
-        --base main \
-        --head "$BRANCH" \
-        --title "OpenCode: issue #${{ github.event.issue.number }}" \
-        --body "Automated OpenCode implementation for issue #${{ github.event.issue.number }}.")
-      echo "========================================"
-      echo "PULL REQUEST CREATED"
-      echo "$PR_URL"
-      echo "========================================"
-  - name: Final status
-    run: |
-      echo "===== FINAL GIT STATUS ====="
-      git status --short
-      echo "===== FINAL COMMIT ====="
-      git log -1 --oneline
-      echo "===== CURRENT BRANCH ====="
-      git branch --show-current
+    steps:
+      - name: Show event information
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Comment: ${{ github.event.comment.body }}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Configure Git identity
+        run: |
+          git config --global user.name "OpenCode"
+          git config --global user.email "opencode@users.noreply.github.com"
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: opencode/big-pickle
+          prompt: ${{ github.event_name == 'workflow_dispatch' && inputs.prompt || github.event.comment.body }}
+          use_github_token: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
