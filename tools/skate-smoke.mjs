@@ -3924,6 +3924,63 @@ section('The park editor is vertical');
 }
 
 // --------------------------------------------------------------------------
+section('The park editor shows what you ride');
+{
+  // What you see is what you ride: every palette object's preview mesh has to
+  // sit exactly where its collision footprint sits. The selection outline is
+  // drawn around boundsOf — the same rect the collision is built from — so the
+  // preview and the outline have to agree at every quarter-turn and scale.
+  const aligned = await run(async () => {
+    const g = window.__skate;
+    const THREE = await import('./js/game/three.js');
+    const { boundsOf, newObject } = await import('./js/skate/parkObjects.js');
+    const TYPES = ['slab', 'bank', 'quarter', 'mini', 'rollin', 'spine', 'vert', 'stairs', 'rail', 'ledge', 'funbox'];
+    const out = [];
+    for (const type of TYPES) {
+      for (const ry of [0, 90, 180, 270]) {
+        g.openDesigner({
+          v: 1, id: 'user-align', name: 'Align', blurb: 'Preview/footprint alignment.',
+          extent: 40, ground: 'concrete', spawn: { x: 0, z: -25 },
+          objects: [{ ...newObject(type), id: 'm1', x: 4, y: 0, z: -3, ry, sx: 1.25, sz: 0.75 }],
+        });
+        const d = g.designer;
+        const o = d.file.objects[0];
+        const group = d.pickables.find((gr) => gr.userData.parkObjId === 'm1');
+        const preview = new THREE.Box3().setFromObject(group);
+        const b = boundsOf(o);
+        const fp = {
+          x0: Math.min(b.x0, b.x1), x1: Math.max(b.x0, b.x1),
+          z0: Math.min(b.z0, b.z1), z1: Math.max(b.z0, b.z1),
+        };
+        const px = [preview.min.x, preview.max.x];
+        const pz = [preview.min.z, preview.max.z];
+        const eps = 0.11;
+        let ok;
+        if (type === 'funbox') {
+          // The funbox's rideable transitions legitimately reach past the box
+          // footprint on every side; they still have to be centred on it.
+          ok =
+            Math.abs((px[0] + px[1]) / 2 - (fp.x0 + fp.x1) / 2) < eps &&
+            Math.abs((pz[0] + pz[1]) / 2 - (fp.z0 + fp.z1) / 2) < eps;
+        } else {
+          ok = px[0] >= fp.x0 - eps && px[1] <= fp.x1 + eps && pz[0] >= fp.z0 - eps && pz[1] <= fp.z1 + eps;
+        }
+        if (!ok) {
+          out.push(
+            `${type}@${ry} preview x[${px.map((v) => v.toFixed(2))}] z[${pz.map((v) => v.toFixed(2))}]` +
+            ` vs footprint x[${fp.x0.toFixed(2)},${fp.x1.toFixed(2)}] z[${fp.z0.toFixed(2)},${fp.z1.toFixed(2)}]`
+          );
+        }
+      }
+    }
+    return out;
+  });
+  ok(aligned.length === 0, `every palette preview sits on its own collision footprint (${aligned.length || 'all 44'} aligned)`);
+
+  await run(() => window.__skate.showStart());
+}
+
+// --------------------------------------------------------------------------
 section('The park editor is responsive');
 {
   // The editor's chrome has to re-flow by viewport width, not by device sniff:
