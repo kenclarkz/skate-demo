@@ -5,10 +5,39 @@
 // for nothing.
 
 import { TrickPreview } from './preview.js';
+import { CharacterPreview } from './character-preview.js';
 import { drawPortrait } from './character-portrait.js';
 import { drawGestureDiagram } from './gesture-diagram.js';
+import { summarize, customLook } from './custom.js';
+import {
+  SKIN_TONES,
+  HEIGHTS,
+  BUILDS,
+  HAIRS,
+  PANTS,
+  SHOES,
+  SHIRTS,
+  HATS,
+  SHADES,
+} from './custom.js';
 
-const SCREENS = ['start', 'paused', 'guide', 'parks', 'myparks', 'store', 'settings'];
+const SCREENS = ['start', 'paused', 'guide', 'parks', 'myparks', 'store', 'charselect', 'maker', 'settings'];
+
+/**
+ * The maker's racks, in display order. Each role's name is the draft key it
+ * reads and the save.js owned-list it asks about — one word, no translation.
+ */
+const MAKER_ROLES = [
+  ['skin', SKIN_TONES],
+  ['height', HEIGHTS],
+  ['build', BUILDS],
+  ['hair', HAIRS],
+  ['pants', PANTS],
+  ['shoes', SHOES],
+  ['shirt', SHIRTS],
+  ['hat', HATS],
+  ['shades', SHADES],
+];
 
 /** Reasons a bail can happen, in the words a skater would use. */
 const BAIL_TEXT = {
@@ -323,6 +352,19 @@ export class Hud {
     this.outfitGrid = document.getElementById('outfit-grid');
     this.accessoryGrid = document.getElementById('accessory-grid');
     this.charGrid = document.getElementById('char-grid');
+    this.csCharGrid = document.getElementById('cs-char-grid');
+    this.csMakerBtn = document.getElementById('btn-charselect-maker');
+
+    // The Character Maker's own window. A separate mini-scene like the
+    // tutorial's, so the figure can turn while every rack around it re-renders.
+    this.makerPreviewEl = document.getElementById('maker-preview');
+    this.makerPreview = this.makerPreviewEl ? new CharacterPreview(this.makerPreviewEl) : null;
+    this.makerCoinsEl = document.getElementById('maker-coins');
+    this.makerSummaryEl = document.getElementById('maker-summary');
+    this.makerGrids = {};
+    for (const id of ['skin', 'height', 'build', 'hair', 'pants', 'shoes', 'shirt', 'hat', 'shades']) {
+      this.makerGrids[id] = document.getElementById(`maker-${id}`);
+    }
 
     this.dismountBtn = document.getElementById('btn-dismount');
     this.mountBtn = document.getElementById('btn-mount');
@@ -383,6 +425,13 @@ export class Hud {
       board: null,
       outfit: null,
       character: null,
+      riders: null,
+      maker: null,
+      // A part picked in the maker: `(role, id)`, where role is one of
+      // skin/height/build/hair/pants/shoes/shirt/hat/shades.
+      makePart: null,
+      // The maker's Save pressed with the current draft.
+      makeSave: null,
       dismount: null,
       mount: null,
       sit: null,
@@ -412,6 +461,12 @@ export class Hud {
     click('btn-mypark-new', () => this.on.newPark?.());
     click('btn-store', () => this.on.store?.());
     click('btn-store-back', () => this.on.back?.());
+    click('btn-store-maker', () => this.on.maker?.());
+    click('btn-riders', () => this.on.riders?.());
+    click('btn-charselect-back', () => this.on.back?.());
+    click('btn-charselect-maker', () => this.on.maker?.());
+    click('btn-maker-save', () => this.on.makeSave?.());
+    click('btn-maker-back', () => this.on.back?.());
     click('btn-settings', () => this.on.settings?.());
     click('btn-settings-back', () => this.on.back?.());
     click('btn-pause', () => this.on.pause?.());
@@ -500,6 +555,18 @@ export class Hud {
     this.charGrid?.addEventListener('click', (e) => {
       const card = e.target.closest('[data-character]');
       if (card) this.on.character?.(card.dataset.character);
+    });
+    this.csCharGrid?.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-character]');
+      if (card) this.on.character?.(card.dataset.character);
+    });
+    // One delegated listener for every rack in the maker: each option button
+    // carries its own role and part, so the maker only needs a single wire
+    // whatever a future rack is added.
+    const makerEl = document.getElementById('screen-maker');
+    makerEl?.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-part]');
+      if (card) this.on.makePart?.(card.dataset.role, card.dataset.part);
     });
   }
 
@@ -653,6 +720,10 @@ export class Hud {
     this.stats.hidden = true;
     if (name === 'guide') this.showTutStep(0);
     else this.preview?.stop(); // no sense rendering a second scene nobody can see
+    // The maker's turntable is its own tiny scene with its own loop; keep it
+    // spinning only while its screen is the one in front.
+    if (name === 'maker') this.makerPreview?.start();
+    else this.makerPreview?.stop();
     this.on.screenChanged?.(name);
   }
 
@@ -661,6 +732,7 @@ export class Hud {
     this.stats.hidden = false;
     this.current = null;
     this.preview?.stop();
+    this.makerPreview?.stop();
     this.on.screenChanged?.(null);
   }
 
@@ -940,10 +1012,12 @@ export class Hud {
   /**
    * Re-skin the tutorial's demo rider to match the one being skated. Without
    * this, picking Nova and then opening How to play shows Ace doing the tricks,
-   * which reads as a bug the first time anyone notices it.
+   * which reads as a bug the first time anyone notices it. `scale` is the
+   * maker's height+width body, passed through so a made character's demo is
+   * the same silhouette as the one on the start screen.
    */
-  setPreviewLook(palette, style) {
-    this.preview?.skater.rebuild(palette, style);
+  setPreviewLook(palette, style, scale) {
+    this.preview?.skater.rebuild(palette, style, scale);
   }
 
   /**
@@ -971,6 +1045,121 @@ export class Hud {
     for (const c of characters) {
       const canvas = this.charGrid.querySelector(`[data-portrait="${c.id}"]`);
       if (canvas) drawPortrait(canvas, c);
+    }
+  }
+
+  /**
+   * The Riders screen: the four prebuilt characters exactly as the shop's
+   * rack shows them, with the made character leading the grid when one exists.
+   * It is a picker, not a shop, so the made card is the player's own figure —
+   * drawn from the current maker draft — rather than a price.
+   */
+  renderCharSelect(characters, equippedId, hasCustom, custom) {
+    if (!this.csCharGrid) return;
+    const cards = [];
+    if (hasCustom) {
+      const look = customLook(custom);
+      const isEquipped = equippedId === 'custom';
+      cards.push(
+        `<button type="button" class="char-card${isEquipped ? ' current' : ''}" data-character="custom">` +
+        `<canvas class="char-portrait" data-portrait="custom"></canvas>` +
+        `<b>Made by you</b><span class="char-blurb">Built in the Character Maker.</span>` +
+        `<span class="board-status">${isEquipped ? 'Skating' : 'Tap to pick'}</span></button>`
+      );
+    }
+    cards.push(
+      characters
+        .map((c) => {
+          const isEquipped = c.id === equippedId;
+          return (
+            `<button type="button" class="char-card${isEquipped ? ' current' : ''}" data-character="${c.id}">` +
+            `<canvas class="char-portrait" data-portrait="${c.id}"></canvas>` +
+            `<b>${c.name}</b><span class="char-blurb">${c.blurb}</span>` +
+            `<span class="board-status">${isEquipped ? 'Skating' : 'Tap to pick'}</span></button>`
+          );
+        })
+        .join('')
+    );
+    this.csCharGrid.innerHTML = cards.join('');
+    if (hasCustom) {
+      const canvas = this.csCharGrid.querySelector('[data-portrait="custom"]');
+      if (canvas) drawPortrait(canvas, customLook(custom));
+    }
+    for (const c of characters) {
+      const canvas = this.csCharGrid.querySelector(`[data-portrait="${c.id}"]`);
+      if (canvas) drawPortrait(canvas, c);
+    }
+  }
+
+  /**
+   * The Character Maker's racks. One grid per role, drawn as small chips —
+   * a body swatch over a name over a status — so a full wardrobe fits in a
+   * column without scrolling forever. `config` is the draft being edited and
+   * `save` answers every "do I own it" question, exactly as it does for the
+   * shop's racks.
+   */
+  renderMaker(config, save) {
+    if (this.makerCoinsEl) this.makerCoinsEl.textContent = save.coins.toLocaleString();
+    if (this.makerSummaryEl) this.makerSummaryEl.textContent = summarize(config);
+    const hex = (v) => `#${v.toString(16).padStart(6, '0')}`;
+    const status = (role, part, isCur, owned) => {
+      if (role === 'skin' || role === 'height' || role === 'build' || role === 'hair') {
+        return isCur ? 'Selected' : 'Free';
+      }
+      if (isCur) return 'Wearing';
+      return owned ? 'Owned' : `${part.price} coins`;
+    };
+    // The body glyphs: a disc of skin, a bar whose height hints at the pick's,
+    // three bars whose girth hints at the build's, and a circle for hair.
+    const glyph = (part, role) => {
+      if (role === 'skin') {
+        return `<span class="maker-swatch maker-swatch--glyph skin"><i style="background:${hex(part.color)}"></i></span>`;
+      }
+      if (role === 'height') {
+        const h = { short: '7px', average: '12px', tall: '17px' }[part.id] || '12px';
+        return `<span class="maker-swatch maker-swatch--glyph"><i style="height:${h}"></i></span>`;
+      }
+      if (role === 'build') {
+        const w = { slim: '3px', regular: '5px', stocky: '8px' }[part.id] || '5px';
+        return `<span class="maker-swatch maker-swatch--glyph"><i style="width:${w}"></i><i style="width:${w}"></i><i style="width:${w}"></i></span>`;
+      }
+      return `<span class="maker-swatch maker-swatch--glyph"><b></b></span>`;
+    };
+    const swatch = (part, role) => {
+      if (role === 'skin' || role === 'height' || role === 'build' || role === 'hair') return glyph(part, role);
+      const col =
+        role === 'pants'
+          ? part.colors.pants
+          : role === 'shoes'
+            ? part.colors.shoe
+            : role === 'shirt'
+              ? part.colors.shirt
+              : role === 'shades'
+                ? part.colors
+                  ? part.colors.shades
+                  : null
+                : part.colors
+                  ? part.colors.cap
+                  : null;
+      return col !== null
+        ? `<span class="maker-swatch" style="background:${hex(col)}"></span>`
+        : `<span class="maker-swatch maker-swatch--empty"></span>`;
+    };
+    for (const [role, list] of MAKER_ROLES) {
+      const grid = this.makerGrids[role];
+      if (!grid) continue;
+      grid.innerHTML = list
+        .map((part) => {
+          const isCur = config[role] === part.id;
+          const owned = save.hasPart(role, part.id);
+          const locked = !owned && save.coins < part.price;
+          return (
+            `<button type="button" class="maker-option${isCur ? ' current' : ''}${locked ? ' locked' : ''}" data-role="${role}" data-part="${part.id}">` +
+            swatch(part, role) +
+            `<span class="name">${part.name}</span><span class="status">${status(role, part, isCur, owned)}</span></button>`
+          );
+        })
+        .join('');
     }
   }
 

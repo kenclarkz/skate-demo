@@ -154,6 +154,15 @@ export function drawPortrait(canvas, character) {
     rect(p.cap, 0, L.head + 0.14, 0.12, 0.3);  // the tube
     rect(p.cap, 0, L.head + 0.44, 0.13, 0.04); // the top
     rect(p.band, 0, L.head + 0.19, 0.125, 0.05);
+  } else if (style.head === 'flatcap') {
+    // A low round crown sat forward over the brow, with a stubby peak — the
+    // free alternative to the snapback's straight peak, so the two read as
+    // different hats rather than one drawn twice.
+    rect(p.hair, 0, L.head + 0.032, 0.168, 0.045);
+    rect(p.cap, 0, L.head + 0.058, 0.185, 0.075);
+    rect(p.cap, 0, L.head + 0.088, 0.185, 0.06); // back panel
+    rect(p.band, 0, L.head + 0.048, 0.19, 0.028);
+    rect(p.cap, 0, L.head + 0.038, 0.15, 0.02);  // the peak, edge-on
   } else {
     rect(p.hair, 0, L.head + 0.05, 0.17, 0.06);
     rect(p.cap, 0, L.head + 0.078, 0.176, 0.075);

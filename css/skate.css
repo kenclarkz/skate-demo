@@ -2115,3 +2115,195 @@ button:disabled.primary {
     display: none;
   }
 }
+
+/* --- the Character Maker ------------------------------------------------- */
+/* The whole maker is one grid with the live preview stuck to one side, so a
+   change on the rack is visible before it is committed. On a phone the two
+   stack and the preview shrinks to a banner you see while you scroll the
+   racks, which is the trade-off: a dressing-room mirror and a parts shelf
+   cannot both fit a 380px column, and the mirror loses. */
+.maker-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) 1fr;
+  gap: 16px;
+  align-items: start;
+  text-align: left;
+}
+
+.maker-preview-wrap {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 3:4 like the card portraits, so the preview never has to guess its own
+   shape — the canvas fills it and the turntable keeps the frame fixed. */
+.maker-preview {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #171c23;
+}
+
+.maker-preview-wrap .tag {
+  text-align: center;
+}
+
+.maker-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.maker-group {
+  background: rgba(14, 18, 24, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px 14px;
+}
+
+.maker-group .store-section-title {
+  margin-top: 0;
+}
+
+.maker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.maker-grid:last-child {
+  margin-bottom: 0;
+}
+
+/* A single pick: a colour or shape swatch over a label over a status line,
+   sized smaller than a shop card so a rack of nine shirts stays a rack and
+   not a scroll. */
+.maker-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 8px 10px;
+  min-height: 0;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.maker-option .maker-swatch {
+  width: 100%;
+  max-width: 54px;
+  height: 20px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* A body option has no colour to show, so its "swatch" is a tiny glyph —
+   a filled disc for skin tone, three bars for the builds, a head outline for
+   hair. Each one is drawn in CSS rather than shipped as art. */
+.maker-option .maker-swatch--glyph {
+  box-shadow: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.maker-option .maker-swatch--glyph i {
+  display: block;
+  width: 5px;
+  border-radius: 2px;
+  background: var(--dim);
+}
+
+.maker-option .maker-swatch--glyph b {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--dim);
+}
+
+.maker-option .maker-swatch--glyph.skin i {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 3px var(--dim);
+}
+
+.maker-option span.name {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.maker-option .status {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--dim);
+}
+
+.maker-option.current {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+.maker-option.current span.name {
+  color: var(--hot);
+}
+
+.maker-option.locked .status {
+  color: var(--bad);
+}
+
+.maker-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.maker-actions .tag {
+  margin: 0 auto 0 0;
+}
+
+/* The maker's canvas sits inside the wide screen's text-left context, and the
+   whole rack of tiny chips would look lost full-width; keep it comfortably
+   under the board grid's own max. */
+#screen-maker .maker-stack {
+  max-width: 640px;
+}
+
+@media (max-width: 760px) {
+  .maker-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .maker-preview-wrap {
+    position: static;
+  }
+
+  .maker-preview {
+    max-width: 240px;
+  }
+}
+
+/* "No Hat" / "No shades" have no colour to show, so their swatch is an empty
+   frame — a dashed box reads as "the option of nothing" rather than as one
+   more colour that happens to be missing. */
+.maker-swatch--empty {
+  background: transparent;
+  border: 1px dashed var(--line);
+  box-shadow: none;
+}
