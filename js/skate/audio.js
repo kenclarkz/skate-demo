@@ -69,6 +69,9 @@ export class Audio {
     this.musicIndex = 0;      // where the playlist is right now
     this.currentTrack = null; // the last track that actually started playing
     this.onTrack = null;      // (track) => void, fired as each playlist track starts
+    this.musicStartTime = 0;  // ctx.currentTime when the current track began
+    this.musicPaused = false; // local playlist held by the in-game play button
+    this.musicPausedAt = 0;   // seconds into the track where it was paused
   }
 
   /**
@@ -252,13 +255,22 @@ export class Audio {
    * onended starts the next one — wrapping around to the top at the end of the
    * list. No scheduling here to get a seam wrong; a track that is still going
    * when the state is torn down has its handler cleared first so nothing fires
-   * twice.
+   * twice. `at` is a resume offset: pauseMusic() remembers where it stopped,
+   * and resumeMusic() hands that back so the pause is seamless rather than a
+   * restart.
    */
-  playMusicTrack(i) {
+  playMusicTrack(i, at = 0) {
     const ctx = this.ctx;
     const n = this.musicBuffers.length;
     i = ((i % n) + n) % n;
-    if (this.musicSource) this.musicSource.onended = null;
+    // Swapping to a new track — a skip, a resume, or the natural end of the
+    // previous one. Detach the old source and stop it so a still-playing track
+    // cannot overlap the next and an already-ended one cannot fire twice.
+    const prev = this.musicSource;
+    if (prev) {
+      prev.onended = null;
+      try { prev.stop(); } catch {}
+    }
     const src = ctx.createBufferSource();
     src.buffer = this.musicBuffers[i];
     src.loop = false;
@@ -268,10 +280,73 @@ export class Audio {
       this.musicIndex = (i + 1) % n;
       this.playMusicTrack(this.musicIndex);
     };
-    src.start();
+    if (at > 0) src.start(0, at);
+    else src.start();
     this.musicSource = src;
+    this.musicStartTime = ctx.currentTime - at;
+    this.musicPaused = false;
     this.currentTrack = this.musicTracks[i];
     this.onTrack?.(this.currentTrack);
+  }
+
+  /**
+   * The in-game transport for the built-in Skate FM station: skip, back, and
+   * play/pause. Spotify's own provider methods answer the same three calls
+   * when a connected station is the radio, so radio.js can dispatch either way
+   * without caring which one it is talking to.
+   */
+
+  /** Skip forward in the local playlist, wrapping around the end. */
+  nextTrack() {
+    if (!this.musicBuffers?.length) return;
+    const n = this.musicBuffers.length;
+    this.musicIndex = (this.musicIndex + 1) % n;
+    this.musicPausedAt = 0;
+    this.playMusicTrack(this.musicIndex);
+  }
+
+  /**
+   * Skip backward the way a music transport actually behaves: restart a track
+   * that has been playing for a few seconds, jump to the previous one if we
+   * are still near its start.
+   */
+  previousTrack() {
+    if (!this.musicBuffers?.length) return;
+    const n = this.musicBuffers.length;
+    if (this.musicSource && this.ctx.currentTime - this.musicStartTime > 3) {
+      this.playMusicTrack(this.musicIndex);
+    } else {
+      this.musicIndex = ((this.musicIndex - 1) % n + n) % n;
+      this.musicPausedAt = 0;
+      this.playMusicTrack(this.musicIndex);
+    }
+  }
+
+  /** Pause the local playlist, remembering where it stopped. */
+  pauseMusic() {
+    if (!this.ready || !this.musicSource || this.musicPaused) return;
+    const src = this.musicSource;
+    src.onended = null;
+    this.musicPausedAt = Math.max(0, this.ctx.currentTime - this.musicStartTime);
+    this.musicPaused = true;
+    this.musicSource = null;
+    try { src.stop(); } catch {}
+  }
+
+  /** Resume the local playlist from where pauseMusic() stopped it. */
+  resumeMusic() {
+    if (!this.ready || !this.musicBuffers?.length || !this.musicPaused) return;
+    const at = this.musicPausedAt;
+    this.musicPaused = false;
+    this.musicPausedAt = 0;
+    this.playMusicTrack(this.musicIndex, at);
+  }
+
+  /** Play/pause toggle for the in-game transport button on Skate FM. */
+  togglePlay() {
+    if (!this.ready || !this.musicBuffers?.length) return;
+    if (this.musicPaused) this.resumeMusic();
+    else this.pauseMusic();
   }
 
   /**
