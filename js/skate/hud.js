@@ -6,6 +6,7 @@
 
 import { TrickPreview } from './preview.js';
 import { CharacterPreview } from './character-preview.js';
+import { BoardPreview } from './board-preview.js';
 import { drawPortrait } from './character-portrait.js';
 import { drawGestureDiagram } from './gesture-diagram.js';
 import { summarize, customLook } from './custom.js';
@@ -20,8 +21,67 @@ import {
   HATS,
   SHADES,
 } from './custom.js';
+import { TYPES } from './boards.js';
+import {
+  STYLES,
+  ICON_LIST,
+  PIXEL_PAINT,
+  PIXEL_PALETTE,
+  BLOCKART_COLS,
+  BLOCKART_ROWS,
+  summarizeDesign,
+  colorHex,
+} from './board-design.js';
 
-const SCREENS = ['start', 'paused', 'guide', 'parks', 'myparks', 'store', 'charselect', 'maker', 'settings'];
+const SCREENS = ['start', 'paused', 'guide', 'parks', 'myparks', 'store', 'charselect', 'maker', 'boardmaker', 'settings'];
+
+/** A two-colour hint of each style, drawn in CSS for its chip. */
+const STYLE_SWATCH = {
+  plain: 'repeating-linear-gradient(45deg,#9b6a3f,#9b6a3f 6px,#d8b183 6px,#d8b183 12px)',
+  pixel: 'linear-gradient(#2f7fd1,#35ffe0,#ffc93f,#ff2fa0)',
+  graffiti: 'linear-gradient(#d3323f,#8a1f2a)',
+  flame: 'linear-gradient(#ffc93f,#e6392e,#ff2fa0)',
+  lightning: 'linear-gradient(#35ffe0,#12141a)',
+  camo: 'repeating-linear-gradient(45deg,#3f7a3f,#3f7a3f 6px,#12141a 6px,#12141a 12px)',
+  checker: 'repeating-conic-gradient(#ffffff 0 25%,#12141a 0 50%) 0 0 / 10px 10px',
+  stickers: 'radial-gradient(#ffc93f 30%,#ff2fa0 70%)',
+  arcade: 'linear-gradient(#9a5cf6,#12141a)',
+  shop: 'repeating-linear-gradient(45deg,#e6392e,#e6392e 5px,#12141a 5px,#12141a 10px)',
+  blockart: 'conic-gradient(#ff2fa0,#35ffe0,#ffc93f,#9a5cf6,#ff2fa0)',
+};
+
+/** A readable glyph per sticker icon, for the rack and the layer chips. */
+const STICKER_GLYPH = {
+  star: '★',
+  heart: '♥',
+  coin: '◉',
+  bolt: '⚡',
+  skull: '☠',
+  diamond: '◆',
+  ring: '○',
+  ghost: '👻',
+  pac: '◐',
+  cross: '✕',
+  arrow: '➤',
+  invader: '👾',
+  crown: '♛',
+};
+
+/** Which block-art cell sits under a pointer on the scaled paint canvas. */
+function cellFromEvent(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 0.9999);
+  const y = Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 0.9999);
+  return {
+    row: Math.floor(y * BLOCKART_ROWS),
+    col: Math.floor(x * BLOCKART_COLS),
+  };
+}
+
+/** The saved-board card inserts a user-typed name into innerHTML. */
+function escapeHtml(v) {
+  return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 /**
  * The maker's racks, in display order. Each role's name is the draft key it
@@ -369,6 +429,21 @@ export class Hud {
       this.makerGrids[id] = document.getElementById(`maker-${id}`);
     }
 
+    // The Board Maker's own window: the same trick as the Character Maker —
+    // a second mini-scene for the deck, and plain DOM racks around it.
+    this.bmPreviewEl = document.getElementById('bm-preview');
+    this.bmPreview = this.bmPreviewEl ? new BoardPreview(this.bmPreviewEl) : null;
+    this.bmCoinsEl = document.getElementById('bm-coins');
+    this.bmNameEl = document.getElementById('bm-name');
+    this.bmSummaryEl = document.getElementById('bm-summary');
+    this.bmSavedEl = document.getElementById('bm-saved');
+    this.bmStyleEl = document.getElementById('bm-style');
+    this.bmTypeEl = document.getElementById('bm-type');
+    this.bmColorsEl = document.getElementById('bm-colors');
+    this.bmOptionsEl = document.getElementById('bm-options-body');
+    this.bmSaveBtn = document.getElementById('btn-bm-save');
+    this._bmPainting = false;
+
     this.dismountBtn = document.getElementById('btn-dismount');
     this.mountBtn = document.getElementById('btn-mount');
     this.sitBtn = document.getElementById('btn-sit');
@@ -435,6 +510,22 @@ export class Hud {
       makePart: null,
       // The maker's Save pressed with the current draft.
       makeSave: null,
+      // The Board Maker's rack events. Style/type pick by id; colour picks by
+      // role name and hex; the block-art grid paints one cell at a time.
+      boardMaker: null,
+      bmStyle: null,
+      bmType: null,
+      bmColor: null,
+      bmName: null,
+      bmText: null,
+      bmPixel: null,
+      bmBrush: null,
+      bmAddSticker: null,
+      bmLayer: null,
+      bmLayerChange: null,
+      bmLayerDelete: null,
+      bmSave: null,
+      bmSavedAction: null,
       dismount: null,
       mount: null,
       sit: null,
@@ -477,6 +568,76 @@ export class Hud {
         e.preventDefault();
         this.setMakerFullscreen(false);
       }
+    });
+    click('btn-boardmaker', () => this.on.boardMaker?.());
+    click('btn-store-boardmaker', () => this.on.boardMaker?.());
+    click('btn-bm-save', () => this.on.bmSave?.());
+    click('btn-bm-back', () => this.on.back?.());
+    this.bmNameEl?.addEventListener('input', (e) => this.on.bmName?.(e.target.value));
+
+    // The Board Maker's racks are rebuilt on every render, so their events
+    // hang off the two persistent containers instead of the rebuilt buttons.
+    const bmScreen = document.getElementById('screen-boardmaker');
+    bmScreen?.addEventListener('click', (e) => {
+      const style = e.target.closest('[data-bmstyle]');
+      if (style) { this.on.bmStyle?.(style.dataset.bmstyle); return; }
+      const type = e.target.closest('[data-bmtype]');
+      if (type) { this.on.bmType?.(type.dataset.bmtype); return; }
+      const saved = e.target.closest('[data-bmsaved]');
+      if (saved) {
+        const act = e.target.closest('[data-bmaction]');
+        this.on.bmSavedAction?.(saved.dataset.bmsaved, act ? act.dataset.bmaction : 'equip');
+        return;
+      }
+      const brush = e.target.closest('[data-bmbrush]');
+      if (brush) { this.on.bmBrush?.(Number(brush.dataset.bmbrush)); return; }
+      const icon = e.target.closest('[data-bmicon]');
+      if (icon) { this.on.bmAddSticker?.(icon.dataset.bmicon); return; }
+      const layer = e.target.closest('[data-bmlayer]');
+      if (layer) { this.on.bmLayer?.(Number(layer.dataset.bmlayer)); return; }
+      const del = e.target.closest('[data-bmldel]');
+      if (del) { this.on.bmLayerDelete?.(Number(del.dataset.bmldel)); return; }
+    });
+    // Paint the block-art grid on pointer-down and keep painting while the
+    // pointer is held down and drags across — a tap paints one cell, a swipe
+    // paints a stroke. The cell under the pointer is found from the scaled
+    // canvas's own box, so it lines up at any CSS size.
+    bmScreen?.addEventListener('pointerdown', (e) => {
+      const pixel = e.target.closest('[data-bmpixel]');
+      if (!pixel) return;
+      this._bmPainting = true;
+      pixel.setPointerCapture?.(e.pointerId);
+      const rc = cellFromEvent(e, pixel);
+      this.on.bmPixel?.(rc.row, rc.col);
+    });
+    bmScreen?.addEventListener('pointermove', (e) => {
+      if (!this._bmPainting) return;
+      const pixel = e.target.closest('[data-bmpixel]');
+      if (!pixel) return;
+      const rc = cellFromEvent(e, pixel);
+      this.on.bmPixel?.(rc.row, rc.col);
+    });
+    bmScreen?.addEventListener('pointerup', () => { this._bmPainting = false; });
+    bmScreen?.addEventListener('pointercancel', () => { this._bmPainting = false; });
+    this.bmOptionsEl?.addEventListener('input', (e) => {
+      const color = e.target.closest('[data-bmcolor]');
+      if (color) { this.on.bmColor?.(color.dataset.bmcolor, color.value); return; }
+      const text = e.target.closest('[data-bmtext]');
+      if (text) { this.on.bmText?.(text.value); return; }
+      const lx = e.target.closest('[data-bmlx]');
+      if (lx) { this.on.bmLayerChange?.(Number(lx.dataset.bmlx), 'x', Number(lx.value)); return; }
+      const lz = e.target.closest('[data-bmlz]');
+      if (lz) { this.on.bmLayerChange?.(Number(lz.dataset.bmlz), 'z', Number(lz.value)); return; }
+      const lr = e.target.closest('[data-bmlr]');
+      if (lr) { this.on.bmLayerChange?.(Number(lr.dataset.bmlr), 'rot', Number(lr.value)); return; }
+      const ls = e.target.closest('[data-bmls]');
+      if (ls) { this.on.bmLayerChange?.(Number(ls.dataset.bmls), 'scale', Number(ls.value)); return; }
+    });
+    // The main colour rack lives in its own container, so the same delegation
+    // hangs off it too.
+    this.bmColorsEl?.addEventListener('input', (e) => {
+      const color = e.target.closest('[data-bmcolor]');
+      if (color) this.on.bmColor?.(color.dataset.bmcolor, color.value);
     });
     click('btn-settings', () => this.on.settings?.());
     click('btn-settings-back', () => this.on.back?.());
@@ -736,6 +897,8 @@ export class Hud {
     // spinning only while its screen is the one in front.
     if (name === 'maker') this.makerPreview?.start();
     else this.makerPreview?.stop();
+    if (name === 'boardmaker') this.bmPreview?.start();
+    else this.bmPreview?.stop();
     this.on.screenChanged?.(name);
   }
 
@@ -746,6 +909,7 @@ export class Hud {
     this.current = null;
     this.preview?.stop();
     this.makerPreview?.stop();
+    this.bmPreview?.stop();
     this.on.screenChanged?.(null);
   }
 
@@ -1194,6 +1358,182 @@ export class Hud {
           );
         })
         .join('');
+    }
+  }
+
+  /** Rebuilds every rack of the Board Maker from the working draft. Called on
+   * every change, so the preview, the swatches and the options stay in step;
+   * the racks are cheap to rebuild, the WebGL deck is not, so the deck just
+   * gets a `.set(draft)` from main.js instead of being recreated here. */
+  renderBoardMaker(config, save, selectedLayer = null) {
+    const hex = colorHex;
+    if (this.bmCoinsEl) this.bmCoinsEl.textContent = save.coins.toLocaleString();
+    if (this.bmNameEl) this.bmNameEl.value = config.name;
+    if (this.bmSummaryEl) this.bmSummaryEl.textContent = summarizeDesign(config);
+
+    // Saved boards: equip, re-open for editing, or delete. The card shows the
+    // deck colour with a stripe of the accent, plus the one-line summary.
+    if (this.bmSavedEl) {
+      this.bmSavedEl.innerHTML = save.customBoards.length
+        ? save.customBoards
+            .map((b) => {
+              const equipped = save.boardId === `custom:${b.id}`;
+              return (
+                `<div class="bm-saved-card${equipped ? ' current' : ''}" data-bmsaved="${b.id}">` +
+                `<span class="bm-saved-swatch" style="background:${hex(b.colors.deck)};box-shadow:inset 0 0 0 4px ${hex(b.colors.accent)}"></span>` +
+                `<b>${escapeHtml(b.name)}</b>` +
+                `<span class="bm-saved-meta">${summarizeDesign(b)}</span>` +
+                `<span class="bm-saved-actions">` +
+                `<button type="button" data-bmaction="equip">${equipped ? 'On now' : 'Equip'}</button>` +
+                `<button type="button" data-bmaction="edit">Edit</button>` +
+                `<button type="button" class="bm-saved-del" data-bmaction="delete">Delete</button>` +
+                `</span></div>`
+              );
+            })
+            .join('')
+        : `<p class="tag">No custom boards saved yet — build one and press Save.</p>`;
+    }
+
+    // Style rack. The chip swatch is a CSS gradient hint, not the real deck —
+    // that lives in the preview.
+    if (this.bmStyleEl) {
+      this.bmStyleEl.innerHTML = STYLES.map((s) => {
+        const cur = config.style === s.id;
+        const glyph = STYLE_SWATCH[s.id] || STYLE_SWATCH.plain;
+        return (
+          `<button type="button" class="maker-option${cur ? ' current' : ''}" data-bmstyle="${s.id}">` +
+          `<span class="maker-swatch" style="background:${glyph}"></span>` +
+          `<span class="name">${s.name}</span><span class="status">${cur ? 'On' : 'Pick'}</span></button>`
+        );
+      }).join('');
+    }
+
+    // Deck-type rack. The glyph is a bar whose length hints at the deck's.
+    if (this.bmTypeEl) {
+      this.bmTypeEl.innerHTML = TYPES.map((t) => {
+        const cur = config.type === t.id;
+        const w = Math.round(55 + ((t.shape.deckLen - 0.56) / (1.05 - 0.56)) * 40);
+        return (
+          `<button type="button" class="maker-option${cur ? ' current' : ''}" data-bmtype="${t.id}">` +
+          `<span class="maker-swatch maker-swatch--glyph"><i style="width:${w}%;height:8px;border-radius:3px"></i></span>` +
+          `<span class="name">${t.name}</span><span class="status">${cur ? 'On' : 'Pick'}</span></button>`
+        );
+      }).join('');
+    }
+
+    // The colour rack: one native colour input per role, labels from the
+    // deck's own palette so a swap of deck type (a different shop deck, a
+    // wider cruiser) still reads correctly.
+    const colorRows = [
+      ['deck', 'Deck'],
+      ['grip', 'Grip'],
+      ['accent', 'Stripe'],
+      ['truck', 'Trucks'],
+      ['wheel', 'Wheels'],
+      ['bearing', 'Bearings'],
+    ];
+    if (this.bmColorsEl) {
+      this.bmColorsEl.innerHTML = colorRows
+        .map(
+          ([k, label]) =>
+            `<div class="bm-color-row"><label for="bmc-${k}">${label}</label>` +
+            `<input type="color" id="bmc-${k}" data-bmcolor="${k}" value="${hex(config.colors[k])}"></div>`
+        )
+        .join('');
+    }
+
+    // The per-style options panel: pattern colours, block lettering, the
+    // pixel editor, and the sticker rack. Only the parts that apply.
+    if (this.bmOptionsEl) {
+      let html = '';
+      if (config.style !== 'plain') {
+        html +=
+          `<div class="bm-color-rows">` +
+          `<div class="bm-color-row"><label for="bmc-sa">Pattern A</label><input type="color" id="bmc-sa" data-bmcolor="styleColor" value="${hex(config.styleColor)}"></div>` +
+          `<div class="bm-color-row"><label for="bmc-sb">Pattern B</label><input type="color" id="bmc-sb" data-bmcolor="styleColor2" value="${hex(config.styleColor2)}"></div>` +
+          `</div>`;
+      }
+      if (config.style === 'graffiti' || config.style === 'shop') {
+        html +=
+          `<div class="bm-text-field"><label for="bm-text">Block lettering</label>` +
+          `<input type="text" id="bm-text" data-bmtext value="${escapeHtml(config.text)}" maxlength="12" spellcheck="false" placeholder="SKATE"></div>`;
+      }
+      if (config.style === 'blockart') {
+        html +=
+          `<div class="bm-pixel-wrap">` +
+          `<canvas class="bm-pixel" data-bmpixel width="${BLOCKART_COLS * 16}" height="${BLOCKART_ROWS * 16}"></canvas>` +
+          `<div class="bm-brushes">` +
+          `<button type="button" class="bm-brush bm-brush--eraser${config.pixelBrush === 0 ? ' current' : ''}" data-bmbrush="0" title="Erase">⌫</button>` +
+          PIXEL_PAINT.map(
+            (c, i) =>
+              `<button type="button" class="bm-brush${config.pixelBrush === i + 1 ? ' current' : ''}" data-bmbrush="${i + 1}" style="background:${hex(c)}" title="Paint"></button>`
+          ).join('') +
+          `</div></div>`;
+      }
+      html +=
+        `<div class="bm-sticker-bar">` +
+        `<span class="bm-sticker-label">Stickers — tap one to stick it on the deck</span>` +
+        `<div class="bm-sticker-icons">` +
+        ICON_LIST.map(
+          (id) => `<button type="button" class="bm-sticker-btn" data-bmicon="${id}" title="${id}">${STICKER_GLYPH[id] || '✳'}</button>`
+        ).join('') +
+        `</div>` +
+        (config.layers.length
+          ? `<div class="bm-layers">` +
+            config.layers
+              .map(
+                (l, i) =>
+                  `<button type="button" class="bm-layer-chip${i === selectedLayer ? ' current' : ''}" data-bmlayer="${i}">${STICKER_GLYPH[l.icon] || '✳'} ${i + 1}</button>`
+              )
+              .join('') +
+            `</div>`
+          : '') +
+        `</div>`;
+      const layer = selectedLayer != null ? config.layers[selectedLayer] : null;
+      if (layer) {
+        html +=
+          `<div class="bm-layer-inspector">` +
+          `<label>Across<input type="range" data-bmlx="${selectedLayer}" min="-0.18" max="0.18" step="0.005" value="${layer.x}"></label>` +
+          `<label>Along<input type="range" data-bmlz="${selectedLayer}" min="-0.3" max="0.3" step="0.005" value="${layer.z}"></label>` +
+          `<label>Spin<input type="range" data-bmlr="${selectedLayer}" min="-180" max="180" step="5" value="${Math.round((layer.rot * 180) / Math.PI)}"></label>` +
+          `<label>Size<input type="range" data-bmls="${selectedLayer}" min="0.5" max="2" step="0.05" value="${layer.scale}"></label>` +
+          `<button type="button" class="bm-layer-del" data-bmldel="${selectedLayer}">Delete sticker</button>` +
+          `</div>`;
+      }
+      this.bmOptionsEl.innerHTML = html;
+    }
+
+    // Redraw the block-art grid (only exists when the block-art style is on).
+    const pixel = this.bmOptionsEl?.querySelector('[data-bmpixel]');
+    if (pixel) this.drawPixelGrid(pixel, config.pixels);
+  }
+
+  /** Paints the block-art grid into its canvas — a full redraw each time a
+   * cell changes; the grid is small, so redrawing beats patching. */
+  drawPixelGrid(canvas, pixels) {
+    const g = canvas.getContext('2d');
+    const cw = canvas.width / BLOCKART_COLS;
+    const ch = canvas.height / BLOCKART_ROWS;
+    for (let r = 0; r < BLOCKART_ROWS; r++) {
+      for (let c = 0; c < BLOCKART_COLS; c++) {
+        const idx = pixels && pixels[r] && pixels[r][c] ? pixels[r][c] : 0;
+        g.fillStyle = idx ? colorHex(PIXEL_PALETTE[idx]) : '#12151b';
+        g.fillRect(c * cw, r * ch, cw + 0.5, ch + 0.5);
+      }
+    }
+    g.strokeStyle = 'rgba(255,255,255,0.08)';
+    g.lineWidth = 1;
+    for (let c = 0; c <= BLOCKART_COLS; c++) {
+      g.beginPath();
+      g.moveTo(c * cw, 0);
+      g.lineTo(c * cw, canvas.height);
+      g.stroke();
+    }
+    for (let r = 0; r <= BLOCKART_ROWS; r++) {
+      g.beginPath();
+      g.moveTo(0, r * ch);
+      g.lineTo(canvas.width, r * ch);
+      g.stroke();
     }
   }
 

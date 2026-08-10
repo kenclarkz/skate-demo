@@ -10,6 +10,16 @@ import { byId as outfitById, DEFAULT_OUTFIT_ID } from './outfits.js';
 import { byId as accessoryById, DEFAULT_ACCESSORY_ID } from './accessories.js';
 import { byId as charById, DEFAULT_CHARACTER_ID } from './characters.js';
 import { DEFAULT_CUSTOM, skinById, heightById, buildById, pantsById, shoeById, hairById, shirtById, hatById, shadeById, PART_BY_ID } from './custom.js';
+import {
+  DEFAULT_BOARD_DRAFT,
+  STYLES,
+  styleById,
+  ICONS,
+  PIXEL_PALETTE,
+  BLOCKART_COLS,
+  BLOCKART_ROWS,
+} from './board-design.js';
+import { TYPES, typeById } from './boards.js';
 
 const KEY = 'skate.save';
 
@@ -33,6 +43,13 @@ const DEFAULTS = {
   // thing that sets it, and without it the picker has no custom rider to show.
   custom: {},
   customSaved: false,
+  // The Board Maker's working draft and its saved decks. `customBoards` is the
+  // rack the shop and the maker's own saved-grid read; `boardMakerSaved` just
+  // records that at least one custom board exists. A custom board's id in
+  // boardId is 'custom:<id>', so it can never collide with the catalogue.
+  customBoards: [],
+  boardDraft: null,
+  boardMakerSaved: false,
   sound: true,
   seenGuide: false,
   park: 'home',
@@ -56,6 +73,72 @@ const freshBoards = () => [DEFAULT_BOARD_ID];
 const freshOutfits = () => [DEFAULT_OUTFIT_ID];
 const freshAccessories = () => [DEFAULT_ACCESSORY_ID];
 const freshCustom = () => ({ ...DEFAULT_CUSTOM });
+const freshCustomBoards = () => [];
+const freshBoardDraft = () => ({
+  ...DEFAULT_BOARD_DRAFT,
+  colors: { ...DEFAULT_BOARD_DRAFT.colors },
+  pixels: DEFAULT_BOARD_DRAFT.pixels.map((r) => [...r]),
+  layers: [],
+});
+/** The palette keys a board draft carries; every one is a hex number. */
+const PALETTE_KEYS = ['deck', 'grip', 'accent', 'ply', 'truck', 'wheel', 'bearing', 'bolt'];
+
+const clampNum = (v, lo, hi) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(lo, Math.min(hi, n));
+};
+
+/**
+ * Only ids and numbers the board maker knows about, and only for their own
+ * slots — a hand-edited save must not be able to invent a style, a sticker
+ * icon or a palette colour out of thin air.
+ */
+function cleanBoardDraft(raw) {
+  const d = freshBoardDraft();
+  if (!raw || typeof raw !== 'object') return d;
+  if (typeof raw.name === 'string' && raw.name.trim()) d.name = raw.name.trim().slice(0, 40);
+  if (typeof raw.type === 'string' && typeById[raw.type]) d.type = raw.type;
+  if (raw.colors && typeof raw.colors === 'object') {
+    for (const k of PALETTE_KEYS) {
+      const v = Number(raw.colors[k]);
+      if (Number.isInteger(v)) d.colors[k] = (v >>> 0) & 0xffffff;
+    }
+  }
+  if (typeof raw.style === 'string' && styleById[raw.style]) d.style = raw.style;
+  if (typeof raw.text === 'string') d.text = raw.text.slice(0, 12);
+  const sc = Number(raw.styleColor);
+  if (Number.isInteger(sc)) d.styleColor = (sc >>> 0) & 0xffffff;
+  const sc2 = Number(raw.styleColor2);
+  if (Number.isInteger(sc2)) d.styleColor2 = (sc2 >>> 0) & 0xffffff;
+  if (Array.isArray(raw.pixels)) {
+    for (let r = 0; r < BLOCKART_ROWS; r++) {
+      const row = raw.pixels[r];
+      for (let c = 0; c < BLOCKART_COLS; c++) {
+        const v = row && row[c];
+        if (Number.isInteger(v)) {
+          d.pixels[r][c] = Math.max(0, Math.min(PIXEL_PALETTE.length - 1, v));
+        }
+      }
+    }
+  }
+  if (Number.isInteger(raw.pixelBrush)) {
+    d.pixelBrush = Math.max(0, Math.min(PIXEL_PALETTE.length - 1, raw.pixelBrush));
+  }
+  if (Array.isArray(raw.layers)) {
+    d.layers = raw.layers
+      .filter((l) => l && typeof l.icon === 'string' && ICONS[l.icon])
+      .map((l) => ({
+        icon: l.icon,
+        x: clampNum(l.x, -0.3, 0.3),
+        z: clampNum(l.z, -0.4, 0.4),
+        rot: clampNum(l.rot, -Math.PI, Math.PI),
+        scale: clampNum(l.scale, 0.4, 2.5),
+        color: Number.isInteger(Number(l.color)) ? (Number(l.color) >>> 0) & 0xffffff : d.styleColor,
+      }));
+  }
+  return d;
+}
 /** The maker's owned-clothes lists, seeded with each role's free default. */
 const freshOwned = () => ({
   pants: [DEFAULT_CUSTOM.pants],
@@ -109,6 +192,8 @@ function read() {
         accessories: freshAccessories(),
         custom: freshCustom(),
         owned: freshOwned(),
+        customBoards: freshCustomBoards(),
+        boardDraft: freshBoardDraft(),
       };
     const parsed = JSON.parse(raw);
     const s = {
@@ -118,6 +203,8 @@ function read() {
       accessories: freshAccessories(),
       custom: freshCustom(),
       owned: freshOwned(),
+      customBoards: freshCustomBoards(),
+      boardDraft: freshBoardDraft(),
       ...parsed,
     };
     // A hand-edited or half-written record must not be able to break the game.
@@ -147,6 +234,29 @@ function read() {
       ? [...new Set([DEFAULT_BOARD_ID, ...parsed.boards.filter((id) => byId[id])])]
       : freshBoards();
     s.boardId = typeof s.boardId === 'string' && s.boards.includes(s.boardId) ? s.boardId : DEFAULT_BOARD_ID;
+    // The board maker's deck. Each saved board keeps its own id (or is given
+    // one), so boardId can point at 'custom:<id>' without colliding with the
+    // catalogue.
+    s.customBoards = Array.isArray(parsed.customBoards)
+      ? parsed.customBoards
+          .map((raw, i) => {
+            const b = cleanBoardDraft(raw);
+            b.id =
+              raw && typeof raw.id === 'string' && raw.id
+                ? raw.id.slice(0, 40)
+                : `b${Date.now().toString(36)}${i.toString(36)}`;
+            return b;
+          })
+          .filter((b) => b.id)
+      : freshCustomBoards();
+    s.boardDraft = cleanBoardDraft(parsed.boardDraft);
+    s.boardMakerSaved = parsed.boardMakerSaved === true;
+    const customEquipped =
+      typeof s.boardId === 'string' &&
+      s.boardId.startsWith('custom:') &&
+      s.customBoards.some((b) => b.id === s.boardId.slice(7));
+    if (customEquipped) s.boardId = s.boardId;
+    else if (!s.boards.includes(s.boardId)) s.boardId = DEFAULT_BOARD_ID;
     s.outfits = Array.isArray(parsed.outfits)
       ? [...new Set([DEFAULT_OUTFIT_ID, ...parsed.outfits.filter((id) => outfitById[id])])]
       : freshOutfits();
@@ -176,6 +286,8 @@ function read() {
       accessories: freshAccessories(),
       custom: freshCustom(),
       owned: freshOwned(),
+      customBoards: freshCustomBoards(),
+      boardDraft: freshBoardDraft(),
     };
   }
 }
@@ -239,6 +351,21 @@ export const save = {
   },
   get customSaved() {
     return state.customSaved;
+  },
+  /** The Board Maker's saved decks, as copies. */
+  get customBoards() {
+    return state.customBoards.map((b) => ({ ...b, colors: { ...b.colors }, layers: b.layers.map((l) => ({ ...l })) }));
+  },
+  /** The Board Maker's working draft, as a fresh deep-ish copy. */
+  get boardDraft() {
+    return cleanBoardDraft(state.boardDraft);
+  },
+  get boardMakerSaved() {
+    return state.boardMakerSaved;
+  },
+  /** @returns true if the given id is one of the player's saved custom boards. */
+  hasCustomBoard(id) {
+    return state.customBoards.some((b) => b.id === id);
   },
   /** The maker's owned-clothes lists, as copies. */
   get owned() {
@@ -399,6 +526,57 @@ export const save = {
     return state.customSaved;
   },
 
+  /** Store the Board Maker's draft as it changes; a reload must not lose it. */
+  setBoardDraft(draft) {
+    state.boardDraft = cleanBoardDraft(draft);
+    flush();
+  },
+
+  /**
+   * Save the draft as a new custom board and equip it on the spot. A fresh id
+   * each save — saving twice makes two decks, the way the character maker's
+   * save makes one custom rider that gets overwritten. Editing a saved board
+   * and saving again is meant to be "save a new one", not "overwrite mine".
+   */
+  saveCustomBoard(draft) {
+    const d = cleanBoardDraft(draft);
+    const id = `b${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+    const board = { id, ...d };
+    state.customBoards.push(board);
+    state.boardId = `custom:${id}`;
+    state.boardMakerSaved = true;
+    flush();
+    return id;
+  },
+
+  /** Overwrite an existing saved board with the draft, keeping its id. */
+  updateCustomBoard(id, draft) {
+    const i = state.customBoards.findIndex((b) => b.id === id);
+    if (i === -1) return false;
+    const d = cleanBoardDraft(draft);
+    state.customBoards[i] = { id, ...d };
+    state.boardId = `custom:${id}`;
+    state.boardMakerSaved = true;
+    flush();
+    return true;
+  },
+
+  /** @returns true if the custom board exists and is now equipped. */
+  setCustomBoard(id) {
+    if (!state.customBoards.some((b) => b.id === id)) return false;
+    state.boardId = `custom:${id}`;
+    flush();
+    return true;
+  },
+
+  /** Remove a saved custom board; equipping falls back to the starter. */
+  deleteCustomBoard(id) {
+    state.customBoards = state.customBoards.filter((b) => b.id !== id);
+    if (state.boardId === `custom:${id}`) state.boardId = DEFAULT_BOARD_ID;
+    flush();
+    return true;
+  },
+
   /**
    * The maker's owned-lists. `role` is one of pants/shoes/shirts/hats/shades;
    * free parts are always treated as owned by the maker and never recorded
@@ -497,6 +675,8 @@ export const save = {
       boards: freshBoards(),
       outfits: freshOutfits(),
       accessories: freshAccessories(),
+      customBoards: freshCustomBoards(),
+      boardDraft: freshBoardDraft(),
     });
     flush();
   },

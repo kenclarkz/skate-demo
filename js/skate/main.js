@@ -24,6 +24,7 @@ import { OUTFITS, byId as outfitById } from './outfits.js';
 import { ACCESSORIES, byId as accessoryById } from './accessories.js';
 import { CHARACTERS, byId as charById, lookOf, styleOf } from './characters.js';
 import { customLook, heightById, buildById } from './custom.js';
+import { designPalette, sanitizeText } from './board-design.js';
 import { GRABS } from './tricks.js';
 import { makeAiSkaters } from './ai.js';
 import { makeBirds } from './bird.js';
@@ -41,6 +42,7 @@ const MYPARKSMENU = 'myparks';
 const STOREMENU = 'store';
 const CHARSELECT = 'charselect';
 const MAKER = 'maker';
+const BOARDMAKER = 'boardmaker';
 const SETTINGSMENU = 'settings';
 const WALKING = 'walking';
 const DESIGNER = 'designer';
@@ -91,8 +93,29 @@ let park = new Park(allParks().find((p) => p.id === save.park) || PARKS[0]);
 scene.add(park.group);
 lighting.setPark(park);
 
-const equipped = boardById[save.boardId];
-const board = new Board(equipped?.palette, boardTypeById[equipped?.type]?.shape);
+const setup = boardSetup();
+const board = new Board(setup.palette, setup.shape, setup.design);
+
+/**
+ * The palette, shape and (for a custom deck) design the currently equipped
+ * board is built from. A 'custom:<id>' board resolves from the maker's saved
+ * decks; anything else is straight from the catalogue.
+ */
+function boardSetup() {
+  const id = save.boardId;
+  if (typeof id === 'string' && id.startsWith('custom:')) {
+    const draft = save.customBoards.find((b) => b.id === id.slice(7));
+    if (draft) return { palette: designPalette(draft), shape: boardTypeById[draft.type]?.shape, design: draft };
+  }
+  const def = boardById[id];
+  return { palette: def?.palette, shape: boardTypeById[def?.type]?.shape, design: null };
+}
+
+/** Rebuild the in-game board to match whatever save.boardId now points at. */
+function applyBoard() {
+  const setup = boardSetup();
+  board.build(setup.palette, setup.shape, setup.design);
+}
 
 /**
  * The look the rig is built from. A made character is resolved straight from
@@ -457,6 +480,144 @@ function saveMadeCharacter() {
   showStart();
 }
 
+// --- the Board Maker -------------------------------------------------------
+/** Which sticker layer in the draft the inspector is pointed at. A draft's own
+ * state, so it does not live in the draft itself (and so cannot be saved). */
+let boardSelectedLayer = null;
+
+/** The Board Maker's whole working state, in one place, so it cannot drift. */
+function boardDraft() {
+  return save.boardDraft;
+}
+
+/** Re-render the Board Maker's racks and its turntable from the draft. */
+function renderBoardMaker() {
+  const d = boardDraft();
+  hud.renderBoardMaker(d, save, boardSelectedLayer);
+  hud.bmPreview?.setBoard(designPalette(d), boardTypeById[d.type]?.shape, d);
+}
+
+function showBoardMaker() {
+  state = BOARDMAKER;
+  input.enabled = false;
+  renderBoardMaker();
+  hud.show('boardmaker');
+}
+
+/** Mutate the draft, persist it, then re-render everything that reads it. */
+function updateBoardDraft(mutate) {
+  const d = boardDraft();
+  mutate(d);
+  save.setBoardDraft(d);
+  renderBoardMaker();
+}
+
+function pickBoardStyle(id) {
+  updateBoardDraft((d) => {
+    d.style = id;
+    boardSelectedLayer = null;
+  });
+}
+
+function pickBoardType(id) {
+  updateBoardDraft((d) => {
+    d.type = id;
+  });
+}
+
+function pickBoardColor(role, hex) {
+  updateBoardDraft((d) => {
+    d.colors[role] = parseInt(hex.slice(1), 16);
+  });
+}
+
+function setBoardName(name) {
+  updateBoardDraft((d) => {
+    d.name = name.trim().slice(0, 40) || 'My Board';
+  });
+}
+
+function setBoardText(text) {
+  updateBoardDraft((d) => {
+    d.text = sanitizeText(text);
+  });
+}
+
+/** Paint one block-art cell with the current brush (brush 0 erases). */
+function paintBoardPixel(row, col) {
+  updateBoardDraft((d) => {
+    if (!d.pixels[row]) d.pixels[row] = [];
+    d.pixels[row][col] = d.pixelBrush;
+  });
+}
+
+function pickBoardBrush(idx) {
+  updateBoardDraft((d) => {
+    d.pixelBrush = idx;
+  });
+}
+
+function addBoardSticker(icon) {
+  updateBoardDraft((d) => {
+    d.layers.push({ icon, x: 0, z: 0, rot: 0, scale: 1 });
+    boardSelectedLayer = d.layers.length - 1;
+  });
+}
+
+function selectBoardLayer(i) {
+  boardSelectedLayer = i;
+  renderBoardMaker();
+}
+
+/** One knob of the selected sticker's inspector: position, spin, size. */
+function changeBoardLayer(i, key, value) {
+  updateBoardDraft((d) => {
+    const l = d.layers[i];
+    if (!l) return;
+    l[key] = key === 'rot' ? (value * Math.PI) / 180 : value;
+  });
+}
+
+function deleteBoardLayer(i) {
+  updateBoardDraft((d) => {
+    d.layers.splice(i, 1);
+    boardSelectedLayer = d.layers.length ? Math.min(boardSelectedLayer ?? 0, d.layers.length - 1) : null;
+  });
+}
+
+/** The maker's Save: the draft becomes a new saved board and is equipped. */
+function saveMadeBoard() {
+  const d = boardDraft();
+  save.saveCustomBoard(d);
+  applyBoard();
+  boardSelectedLayer = null;
+  showStart();
+}
+
+/** Equip, edit or delete one of the player's saved custom boards. */
+function boardSavedAction(id, action) {
+  if (action === 'delete') {
+    save.deleteCustomBoard(id);
+    applyBoard();
+    renderBoardMaker();
+  } else if (action === 'edit') {
+    const b = save.customBoards.find((x) => x.id === id);
+    if (b) {
+      save.setBoardDraft({
+        ...b,
+        colors: { ...b.colors },
+        pixels: b.pixels.map((r) => [...r]),
+        layers: b.layers.map((l) => ({ ...l })),
+      });
+      boardSelectedLayer = null;
+      renderBoardMaker();
+    }
+  } else if (save.setCustomBoard(id)) {
+    applyBoard();
+    renderBoardMaker();
+  }
+}
+
 function showSettings() {
   state = SETTINGSMENU;
   input.enabled = false;
@@ -543,6 +704,20 @@ hud.on.riders = () => showRiders();
 hud.on.maker = () => showMaker();
 hud.on.makePart = (role, id) => pickMakerPart(role, id);
 hud.on.makeSave = () => saveMadeCharacter();
+hud.on.boardMaker = () => showBoardMaker();
+hud.on.bmStyle = (id) => pickBoardStyle(id);
+hud.on.bmType = (id) => pickBoardType(id);
+hud.on.bmColor = (role, hex) => pickBoardColor(role, hex);
+hud.on.bmName = (name) => setBoardName(name);
+hud.on.bmText = (text) => setBoardText(text);
+hud.on.bmPixel = (row, col) => paintBoardPixel(row, col);
+hud.on.bmBrush = (idx) => pickBoardBrush(idx);
+hud.on.bmAddSticker = (icon) => addBoardSticker(icon);
+hud.on.bmLayer = (i) => selectBoardLayer(i);
+hud.on.bmLayerChange = (i, key, value) => changeBoardLayer(i, key, value);
+hud.on.bmLayerDelete = (i) => deleteBoardLayer(i);
+hud.on.bmSave = () => saveMadeBoard();
+hud.on.bmSavedAction = (id, action) => boardSavedAction(id, action);
 hud.on.pause = () => togglePause();
 hud.on.board = (id) => selectBoard(id);
 hud.on.outfit = (id) => selectOutfit(id);
@@ -679,7 +854,7 @@ hud.on.reset = () => {
   C.setCameraMode(save.cameraMode);
   chase.setMode(save.cameraMode);
   hud.setCoins(save.coins);
-  board.build(boardById[save.boardId].palette, boardTypeById[boardById[save.boardId].type].shape);
+  applyBoard();
   const look = currentLook();
   skater.rebuild(look.palette, look.style, look.scale);
   hud.setPreviewLook(look.palette, look.style, look.scale);
