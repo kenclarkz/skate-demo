@@ -23,6 +23,7 @@ import { BOARDS, TYPES as BOARD_TYPES, byId as boardById, typeById as boardTypeB
 import { OUTFITS, byId as outfitById } from './outfits.js';
 import { ACCESSORIES, byId as accessoryById } from './accessories.js';
 import { CHARACTERS, byId as charById, lookOf, styleOf } from './characters.js';
+import { customLook, heightById, buildById } from './custom.js';
 import { GRABS } from './tricks.js';
 import { makeAiSkaters } from './ai.js';
 import { makeBirds } from './bird.js';
@@ -38,6 +39,8 @@ const GUIDE = 'guide';
 const PARKMENU = 'parks';
 const MYPARKSMENU = 'myparks';
 const STOREMENU = 'store';
+const CHARSELECT = 'charselect';
+const MAKER = 'maker';
 const SETTINGSMENU = 'settings';
 const WALKING = 'walking';
 const DESIGNER = 'designer';
@@ -90,8 +93,24 @@ lighting.setPark(park);
 
 const equipped = boardById[save.boardId];
 const board = new Board(equipped?.palette, boardTypeById[equipped?.type]?.shape);
-/** The equipped character, with the equipped shirt and accessory over the top. */
+
+/**
+ * The look the rig is built from. A made character is resolved straight from
+ * the maker's draft — skin, height, build, clothes and all — instead of from
+ * a character with an outfit painted over it, which is the whole point of the
+ * Character Maker. Every path also carries `scale` (the height and width the
+ * body is drawn at), so the caller can hand the same figure to the builder.
+ */
 function currentLook() {
+  if (save.characterId === 'custom') {
+    const c = save.custom;
+    const look = customLook(c);
+    return {
+      ...look,
+      character: { palette: look.palette },
+      scale: { height: heightById[c.height].scale, width: buildById[c.build].width },
+    };
+  }
   const character = charById[save.characterId] ?? CHARACTERS[0];
   const outfit = outfitById[save.outfitId];
   const accessory = accessoryById[save.accessoryId];
@@ -99,11 +118,12 @@ function currentLook() {
     character,
     palette: lookOf(character, outfit, accessory),
     style: styleOf(character, accessory),
+    scale: { height: 1, width: 1 },
   };
 }
 
 const startLook = currentLook();
-const skater = new Skater(startLook.palette, { style: startLook.style });
+const skater = new Skater(startLook.palette, { style: startLook.style, scale: startLook.scale });
 const ride = new Ride(park, board, skater);
 scene.add(ride.frame);
 
@@ -271,7 +291,7 @@ hud.setCameraMode(save.cameraMode);
 hud.setStats(save);
 hud.setCurrentPark(park.name);
 hud.setCoins(save.coins);
-hud.setPreviewLook(startLook.palette, startLook.style);
+hud.setPreviewLook(startLook.palette, startLook.style, startLook.scale);
 C.setTopSpeed(save.speed);
 C.setCamZoom(save.camZoom);
 C.setHoldToPush(save.holdToPush);
@@ -378,6 +398,65 @@ function showStore() {
   hud.show('store');
 }
 
+function showRiders() {
+  state = CHARSELECT;
+  input.enabled = false;
+  hud.renderCharSelect(CHARACTERS, save.characterId, save.hasCustom(), save.custom);
+  hud.show('charselect');
+}
+
+/** The maker's whole working state, in one place, so it cannot drift. */
+function makeDraft() {
+  return save.custom;
+}
+
+/** Re-render the maker and its turntable from the current draft. */
+function renderMaker() {
+  const c = makeDraft();
+  hud.renderMaker(c, save);
+  const look = customLook(c);
+  hud.makerPreview?.setLook(
+    look.palette,
+    look.style,
+    { height: heightById[c.height].scale, width: buildById[c.build].width }
+  );
+}
+
+function showMaker() {
+  state = MAKER;
+  input.enabled = false;
+  renderMaker();
+  hud.show('maker');
+}
+
+/**
+ * A part picked in the maker. Paid parts are bought the moment they are picked,
+ * exactly like the shop's own buy-then-equip flow, and then they are owned for
+ * ever — there is no own/equip split in the maker. A part that cannot be
+ * afforded is simply not picked.
+ */
+function pickMakerPart(role, id) {
+  const c = makeDraft();
+  if (!save.hasPart(role, id) && !save.buyPart(role, id)) return;
+  c[role] = id;
+  save.setCustom(c);
+  renderMaker();
+}
+
+/**
+ * The maker's Save: the draft becomes the custom character and is equipped on
+ * the spot. Re-saving an existing custom character just re-skins it in place —
+ * it is one slot, not a collection, so there is no second price to pay for
+ * going back to tweak it.
+ */
+function saveMadeCharacter() {
+  save.saveCustom(makeDraft());
+  const look = currentLook();
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
+  showStart();
+}
+
 function showSettings() {
   state = SETTINGSMENU;
   input.enabled = false;
@@ -460,6 +539,10 @@ hud.on.lighting = (mode) => {
 };
 hud.on.store = () => showStore();
 hud.on.settings = () => showSettings();
+hud.on.riders = () => showRiders();
+hud.on.maker = () => showMaker();
+hud.on.makePart = (role, id) => pickMakerPart(role, id);
+hud.on.makeSave = () => saveMadeCharacter();
 hud.on.pause = () => togglePause();
 hud.on.board = (id) => selectBoard(id);
 hud.on.outfit = (id) => selectOutfit(id);
@@ -500,8 +583,8 @@ function selectOutfit(id) {
   if (!save.outfits.includes(id) && !save.buyOutfit(id)) return false; // can't afford it
   save.setOutfit(id);
   const look = currentLook();
-  skater.rebuild(look.palette, look.style);
-  hud.setPreviewLook(look.palette, look.style);
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
   hud.renderOutfits(OUTFITS, save, look.character.palette);
   // The accessory portraits are drawn on the equipped rider, so a new shirt
   // repaints them just like it repaints the "Original" outfit swatch.
@@ -511,15 +594,19 @@ function selectOutfit(id) {
 
 /**
  * Swap rider. Free — this is a picker, not a shop, so there is no owned-list
- * and nothing to afford. The shirt stays as it was and re-applies over the new
- * character, which is why the rebuild goes through currentLook().
+ * and nothing to afford. 'custom' is the made character, which resolves from
+ * the maker's draft; the shirt stays as it was and re-applies over whichever
+ * rider, which is why the rebuild goes through currentLook().
  */
 function selectCharacter(id) {
-  if (!charById[id] || !save.setCharacter(id)) return false;
+  if (!save.setCharacter(id)) return false;
   const look = currentLook();
-  skater.rebuild(look.palette, look.style);
-  hud.setPreviewLook(look.palette, look.style);
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
   hud.renderCharacters(CHARACTERS, save.characterId);
+  // The Riders screen carries the made character too, so it gets repainted
+  // alongside the shop's rack when a pick happens there.
+  hud.renderCharSelect(CHARACTERS, save.characterId, save.hasCustom(), save.custom);
   // The shirt rack sits under the skaters in the same screen, and its "Original"
   // swatch is whatever the equipped rider wears — so swapping rider has to
   // repaint that too, or the card goes on advertising the old one's colours.
@@ -537,8 +624,8 @@ function selectAccessory(id) {
   if (!save.accessories.includes(id) && !save.buyAccessory(id)) return false; // can't afford it
   save.setAccessory(id);
   const look = currentLook();
-  skater.rebuild(look.palette, look.style);
-  hud.setPreviewLook(look.palette, look.style);
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
   hud.renderAccessories(ACCESSORIES, save, look);
   return true;
 }
@@ -594,8 +681,8 @@ hud.on.reset = () => {
   hud.setCoins(save.coins);
   board.build(boardById[save.boardId].palette, boardTypeById[boardById[save.boardId].type].shape);
   const look = currentLook();
-  skater.rebuild(look.palette, look.style);
-  hud.setPreviewLook(look.palette, look.style);
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
   C.setTopSpeed(save.speed);
   C.setCamZoom(save.camZoom);
   radio?.resetSettings();
@@ -1149,6 +1236,10 @@ window.__skate = {
   selectAccessory,
   selectCharacter,
   showStore,
+  showRiders,
+  showMaker,
+  pickMakerPart,
+  saveMadeCharacter,
   /** Step off the board, the way the on-screen button does. */
   dismount,
   /** Hop back on, the way the on-screen button does — possible from anywhere. */

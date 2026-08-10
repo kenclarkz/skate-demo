@@ -9,6 +9,7 @@ import { byId, DEFAULT_BOARD_ID } from './boards.js';
 import { byId as outfitById, DEFAULT_OUTFIT_ID } from './outfits.js';
 import { byId as accessoryById, DEFAULT_ACCESSORY_ID } from './accessories.js';
 import { byId as charById, DEFAULT_CHARACTER_ID } from './characters.js';
+import { DEFAULT_CUSTOM, skinById, heightById, buildById, pantsById, shoeById, hairById, shirtById, hatById, shadeById, PART_BY_ID } from './custom.js';
 
 const KEY = 'skate.save';
 
@@ -26,6 +27,12 @@ const DEFAULTS = {
   // Characters are picked, not bought — there is no `characters` owned-list to
   // go with this the way boards and outfits have one.
   characterId: DEFAULT_CHARACTER_ID,
+  // The Character Maker's draft: the part ids a made character is built from.
+  // It lives here so half-finished edits survive a reload. `customSaved` is
+  // what lets characterId be 'custom' — the maker's Save button is the only
+  // thing that sets it, and without it the picker has no custom rider to show.
+  custom: {},
+  customSaved: false,
   sound: true,
   seenGuide: false,
   park: 'home',
@@ -43,21 +50,74 @@ const DEFAULTS = {
 // `boards`, `outfits` and `accessories` (which ones are owned) are arrays and
 // so cannot live in DEFAULTS itself — spreading DEFAULTS only copies the
 // reference, and the first purchase would then push onto (and permanently
-// mutate) that shared default.
+// mutate) that shared default. `custom` and the maker's per-part owned-lists
+// are the same story.
 const freshBoards = () => [DEFAULT_BOARD_ID];
 const freshOutfits = () => [DEFAULT_OUTFIT_ID];
 const freshAccessories = () => [DEFAULT_ACCESSORY_ID];
+const freshCustom = () => ({ ...DEFAULT_CUSTOM });
+/** The maker's owned-clothes lists, seeded with each role's free default. */
+const freshOwned = () => ({
+  pants: [DEFAULT_CUSTOM.pants],
+  shoes: [DEFAULT_CUSTOM.shoes],
+  shirt: [DEFAULT_CUSTOM.shirt],
+  hat: [DEFAULT_CUSTOM.hat],
+  shades: [DEFAULT_CUSTOM.shades],
+});
+// Role names are the maker's own draft keys (config.shirt, config.hat, ...),
+// so the maker's renderer can hand the same word to both the draft lookup and
+// save.js and never translate between the two.
+const OWNED_ROLES = ['pants', 'shoes', 'shirt', 'hat', 'shades'];
+
+/** Only ids the maker knows about, and only for their own slots. */
+function cleanCustom(raw) {
+  const c = freshCustom();
+  if (!raw || typeof raw !== 'object') return c;
+  const slot = (key, byId) => (typeof raw[key] === 'string' && byId[raw[key]] ? raw[key] : c[key]);
+  c.skin = slot('skin', skinById);
+  c.height = slot('height', heightById);
+  c.build = slot('build', buildById);
+  c.hair = slot('hair', hairById);
+  c.pants = slot('pants', pantsById);
+  c.shoes = slot('shoes', shoeById);
+  c.shirt = slot('shirt', shirtById);
+  c.hat = slot('hat', hatById);
+  c.shades = slot('shades', shadeById);
+  return c;
+}
+
+/** The maker's owned-lists, cleaned so a hand-edited save cannot invent parts. */
+function cleanOwned(raw) {
+  const owned = freshOwned();
+  if (!raw || typeof raw !== 'object') return owned;
+  for (const role of OWNED_ROLES) {
+    const list = raw[role];
+    if (!Array.isArray(list)) continue;
+    owned[role] = [...new Set([owned[role][0], ...list.filter((id) => PART_BY_ID[role][id])])];
+  }
+  return owned;
+}
 
 function read() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS, boards: freshBoards(), outfits: freshOutfits(), accessories: freshAccessories() };
+    if (!raw)
+      return {
+        ...DEFAULTS,
+        boards: freshBoards(),
+        outfits: freshOutfits(),
+        accessories: freshAccessories(),
+        custom: freshCustom(),
+        owned: freshOwned(),
+      };
     const parsed = JSON.parse(raw);
     const s = {
       ...DEFAULTS,
       boards: freshBoards(),
       outfits: freshOutfits(),
       accessories: freshAccessories(),
+      custom: freshCustom(),
+      owned: freshOwned(),
       ...parsed,
     };
     // A hand-edited or half-written record must not be able to break the game.
@@ -100,9 +160,23 @@ function read() {
         ? s.accessoryId
         : DEFAULT_ACCESSORY_ID;
     s.characterId = typeof s.characterId === 'string' && charById[s.characterId] ? s.characterId : DEFAULT_CHARACTER_ID;
+    // The maker's draft is cleaned field by field, and the owned-lists only
+    // hold ids the maker actually sells. 'custom' as a character choice is
+    // only legitimate once the maker's Save has actually been pressed.
+    s.custom = cleanCustom(parsed.custom);
+    s.customSaved = parsed.customSaved === true;
+    s.owned = cleanOwned(parsed.owned);
+    if (s.characterId === 'custom' && !s.customSaved) s.characterId = DEFAULT_CHARACTER_ID;
     return s;
   } catch {
-    return { ...DEFAULTS, boards: freshBoards(), outfits: freshOutfits(), accessories: freshAccessories() };
+    return {
+      ...DEFAULTS,
+      boards: freshBoards(),
+      outfits: freshOutfits(),
+      accessories: freshAccessories(),
+      custom: freshCustom(),
+      owned: freshOwned(),
+    };
   }
 }
 
@@ -158,6 +232,17 @@ export const save = {
   },
   get characterId() {
     return state.characterId;
+  },
+  /** The maker's draft config, as a copy so callers cannot mutate state. */
+  get custom() {
+    return { ...state.custom };
+  },
+  get customSaved() {
+    return state.customSaved;
+  },
+  /** The maker's owned-clothes lists, as copies. */
+  get owned() {
+    return Object.fromEntries(OWNED_ROLES.map((r) => [r, [...state.owned[r]]]));
   },
   get sound() {
     return state.sound;
@@ -289,8 +374,54 @@ export const save = {
 
   /** @returns true if that is a real character and it is now equipped. */
   setCharacter(id) {
-    if (!charById[id]) return false;
+    if (!charById[id] && !(id === 'custom' && state.customSaved)) return false;
     state.characterId = id;
+    flush();
+    return true;
+  },
+
+  /** Store the maker's draft as it changes; a reload must not lose it. */
+  setCustom(config) {
+    state.custom = cleanCustom(config);
+    flush();
+  },
+
+  /** The maker's Save: the draft becomes the custom character and is equipped. */
+  saveCustom(config) {
+    state.custom = cleanCustom(config);
+    state.customSaved = true;
+    state.characterId = 'custom';
+    flush();
+  },
+
+  /** @returns true if the maker has ever saved a custom character. */
+  hasCustom() {
+    return state.customSaved;
+  },
+
+  /**
+   * The maker's owned-lists. `role` is one of pants/shoes/shirts/hats/shades;
+   * free parts are always treated as owned by the maker and never recorded
+   * here, which is why only paid ones show up after their purchase.
+   */
+  ownedParts(role) {
+    return state.owned[role] ? [...state.owned[role]] : [];
+  },
+
+  /** @returns true if the part is bought or priced nothing. */
+  hasPart(role, id) {
+    const by = PART_BY_ID[role];
+    if (!by || !by[id]) return false;
+    return !by[id].price || state.owned[role].includes(id);
+  },
+
+  /** @returns true if the purchase actually went through. */
+  buyPart(role, id) {
+    const by = PART_BY_ID[role];
+    const part = by && by[id];
+    if (!part || !part.price || state.owned[role].includes(id) || state.coins < part.price) return false;
+    state.coins -= part.price;
+    state.owned[role].push(id);
     flush();
     return true;
   },

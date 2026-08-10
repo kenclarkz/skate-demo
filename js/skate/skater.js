@@ -256,6 +256,15 @@ function headParts(p, style) {
     parts.push(box(p.cap, 0.19, 0.085, 0.2, 0, 0.115, 0));
     parts.push(box(p.cap, 0.17, 0.06, 0.18, 0, 0.08, 0));
     parts.push(box(p.cap, 0.25, 0.022, 0.26, 0, 0.135, 0));   // the wide brim
+  } else if (s === 'flatcap') {
+    // A flat cap: a low crown that sits forward over the brow, a little panel
+    // at the back, and a stubby peak. Rounder and shallower than the 'cap'
+    // snapback, so the two free head options read differently side by side.
+    parts.push(box(p.hair, 0.168, 0.045, 0.188, 0, 0.052, -0.01));
+    parts.push(box(p.cap, 0.185, 0.075, 0.2, 0, 0.095, 0.012));
+    parts.push(box(p.cap, 0.185, 0.06, 0.1, 0, 0.095, -0.095)); // back panel
+    parts.push(box(p.band, 0.19, 0.028, 0.205, 0, 0.062, 0.01));
+    parts.push(box(p.cap, 0.15, 0.02, 0.08, 0, 0.058, 0.14));   // the peak
   } else if (s === 'tophat') {
     // A straight-sided tube on a wide brim, with a band where the two meet.
     parts.push(box(p.cap, 0.21, 0.05, 0.21, 0, 0.115, 0));
@@ -279,15 +288,24 @@ function headParts(p, style) {
   return parts;
 }
 
-function buildGeometries(p, style = {}) {
+function buildGeometries(p, style = {}, scale = { height: 1, width: 1 }) {
   // Long sleeves are the one thing below the collar that can change, because it
   // is only which colour the forearm segment is built in — no measurement moves.
   const foreColour = style.sleeves === 'long' ? p.sleeve : p.skin;
+  // The Character Maker's height and build. Everything scales so the rig's own
+  // constants stay the source of truth: a length multiplies C.THIGH et al. and
+  // a width multiplies the girths (C.HIP_W, C.SHOULDER_W, segment widths) but
+  // never a height — short+stocky and tall+slim are genuinely different
+  // silhouettes, not one slider squashing both ways. The head is left alone
+  // entirely: headParts() reads only colours, and nobody scales a skull with
+  // their belt.
+  const h = scale.height || 1;
+  const w = scale.width || 1;
   return {
     pelvis: merge(
       [
-        box(p.pants, C.HIP_W * 2 + 0.10, 0.155, 0.18, 0, 0, 0),
-        box(p.band, C.HIP_W * 2 + 0.105, 0.032, 0.186, 0, 0.072, 0), // belt
+        box(p.pants, (C.HIP_W * 2 + 0.10) * w, 0.155 * h, 0.18 * w, 0, 0, 0),
+        box(p.band, (C.HIP_W * 2 + 0.105) * w, 0.032 * h, 0.186 * w, 0, 0.072 * h, 0), // belt
       ],
       6
     ),
@@ -296,36 +314,36 @@ function buildGeometries(p, style = {}) {
     // direction the rider faces.
     chest: merge(
       [
-        box(p.shirt, 0.30, C.CHEST, 0.21, 0, 0, 0),
-        box(p.shirt, C.SHOULDER_W * 2, 0.12, 0.2, 0, C.SHOULDER_UP, 0),
-        box(p.sleeve, 0.1, 0.12, 0.15, C.SHOULDER_W, C.SHOULDER_UP - 0.03, 0),
-        box(p.sleeve, 0.1, 0.12, 0.15, -C.SHOULDER_W, C.SHOULDER_UP - 0.03, 0),
-        box(p.shirt, 0.25, 0.1, 0.195, 0, -C.CHEST / 2 + 0.04, 0), // waist, narrower
+        box(p.shirt, 0.30 * w, C.CHEST * h, 0.21 * w, 0, 0, 0),
+        box(p.shirt, C.SHOULDER_W * 2 * w, 0.12 * h, 0.2 * w, 0, C.SHOULDER_UP * h, 0),
+        box(p.sleeve, 0.1 * w, 0.12 * h, 0.15 * w, C.SHOULDER_W * w, (C.SHOULDER_UP - 0.03) * h, 0),
+        box(p.sleeve, 0.1 * w, 0.12 * h, 0.15 * w, -C.SHOULDER_W * w, (C.SHOULDER_UP - 0.03) * h, 0),
+        box(p.shirt, 0.25 * w, 0.1 * h, 0.195 * w, 0, (-C.CHEST / 2 + 0.04) * h, 0), // waist, narrower
         // A neck. Without one there is a visible gap between collar and jaw, and
         // the head reads as floating rather than as attached.
-        box(p.skin, 0.09, 0.11, 0.09, 0, C.SHOULDER_UP + 0.055, -0.005),
+        box(p.skin, 0.09 * w, 0.11 * h, 0.09 * w, 0, (C.SHOULDER_UP + 0.055) * h, -0.005),
       ],
       6
     ),
     head: merge(headParts(p, style), 6),
-    thigh: segment(p.pants, 0.15, C.THIGH, 0.16, 0.76),
-    shin: segment(p.pantsDark, 0.12, C.SHIN, 0.13, 0.84),
-    upperArm: segment(style.sleeves === 'long' ? p.sleeve : p.skin, 0.085, C.UPPER_ARM, 0.085, 0.86),
-    forearm: segment(foreColour, 0.075, C.FOREARM, 0.075, 0.9),
+    thigh: segment(p.pants, 0.15 * w, C.THIGH * h, 0.16 * w, 0.76),
+    shin: segment(p.pantsDark, 0.12 * w, C.SHIN * h, 0.13 * w, 0.84),
+    upperArm: segment(style.sleeves === 'long' ? p.sleeve : p.skin, 0.085 * w, C.UPPER_ARM * h, 0.085 * w, 0.86),
+    forearm: segment(foreColour, 0.075 * w, C.FOREARM * h, 0.075 * w, 0.9),
     // A shoe. Its origin is the ankle and the toe points up its own +Z.
     shoe: merge(
       [
-        box(p.shoe, 0.09, 0.062, C.FOOT_L * 0.8, 0, -0.03, 0.035),
-        box(p.sole, 0.094, 0.022, C.FOOT_L * 0.84, 0, -0.062, 0.035),
-        box(p.shoe, 0.084, 0.08, 0.08, 0, 0.012, -0.055),       // heel cup
+        box(p.shoe, 0.09 * w, 0.062 * h, C.FOOT_L * 0.8, 0, -0.03 * h, 0.035),
+        box(p.sole, 0.094 * w, 0.022 * h, C.FOOT_L * 0.84, 0, -0.062 * h, 0.035),
+        box(p.shoe, 0.084 * w, 0.08 * h, 0.08, 0, 0.012 * h, -0.055),       // heel cup
       ],
       6
     ),
-    hand: merge([box(p.skin, 0.075, 0.09, 0.052, 0, 0, 0)], 6),
+    hand: merge([box(p.skin, 0.075 * w, 0.09 * h, 0.052, 0, 0, 0)], 6),
     // The untucked back of the shirt — built with its top edge at the local
     // origin rather than centred on it, so rotating this mesh hinges it from
     // where it actually meets the waist instead of swinging through it.
-    hem: merge([box(p.shirt, 0.28, 0.16, 0.03, 0, -0.08, 0)], 4),
+    hem: merge([box(p.shirt, 0.28 * w, 0.16 * h, 0.03, 0, -0.08 * h, 0)], 4),
   };
 }
 
@@ -336,7 +354,7 @@ export class Skater {
    * whole extra draw call on its own unique material (the colour is per
    * skater), and nobody is watching a bystander's shirt for it.
    */
-  constructor(palette = PALETTE, { glow = true, style = {} } = {}) {
+  constructor(palette = PALETTE, { glow = true, style = {}, scale = { height: 1, width: 1 } } = {}) {
     this.group = new THREE.Group();
     this.material = new THREE.MeshPhongMaterial({
       vertexColors: true,
@@ -346,7 +364,10 @@ export class Skater {
 
     this.palette = palette;
     this.style = style;
-    this.geos = buildGeometries(palette, style);
+    // The Character Maker's body: how tall, how wide. Kept on the instance
+    // because every pose reads these back — see pose() and poseWalk().
+    this.scale = { height: scale.height || 1, width: scale.width || 1 };
+    this.geos = buildGeometries(palette, style, this.scale);
     const mk = (geo) => {
       const m = new THREE.Mesh(geo, this.material);
       this.group.add(m);
@@ -376,7 +397,7 @@ export class Skater {
     // pose()'s last line — so it never has to solve anything of its own.
     this.hasGlow = glow;
     if (glow) {
-      this.glowGeo = new THREE.BoxGeometry(0.37, C.CHEST * 1.2, 0.28);
+      this.glowGeo = new THREE.BoxGeometry(0.37 * this.scale.width, C.CHEST * 1.2 * this.scale.height, 0.28 * this.scale.width);
       this.glowMat = new THREE.MeshBasicMaterial({
         color: palette.shirt,
         transparent: true,
@@ -431,6 +452,13 @@ export class Skater {
    * without anything else having to know.
    */
   pose(s, dt) {
+    // The Character Maker's body applied to the joint network: every height
+    // below is a config constant scaled by `this.scale.height` and every width
+    // by `this.scale.width`, so a short rider's hips really sit lower and a
+    // stocky one's shoulders really spread — the same physics state poses a
+    // whole range of bodies without the ride model knowing or caring.
+    const H = this.scale.height;
+    const W = this.scale.width;
     // --- the body's frame -------------------------------------------------
     // A regular rider faces the toe side, which is -X. Riding fakie after a 180
     // means facing the other way, and mirroring this one number is all of it.
@@ -472,7 +500,7 @@ export class Skater {
     // Over the middle of the stance, dropped by the crouch, and biased towards
     // the back foot — which is where a skater's weight sits, and what stops the
     // figure looking like it is mid-lunge.
-    const hipH = this.hipY.step(dt, C.HIP_H - s.crouch, s.stiff ? 34 : 18);
+    const hipH = this.hipY.step(dt, C.HIP_H * H - s.crouch, s.stiff ? 34 : 18);
     _mid.copy(feet[0]).add(feet[1]).multiplyScalar(0.5).lerp(feet[1], 0.16);
     const pelvis = this.joints.pelvis;
     // Start on the deck plane and go up the *leaned* up axis: that puts the hips
@@ -486,8 +514,8 @@ export class Skater {
     // cannot drop your hips 25 cm and keep your shoulders above them.
     const pitch = s.spinePitch + s.crouch * 0.8 + Math.min(0.16, s.speed * 0.012);
     const chest = this.joints.chest;
-    chest.copy(pelvis).addScaledVector(_up, C.SPINE * Math.cos(pitch));
-    chest.addScaledVector(_fwd, C.SPINE * Math.sin(pitch));
+    chest.copy(pelvis).addScaledVector(_up, C.SPINE * H * Math.cos(pitch));
+    chest.addScaledVector(_fwd, C.SPINE * H * Math.sin(pitch));
 
     // The chest's own basis: pitched forward, and turned further into the
     // direction of travel than the hips are. The gap between the two is the
@@ -519,13 +547,13 @@ export class Skater {
     const sway = Math.sin(this.windPhase * 0.63 + 1.7) * windT * 0.3;
     _eul.set(flap, 0, sway, 'XYZ');
     _qHem.setFromEuler(_eul);
-    this.hem.position.copy(chest).addScaledVector(_y, -C.CHEST * 0.5).addScaledVector(_z, -0.09);
+    this.hem.position.copy(chest).addScaledVector(_y, -C.CHEST * 0.5 * H).addScaledVector(_z, -0.09);
     this.hem.quaternion.copy(_qChest).multiply(_qHem);
 
     // The head looks where the board is going, which for a rider stood sideways
     // means turned most of the way out of the shoulders.
     const head = this.joints.head;
-    head.copy(chest).addScaledVector(_y, C.NECK);
+    head.copy(chest).addScaledVector(_y, C.NECK * H);
     this.head.position.copy(head);
     _q.setFromAxisAngle(UP, this.headYaw.step(dt, s.lookYaw) * face * -1);
     this.head.quaternion.copy(_qChest).premultiply(_q);
@@ -537,8 +565,8 @@ export class Skater {
     // --- legs -------------------------------------------------------------
     _d.set(1, 0, 0).applyQuaternion(this.pelvis.quaternion); // the pelvis's right
     const hips = this.joints.hip;
-    hips[0].copy(pelvis).addScaledVector(_d, -C.HIP_W).addScaledVector(_up, -0.05);
-    hips[1].copy(pelvis).addScaledVector(_d, C.HIP_W).addScaledVector(_up, -0.05);
+    hips[0].copy(pelvis).addScaledVector(_d, -C.HIP_W * W).addScaledVector(_up, -0.05);
+    hips[1].copy(pelvis).addScaledVector(_d, C.HIP_W * W).addScaledVector(_up, -0.05);
 
     for (let i = 0; i < 2; i++) {
       // Knees break forwards and outwards, further out the deeper the crouch —
@@ -550,7 +578,7 @@ export class Skater {
         .addScaledVector(_right, outward * (0.30 + s.crouch * 1.5))
         .addScaledVector(_up, -0.12)
         .normalize();
-      solveJoint(hips[i], feet[i], C.THIGH, C.SHIN, _a, this.joints.knee[i]);
+      solveJoint(hips[i], feet[i], C.THIGH * H, C.SHIN * H, _a, this.joints.knee[i]);
       this.joints.foot[i].copy(feet[i]);
       bone(this.legs[i].thigh, hips[i], this.joints.knee[i], _a);
       bone(this.legs[i].shin, this.joints.knee[i], feet[i], _a);
@@ -648,10 +676,12 @@ export class Skater {
    */
   poseArms(s, dt, chest, chestQ) {
     const shoulders = this.joints.shoulder;
+    const H = this.scale.height;
+    const W = this.scale.width;
     _d.set(1, 0, 0).applyQuaternion(chestQ);
     _y.set(0, 1, 0).applyQuaternion(chestQ);
-    shoulders[0].copy(chest).addScaledVector(_d, -C.SHOULDER_W).addScaledVector(_y, C.SHOULDER_UP);
-    shoulders[1].copy(chest).addScaledVector(_d, C.SHOULDER_W).addScaledVector(_y, C.SHOULDER_UP);
+    shoulders[0].copy(chest).addScaledVector(_d, -C.SHOULDER_W * W).addScaledVector(_y, C.SHOULDER_UP * H);
+    shoulders[1].copy(chest).addScaledVector(_d, C.SHOULDER_W * W).addScaledVector(_y, C.SHOULDER_UP * H);
 
     // Which literal arm a grab uses. GRABS' hand field names a fixed body side
     // (0/1, the same side hips and feet already index by), not "front" or
@@ -659,7 +689,7 @@ export class Skater {
     // one flip happens right here rather than needing to touch tricks.js.
     const grabHand = s.grab ? (s.switchStance ? 1 - s.grab.hand : s.grab.hand) : -1;
 
-    const reach = C.UPPER_ARM + C.FOREARM;
+    const reach = (C.UPPER_ARM + C.FOREARM) * H;
     for (let i = 0; i < 2; i++) {
       const lead = i === 0 ? 1 : -1; // 0 is the nose-side arm
       const spread = s.armSpread;
@@ -695,7 +725,7 @@ export class Skater {
         .addScaledVector(_up, -0.75)
         .addScaledVector(_right, lead * 0.5)
         .normalize();
-      solveJoint(shoulders[i], hand, C.UPPER_ARM, C.FOREARM, _b, this.joints.elbow[i]);
+      solveJoint(shoulders[i], hand, C.UPPER_ARM * H, C.FOREARM * H, _b, this.joints.elbow[i]);
       this.joints.hand[i].copy(hand);
       bone(this.arms[i].upper, shoulders[i], this.joints.elbow[i], _b);
       bone(this.arms[i].fore, this.joints.elbow[i], hand, _b);
@@ -719,9 +749,9 @@ export class Skater {
    * buildGeometries(); rebuilding walks that exact same shape and disposes
    * each shared geometry exactly once, not once per mesh that points at it.
    */
-  rebuild(palette, style = this.style) {
+  rebuild(palette, style = this.style, scale = this.scale) {
     const old = this.geos;
-    const fresh = buildGeometries(palette, style);
+    const fresh = buildGeometries(palette, style, scale);
     this.pelvis.geometry = fresh.pelvis;
     this.chest.geometry = fresh.chest;
     this.head.geometry = fresh.head;
@@ -738,9 +768,15 @@ export class Skater {
     }
     for (const key of Object.keys(old)) old[key].dispose();
     this.geos = fresh;
-    if (this.hasGlow) this.glowMat.color.setHex(palette.shirt);
+    if (this.hasGlow) {
+      this.glowGeo.dispose();
+      this.glowGeo = new THREE.BoxGeometry(0.37 * scale.width, C.CHEST * 1.2 * scale.height, 0.28 * scale.width);
+      this.glow.geometry = this.glowGeo;
+      this.glowMat.color.setHex(palette.shirt);
+    }
     this.palette = palette;
     this.style = style;
+    this.scale = { height: scale.height || 1, width: scale.width || 1 };
   }
 }
 
@@ -869,8 +905,10 @@ Skater.prototype.poseWalk = function poseWalk(w, dt) {
   _right.crossVectors(_fwd, _up).normalize();
 
   const sit = this.sitS.step(dt, w.sit, 8);
+  const H = this.scale.height;
+  const W = this.scale.width;
   const ankle = C.FOOT_H;
-  const reach = C.THIGH + C.SHIN;
+  const reach = (C.THIGH + C.SHIN) * H;
 
   // --- feet: a walk cycle while moving, tucked in and flat while sitting ---
   const stepLen = 0.3 * w.stride;
@@ -882,10 +920,10 @@ Skater.prototype.poseWalk = function poseWalk(w, dt) {
     const along = -Math.cos(legPhase) * stepLen;
     const lift = Math.max(0, Math.sin(legPhase)) * liftH;
     _a.copy(w.pos)
-      .addScaledVector(_right, side * C.HIP_W)
+      .addScaledVector(_right, side * C.HIP_W * W)
       .addScaledVector(_fwd, along)
       .addScaledVector(_up, ankle + lift);
-    _b.copy(w.pos).addScaledVector(_right, side * C.HIP_W).addScaledVector(_fwd, 0.3).addScaledVector(_up, ankle);
+    _b.copy(w.pos).addScaledVector(_right, side * C.HIP_W * W).addScaledVector(_fwd, 0.3).addScaledVector(_up, ankle);
     _a.lerp(_b, sit);
     if (!this.ready) this.feetS[i].set(_a);
     feet.push(this.feetS[i].step(dt, _a));
@@ -901,8 +939,8 @@ Skater.prototype.poseWalk = function poseWalk(w, dt) {
   // --- torso: upright, leaning back a little once seated ---
   const pitch = -0.05 - sit * 0.16;
   const chest = this.joints.chest;
-  chest.copy(pelvis).addScaledVector(_up, C.SPINE * Math.cos(pitch));
-  chest.addScaledVector(_fwd, C.SPINE * Math.sin(pitch));
+  chest.copy(pelvis).addScaledVector(_up, C.SPINE * H * Math.cos(pitch));
+  chest.addScaledVector(_fwd, C.SPINE * H * Math.sin(pitch));
   _z.copy(_fwd).addScaledVector(_up, -Math.sin(pitch) * 2);
   basis(this.chest, _z, _up);
   this.chest.position.copy(chest);
@@ -912,14 +950,14 @@ Skater.prototype.poseWalk = function poseWalk(w, dt) {
   this.hem.visible = false; // and no wind to blow it either, at a walk
 
   const head = this.joints.head;
-  head.copy(chest).addScaledVector(_y, C.NECK);
+  head.copy(chest).addScaledVector(_y, C.NECK * H);
   this.head.position.copy(head);
   this.head.quaternion.copy(_qChest);
 
   // --- legs: the same two-bone solver pose() uses, aimed at the walk-cycle feet ---
   const hips = this.joints.hip;
-  hips[0].copy(pelvis).addScaledVector(_right, -C.HIP_W);
-  hips[1].copy(pelvis).addScaledVector(_right, C.HIP_W);
+  hips[0].copy(pelvis).addScaledVector(_right, -C.HIP_W * W);
+  hips[1].copy(pelvis).addScaledVector(_right, C.HIP_W * W);
   for (let i = 0; i < 2; i++) {
     const outward = i === 0 ? -1 : 1;
     _a.copy(_fwd)
@@ -927,7 +965,7 @@ Skater.prototype.poseWalk = function poseWalk(w, dt) {
       .addScaledVector(_right, outward * 0.3)
       .addScaledVector(_up, -0.1)
       .normalize();
-    solveJoint(hips[i], feet[i], C.THIGH, C.SHIN, _a, this.joints.knee[i]);
+    solveJoint(hips[i], feet[i], C.THIGH * H, C.SHIN * H, _a, this.joints.knee[i]);
     this.joints.foot[i].copy(feet[i]);
     bone(this.legs[i].thigh, hips[i], this.joints.knee[i], _a);
     bone(this.legs[i].shin, this.joints.knee[i], feet[i], _a);
@@ -942,9 +980,9 @@ Skater.prototype.poseWalk = function poseWalk(w, dt) {
 
   // --- arms: swing opposite the same-side leg while walking, rest on the knees seated ---
   const shoulders = this.joints.shoulder;
-  shoulders[0].copy(chest).addScaledVector(_right, -C.SHOULDER_W).addScaledVector(_y, C.SHOULDER_UP);
-  shoulders[1].copy(chest).addScaledVector(_right, C.SHOULDER_W).addScaledVector(_y, C.SHOULDER_UP);
-  const armReach = C.UPPER_ARM + C.FOREARM;
+  shoulders[0].copy(chest).addScaledVector(_right, -C.SHOULDER_W * W).addScaledVector(_y, C.SHOULDER_UP * H);
+  shoulders[1].copy(chest).addScaledVector(_right, C.SHOULDER_W * W).addScaledVector(_y, C.SHOULDER_UP * H);
+  const armReach = (C.UPPER_ARM + C.FOREARM) * H;
   for (let i = 0; i < 2; i++) {
     const side = i === 0 ? -1 : 1;
     const armPhase = w.phase + (i === 0 ? Math.PI : 0); // opposite the same-side leg
@@ -971,7 +1009,7 @@ Skater.prototype.poseWalk = function poseWalk(w, dt) {
       .addScaledVector(_up, -0.6)
       .addScaledVector(_right, side * 0.5)
       .normalize();
-    solveJoint(shoulders[i], hand, C.UPPER_ARM, C.FOREARM, _b, this.joints.elbow[i]);
+    solveJoint(shoulders[i], hand, C.UPPER_ARM * H, C.FOREARM * H, _b, this.joints.elbow[i]);
     this.joints.hand[i].copy(hand);
     bone(this.arms[i].upper, shoulders[i], this.joints.elbow[i], _b);
     bone(this.arms[i].fore, this.joints.elbow[i], hand, _b);

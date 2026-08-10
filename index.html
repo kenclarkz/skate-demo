@@ -135,6 +135,7 @@
             <button id="btn-play" class="primary" type="button">Skate</button>
             <button id="btn-parks" type="button">Choose park</button>
             <button id="btn-myparks" type="button">My parks</button>
+            <button id="btn-riders" type="button">Riders</button>
             <button id="btn-store" type="button">Shop</button>
             <button id="btn-guide" type="button">How to play</button>
             <button id="btn-settings" type="button">Settings</button>
@@ -236,6 +237,7 @@
           <h2 class="store-section-title">Skaters</h2>
           <p class="board-type-blurb">Free to pick, and they all ride exactly the same. Shirts below go on over the top.</p>
           <div class="char-grid" id="char-grid"></div>
+          <button id="btn-store-maker" type="button">… or make a character from scratch</button>
           <h2 class="store-section-title">Boards</h2>
           <div class="board-grid" id="board-grid"></div>
           <h2 class="store-section-title">Shirts</h2>
@@ -244,6 +246,52 @@
           <p class="board-type-blurb">One head-slot, like the one shirt: pick a hat or a pair of shades to wear over your look.</p>
           <div class="board-grid" id="accessory-grid"></div>
           <button id="btn-store-back" class="primary" type="button">Back</button>
+        </section>
+
+        <section id="screen-charselect" class="screen wide" hidden>
+          <h1>Riders</h1>
+          <p class="tag">Pick a rider to skate as. They all ride exactly the same.</p>
+          <div class="char-grid" id="cs-char-grid"></div>
+          <button id="btn-charselect-maker" class="primary" type="button">Make your own character</button>
+          <button id="btn-charselect-back" type="button">Back</button>
+        </section>
+
+        <section id="screen-maker" class="screen wide" hidden>
+          <h1>Character Maker</h1>
+          <p class="tag">Build a rider from scratch. The body is free — clothes cost coins, once, and they are yours for good.</p>
+          <div class="maker-layout">
+            <div class="maker-preview-wrap">
+              <canvas id="maker-preview" class="maker-preview"></canvas>
+              <p class="tag" id="maker-summary"></p>
+            </div>
+            <div class="maker-stack">
+              <section class="maker-group">
+                <h2 class="store-section-title">Body</h2>
+                <p class="board-type-blurb">Skin, height, build and hair — always free, for everyone.</p>
+                <div class="maker-grid" id="maker-skin"></div>
+                <div class="maker-grid" id="maker-height"></div>
+                <div class="maker-grid" id="maker-build"></div>
+                <div class="maker-grid" id="maker-hair"></div>
+              </section>
+              <section class="maker-group">
+                <h2 class="store-section-title">Pants</h2>
+                <div class="maker-grid" id="maker-pants"></div>
+                <h2 class="store-section-title">Shoes</h2>
+                <div class="maker-grid" id="maker-shoes"></div>
+                <h2 class="store-section-title">Shirt</h2>
+                <div class="maker-grid" id="maker-shirt"></div>
+                <h2 class="store-section-title">Headwear</h2>
+                <p class="board-type-blurb">One hat and one pair of shades, like the shop’s — these are the same things, just priced here.</p>
+                <div class="maker-grid" id="maker-hat"></div>
+                <div class="maker-grid" id="maker-shades"></div>
+              </section>
+            </div>
+          </div>
+          <div class="maker-actions">
+            <span class="tag"><b id="maker-coins">0</b> coins</span>
+            <button id="btn-maker-save" class="primary" type="button">Save &amp; skate</button>
+            <button id="btn-maker-back" type="button">Back</button>
+          </div>
         </section>
 
         <section id="screen-guide" class="screen" hidden>

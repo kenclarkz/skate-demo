@@ -2958,7 +2958,164 @@ section('Skater picker');
 }
 
 // --------------------------------------------------------------------------
+
+// --------------------------------------------------------------------------
+section('Character Maker');
+{
+  // A body pick is free and lands in the draft, and the maker's turntable
+  // figure rebuilds to match — the preview is the honest claim that Tall is
+  // actually taller and Stocky actually wider.
+  const body = await run(() => {
+    const g = window.__skate;
+    g.hud.show('maker');
+    const coinsBefore = g.save.coins;
+    g.pickMakerPart('height', 'tall');
+    g.pickMakerPart('build', 'stocky');
+    const p = g.hud.makerPreview;
+    return {
+      height: g.save.custom.height,
+      build: g.save.custom.build,
+      coins: g.save.coins,
+      coinsBefore,
+      preview: p ? { height: p.skater.scale.height, width: p.skater.scale.width } : null,
+      grids: Object.keys(g.hud.makerGrids).length,
+    };
+  });
+  ok(body.height === 'tall' && body.build === 'stocky', 'a body pick updates the draft');
+  ok(body.coins === body.coinsBefore, 'and body options are free');
+  ok(
+    body.preview && Math.abs(body.preview.height - 1.08) < 1e-6 && Math.abs(body.preview.width - 1.14) < 1e-6,
+    'and the maker preview grows the figure to match'
+  );
+  ok(body.grids === 9, 'and every rack is wired');
+
+  // The turntable is a real renderer that has actually drawn the figure.
+  const preview = await run(() => {
+    const g = window.__skate;
+    return g.hud.makerPreview ? g.hud.makerPreview.renderer.info.render.triangles : 0;
+  });
+  ok(preview > 0, `and the maker preview is actually rendering (${preview} triangles)`);
+
+  // Paid clothes cost coins once, then they are owned for good. Coins are set
+  // to a known amount first: earlier sections earn and spend in the same
+  // session, so the maker must not assume a fresh save.
+  await run(() => {
+    const g = window.__skate;
+    g.save.addCoins(-g.save.coins);
+    g.save.addCoins(400);
+  });
+  const paid = await run(() => {
+    const g = window.__skate;
+    g.pickMakerPart('shirt', 'tee-amber'); // 200
+    g.pickMakerPart('pants', 'cargo'); // 150
+    return {
+      shirt: g.save.custom.shirt,
+      shirtOwned: g.save.hasPart('shirt', 'tee-amber'),
+      pants: g.save.custom.pants,
+      pantsOwned: g.save.hasPart('pants', 'cargo'),
+      coins: g.save.coins,
+    };
+  });
+  ok(paid.shirt === 'tee-amber' && paid.shirtOwned, 'a paid shirt is bought and worn');
+  ok(paid.pants === 'cargo' && paid.pantsOwned, 'and so is a paid pair of pants');
+  ok(paid.coins === 50, 'and together they cost what they should (400 - 200 - 150)');
+
+  // What cannot be afforded is simply not picked.
+  const poor = await run(() => {
+    const g = window.__skate;
+    g.pickMakerPart('hat', 'tophat'); // 350, unaffordable at the 50 left over
+    return { hat: g.save.custom.hat, owned: g.save.hasPart('hat', 'tophat') };
+  });
+  ok(poor.hat === 'none' && !poor.owned, 'an unaffordable hat is not picked');
+
+  // Save & skate makes the draft the custom rider, equipped with its own body.
+  const saved = await run(() => {
+    const g = window.__skate;
+    g.saveMadeCharacter();
+    return {
+      id: g.save.characterId,
+      has: g.save.hasCustom(),
+      scale: { ...g.skater.scale },
+      head: g.skater.style.head,
+      skin: g.skater.palette.skin,
+      shirt: g.skater.palette.shirt,
+      coins: g.save.coins,
+    };
+  });
+  ok(saved.id === 'custom', 'Save & skate equips the made rider');
+  ok(saved.has === true, 'and the maker is marked as saved');
+  ok(Math.abs(saved.scale.height - 1.08) < 1e-6, 'and the live rig grows to the saved height');
+  ok(Math.abs(saved.scale.width - 1.14) < 1e-6, 'and to the saved build');
+  ok(saved.skin === 0xf0c8a0, 'and wears the chosen skin');
+  ok(saved.shirt === 0xcf9c3e, 'and the bought shirt');
+  ok(saved.coins === paid.coins, 'and saving itself costs nothing');
+
+  // The Riders screen shows the made character leading the grid, drawn as a
+  // real portrait, and tapping it equips it.
+  const riders = await run(() => {
+    const g = window.__skate;
+    g.showRiders();
+    const grid = document.getElementById('cs-char-grid');
+    const cards = [...grid.querySelectorAll('[data-character]')];
+    const canvases = [...grid.querySelectorAll('canvas.char-portrait')];
+    const painted = canvases.map((c) => {
+      const ctx = c.getContext('2d');
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+      return n;
+    });
+    const picked = g.selectCharacter('custom');
+    return {
+      state: g.state,
+      cards: cards.length,
+      hasCustom: !!grid.querySelector('[data-character="custom"]'),
+      current: grid.querySelectorAll('.char-card.current').length,
+      painted,
+      picked,
+      eqId: g.save.characterId,
+    };
+  });
+  ok(riders.state === 'charselect', 'the Riders screen opens');
+  ok(riders.cards === 9, 'with a card for every rider and the made one');
+  ok(riders.hasCustom === true, 'and the made character leads the grid');
+  ok(riders.current === 1, 'exactly one marked as skating');
+  ok(
+    riders.painted.length === 9 && riders.painted.every((n) => n > 400),
+    `and a portrait actually drawn on every card (${riders.painted.join(', ')} pixels)`
+  );
+  ok(riders.picked === true && riders.eqId === 'custom', 'and tapping the made card equips it');
+
+  // Picking a prebuilt rider puts the standard body back on the live rig, and
+  // the tutorial's demo figure follows the made one too.
+  const prebuilt = await run(() => {
+    const g = window.__skate;
+    g.selectCharacter('nova');
+    const afterNova = { id: g.save.characterId, scale: g.skater.scale.height };
+    g.selectCharacter('custom');
+    const demo = g.hud.preview?.skater;
+    return { afterNova, demo: demo ? { scale: demo.scale.height, head: demo.style.head } : null };
+  });
+  ok(prebuilt.afterNova.id === 'nova' && Math.abs(prebuilt.afterNova.scale - 1) < 1e-6, 'and a prebuilt rider restores the standard body');
+  ok(prebuilt.demo && Math.abs(prebuilt.demo.scale - 1.08) < 1e-6, 'and the tutorial demo matches the made rider');
+
+  // The maker re-opens with the saved draft still in it, and edits re-skin the
+  // same slot rather than stacking up a second custom rider.
+  const reopen = await run(() => {
+    const g = window.__skate;
+    g.showMaker();
+    g.pickMakerPart('height', 'short');
+    const c = g.save.custom;
+    return { height: c.height, savedId: g.save.characterId };
+  });
+  ok(reopen.height === 'short' && reopen.savedId === 'custom', 're-opening the maker edits the same saved rider');
+
+  await run(() => window.__skate.hud.show('start'));
+}
+
+// --------------------------------------------------------------------------
 section('Start menu: every button opens what it says');
+
 {
   // Driven with real Playwright clicks rather than el.click(), so a button that
   // is present but not actually hittable — zero-sized, covered, inside a hidden
