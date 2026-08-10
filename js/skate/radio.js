@@ -58,7 +58,9 @@ const PROD_REDIRECT = 'https://kenclarkz.github.io/skate-demo/';
 const DEV_REDIRECT = 'http://127.0.0.1:8080/';
 
 // The station that is always there, whether or not anyone is signed in. When
-// it is "playing", the toast says what it actually is: the park's speakers.
+// it is "playing", the toast says what it actually is: the park's speakers —
+// which now means the whole local playlist in js/skate/audio.js, announced
+// track by track as it plays.
 export const BUILTIN_STATION = {
   id: 'builtin',
   name: 'Skate FM',
@@ -66,8 +68,10 @@ export const BUILTIN_STATION = {
   builtin: true,
 };
 
-// What the toast claims is playing while Skate FM is on. A track datum like any
-// other, so the announce() path stays a single one.
+// What the toast claims while Skate FM is on but the playlist has not started
+// yet (no user gesture). A track datum like any other, so the announce() path
+// stays a single one — the moment music actually begins, audio.js announces
+// the real track through this.ctx.audio.onTrack instead.
 const THEME_TRACK = { id: 'theme', name: 'The park’s own speakers', artists: ['Skate FM'] };
 
 // --- Spotify plumbing -----------------------------------------------------
@@ -1076,6 +1080,16 @@ export class Radio {
       api: 'dbg-api',
       event: 'dbg-event',
     };
+    // The built-in station is a real playlist now (see audio.js's MUSIC list).
+    // As the park's speakers advance to the next local track, this keeps the
+    // "now playing" bar and toast honest — but only while Skate FM is the
+    // station; while a Spotify station is the radio, the local playlist is
+    // ducked to silence and must not talk over it.
+    if (this.ctx.audio) {
+      this.ctx.audio.onTrack = (track) => {
+        if (this.station?.builtin) this.announce(track);
+      };
+    }
     this.bind();
   }
 
@@ -1426,7 +1440,10 @@ export class Radio {
       this.provider.stopPolling();
       this.emit();
       this.renderPlayback();
-      this.announce(THEME_TRACK);
+      // Name whatever the park's speakers are actually on right now — audio.js
+      // keeps currentTrack updated as its playlist advances, so picking Skate
+      // FM mid-song announces the real track, not the default.
+      this.announce(this.ctx.audio?.currentTrack || THEME_TRACK);
       this.syncPanel();
       return;
     }

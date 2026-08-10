@@ -6,7 +6,7 @@
 //
 // To ship an update: bump VERSION. That is the entire release process.
 
-const VERSION = 'v23';
+const VERSION = 'v24';
 const CACHE = `skate-${VERSION}`;
 
 // All relative — this worker's scope is the repo's own Pages root.
@@ -59,16 +59,20 @@ const ASSETS = [
   'icons/apple-touch-icon-180.png',
 ];
 
-// The one real recording in the app — see audio.js's own comment on why this
-// is the deliberate exception to "everything is synthesised." Kept out of
-// ASSETS/cache.addAll() on purpose: addAll() is all-or-nothing, and at 5MB
-// this is by far the biggest thing here — a flaky connection failing just
-// this one fetch must not take the entire precache, and offline play with it,
-// down with it. It still ends up cached, just through its own best-effort add.
-const MUSIC = 'audio/theme.mp3';
+// The one set of real recordings in the app — see audio.js's own comment on
+// why this is the deliberate exception to "everything is synthesised." Kept out
+// of ASSETS/cache.addAll() on purpose: addAll() is all-or-nothing, and at 5MB
+// this is by far the biggest thing here — a flaky connection failing just one
+// of these fetches must not take the entire precache, and offline play, down
+// with it. They still end up cached, just through their own best-effort adds.
+const MUSIC = [
+  'audio/theme.mp3',
+  'audio/Rnb High Hats, Hip Hop___  (Synth).mp3',
+  'audio/Rnb High Hats, Hip Hop___  (Synth) (1).mp3',
+];
 
 // Resolved once so the fetch handler can compare pathnames cheaply.
-const OWNED = new Set([...ASSETS, MUSIC].map((a) => new URL(a, self.registration.scope).pathname));
+const OWNED = new Set([...ASSETS, ...MUSIC].map((a) => new URL(a, self.registration.scope).pathname));
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -82,7 +86,7 @@ self.addEventListener('install', (event) => {
           cache.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))),
           // Best-effort: a game that can be played without music beats an
           // install that fails outright because one music file did not load.
-          cache.add(new Request(MUSIC, { cache: 'reload' })).catch(() => {}),
+          ...MUSIC.map((u) => cache.add(new Request(u, { cache: 'reload' })).catch(() => {})),
         ])
       )
       .then(() => self.skipWaiting())

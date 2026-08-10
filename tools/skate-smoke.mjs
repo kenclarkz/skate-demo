@@ -1759,7 +1759,7 @@ section('Audio: music starts on the first gesture');
   ok(state.ready, 'the audio context is running after a real user gesture');
   ok(state.musicStarted && state.hasMusicGain, 'and startMusic() has been kicked off');
 
-  // startMusic() is async — it has to fetch and decode a real 5MB file — so
+  // startMusic() is async — it has to fetch and decode real files — so
   // this waits for that to actually land rather than assuming it has by now.
   const loaded = await page
     .waitForFunction(() => !!window.__skate.audio.musicSource, null, { timeout: 20000 })
@@ -1774,10 +1774,14 @@ section('Audio: music starts on the first gesture');
       duration: a.musicSource.buffer?.duration ?? 0,
       volume: a.musicGain.gain.value,
       saved: g.save.musicVolume,
+      playlist: a.musicBuffers?.length ?? 0,
+      current: a.currentTrack?.name ?? '',
     };
   });
-  ok(track.loop, 'set to loop — no scheduling here to get a seam wrong');
+  ok(!track.loop, 'each track runs to its end — the next one is chained on onended');
   ok(track.duration > 5, `and it is a real recording, not a stub (${track.duration.toFixed(1)}s)`);
+  ok(track.playlist === 3, `and the built-in station now plays all three local tracks (${track.playlist})`);
+  ok(track.current.length > 0, `with a real "now playing" track announced (${track.current})`);
   ok(
     Math.abs(track.volume - track.saved) < 0.05,
     `and it starts at the saved volume (${track.volume.toFixed(2)} vs saved ${track.saved})`
@@ -3567,9 +3571,14 @@ section('The loop and the page');
     .filter((f) => !sw.includes(f));
   ok(missing.length === 0, `every skate module is precached${missing.length ? `: missing ${missing.join(', ')}` : ''}`);
   ok(sw.includes('index.html') && sw.includes('css/skate.css'), 'and so are the page and its stylesheet');
+  const musicFiles = [
+    'audio/theme.mp3',
+    'audio/Rnb High Hats, Hip Hop___  (Synth).mp3',
+    'audio/Rnb High Hats, Hip Hop___  (Synth) (1).mp3',
+  ];
   ok(
-    sw.includes('audio/theme.mp3') && existsSync(join(ROOT, 'audio/theme.mp3')),
-    'and the music track is both on disk and named in the service worker'
+    musicFiles.every((f) => sw.includes(f) && existsSync(join(ROOT, f))),
+    'and every local music track is both on disk and named in the service worker'
   );
 }
 

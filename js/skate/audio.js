@@ -1,8 +1,8 @@
-// Every sound but one is synthesised at runtime, for the same reason there are
-// no image files: the whole game is precached for offline play, and an
-// oscillator is bytes where a sample is megabytes. The one exception is the
-// background music — see startMusic() near the bottom of this file for why
-// that one is a real recording instead.
+// Every sound but the music is synthesised at runtime, for the same reason
+// there are no image files: the whole game is precached for offline play, and
+// an oscillator is bytes where a sample is megabytes. The exception is the
+// background playlist — a handful of real recordings, see the MUSIC list and
+// startMusic() below for why those are real files instead.
 //
 // The one sound that matters most among the synthesised ones is the roll. A
 // skateboard on concrete is filtered noise whose brightness tracks speed, and
@@ -35,6 +35,16 @@
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
+// The built-in Skate FM playlist. Track objects double as "now playing" data
+// (id/name/artists), so radio.js can announce them without knowing a thing
+// about the files behind them. The order here is the order they play in, and
+// the loop wraps around the list.
+const MUSIC = [
+  { url: 'audio/theme.mp3', id: 'theme', name: 'The park’s own speakers', artists: ['Skate FM'] },
+  { url: 'audio/Rnb High Hats, Hip Hop___  (Synth).mp3', id: 'rnb-high-hats', name: 'Rnb High Hats, Hip Hop___  (Synth)', artists: ['Skate FM'] },
+  { url: 'audio/Rnb High Hats, Hip Hop___  (Synth) (1).mp3', id: 'rnb-high-hats-2', name: 'Rnb High Hats, Hip Hop___  (Synth) (1)', artists: ['Skate FM'] },
+];
+
 export class Audio {
   constructor(on = true) {
     this.ctx = null;
@@ -53,6 +63,12 @@ export class Audio {
     this.wasReverting = false;
     this.musicVolume = 0.5;
     this.ducked = false; // a real (Spotify) station is the radio — see setMusicDucked
+    this.musicSource = null;
+    this.musicBuffers = null; // decoded playlist, in play order
+    this.musicTracks = null;  // the track objects those buffers came from
+    this.musicIndex = 0;      // where the playlist is right now
+    this.currentTrack = null; // the last track that actually started playing
+    this.onTrack = null;      // (track) => void, fired as each playlist track starts
   }
 
   /**
@@ -183,43 +199,79 @@ export class Audio {
 
   // --- background music ---------------------------------------------------
   /**
-   * The one real recording in the whole game: everything else here is
+   * The one set of real recordings in the whole game: everything else here is
    * synthesised, for the same reason there are no image files — the game is
    * precached whole for offline play, and an oscillator is bytes where a
    * sample is megabytes. Music is the deliberate exception, because a
    * generated bassline is a passable stand-in for a footstep or a pop but not
    * for a piece of music somebody actually wrote.
    *
-   * Fetched and decoded once, then played back through an AudioBufferSourceNode
-   * with loop=true — the Web Audio API's own seamless loop, so there is no
-   * scheduling here to get a seam wrong. musicGain sits ahead of it and is
-   * what the volume slider drives; see setMusicVolume(). If the fetch or the
-   * decode fails — offline before the first load, a browser that chokes on the
-   * file — this fails quiet rather than fails loud: no music, not a thrown
-   * error breaking the rest of unlock().
+   * The built-in Skate FM station is a playlist, not a song: each track is
+   * fetched and decoded once, then the three play back to back in a loop —
+   * see playMusicTrack(). Every new track announces itself through this.onTrack
+   * (radio.js feeds that into the "now playing" bar and toast), and the state
+   * never forks because musicStarted is latched before the first fetch and
+   * every subsequent unlock() returns early. If any fetch or decode fails —
+   * offline before the first load, a browser that chokes on a file — that
+   * track is skipped and the rest of the playlist still plays; if none survive
+   * it fails quiet rather than fails loud: no music, not a thrown error
+   * breaking the rest of unlock().
    */
   async startMusic() {
     const ctx = this.ctx;
     this.musicGain = ctx.createGain();
     this.musicGain.gain.value = this.ducked ? 0 : this.musicVolume;
     this.musicGain.connect(this.master);
-    try {
-      const res = await fetch('audio/theme.mp3');
-      const buf = await res.arrayBuffer();
-      // A second unlock() (every pointerdown calls it) must not race this one
-      // and end up decoding — and playing — the track twice.
-      if (this.musicSource) return;
-      const audioBuf = await ctx.decodeAudioData(buf);
-      if (this.musicSource) return;
-      const src = ctx.createBufferSource();
-      src.buffer = audioBuf;
-      src.loop = true;
-      src.connect(this.musicGain);
-      src.start();
-      this.musicSource = src;
-    } catch {
-      // No music. Everything else in the game still works.
+    const buffers = [];
+    const tracks = [];
+    for (const track of MUSIC) {
+      try {
+        const res = await fetch(track.url);
+        const buf = await res.arrayBuffer();
+        // A second unlock() (every pointerdown calls it) must not race this one
+        // and end up decoding — and playing — the tracks twice.
+        if (this.musicSource) return;
+        buffers.push(await ctx.decodeAudioData(buf));
+        tracks.push(track);
+      } catch {
+        // One bad track skips; the rest of the playlist still plays.
+      }
     }
+    if (buffers.length === 0 || this.musicSource) return;
+    this.musicBuffers = buffers;
+    this.musicTracks = tracks;
+    this.musicIndex = 0;
+    this.playMusicTrack(0);
+  }
+
+  /**
+   * Start playlist track `i` and chain the next one onto its end.
+   *
+   * The seam is the Web Audio API's own: each track is a buffer source played
+   * through the shared musicGain with loop=false, and when it runs out,
+   * onended starts the next one — wrapping around to the top at the end of the
+   * list. No scheduling here to get a seam wrong; a track that is still going
+   * when the state is torn down has its handler cleared first so nothing fires
+   * twice.
+   */
+  playMusicTrack(i) {
+    const ctx = this.ctx;
+    const n = this.musicBuffers.length;
+    i = ((i % n) + n) % n;
+    if (this.musicSource) this.musicSource.onended = null;
+    const src = ctx.createBufferSource();
+    src.buffer = this.musicBuffers[i];
+    src.loop = false;
+    src.connect(this.musicGain);
+    src.onended = () => {
+      if (this.musicSource !== src) return;
+      this.musicIndex = (i + 1) % n;
+      this.playMusicTrack(this.musicIndex);
+    };
+    src.start();
+    this.musicSource = src;
+    this.currentTrack = this.musicTracks[i];
+    this.onTrack?.(this.currentTrack);
   }
 
   /**
