@@ -2388,3 +2388,307 @@ button:disabled.primary {
   border: 1px dashed var(--line);
   box-shadow: none;
 }
+
+/* --- the Board Maker ----------------------------------------------------- */
+/* The board maker shares the Character Maker's layout and chip language, and
+   the 3D preview gets the same frame. What it adds on top is the colour
+   pickers, the sticker rack and the pixel grid — everything else here is
+   dressing for those. */
+
+.bm-saved-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.bm-saved-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 12px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.bm-saved-card .bm-saved-swatch {
+  height: 22px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.bm-saved-card b {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bm-saved-card .bm-saved-meta {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--dim);
+}
+
+.bm-saved-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.bm-saved-actions button {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 4px;
+  font-size: 11.5px;
+}
+
+.bm-saved-actions .bm-saved-del {
+  color: var(--bad);
+}
+
+.bm-saved-card.current {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+/* The colour rack: a labelled native colour input per slot, in a friendly
+   grid. Native inputs keep the whole thing free of a bespoke wheel, and the
+   swatch inside each label shows the live pick. */
+.bm-color-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.bm-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bm-color-row label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bm-color-row input[type='color'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bm-color-row input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.bm-color-row input[type='color']::-webkit-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+}
+
+.bm-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Block lettering: a text field for the graffiti and shop styles. */
+.bm-text-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bm-text-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.bm-text-field input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  background: rgba(10, 14, 18, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  outline: none;
+  text-transform: uppercase;
+}
+
+.bm-text-field input:focus {
+  border-color: var(--hot);
+}
+
+/* The custom-block-art editor: a real grid you paint on, one block at a time,
+   with a row of paint swatches beneath (plus an eraser at the front). */
+.bm-pixel-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.bm-pixel {
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 2 / 1;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0c0f14;
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+.bm-brushes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bm-brush {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: var(--panel);
+  position: relative;
+}
+
+.bm-brush.current {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
+.bm-brush--eraser {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  font-size: 16px;
+}
+
+/* The sticker rack: an icon palette to add from, then the layer list, then an
+   inspector for whichever sticker is selected. */
+.bm-sticker-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bm-sticker-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.bm-sticker-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bm-sticker-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+}
+
+.bm-layers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bm-layer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+
+.bm-layer-chip.current {
+  border-color: var(--hot);
+  color: var(--hot);
+}
+
+.bm-layer-inspector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.bm-layer-inspector label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.bm-layer-inspector input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(10, 14, 18, 0.8);
+  border: 1px solid var(--line);
+  outline: none;
+}
+
+.bm-layer-inspector input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--hot);
+  cursor: pointer;
+}
+
+.bm-layer-inspector input[type='range']::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--hot);
+  cursor: pointer;
+  border: 0;
+}
+
+.bm-layer-del {
+  align-self: end;
+  color: var(--bad);
+}

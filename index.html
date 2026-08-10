@@ -137,6 +137,7 @@
             <button id="btn-myparks" type="button">My parks</button>
             <button id="btn-riders" type="button">Riders</button>
             <button id="btn-store" type="button">Shop</button>
+            <button id="btn-boardmaker" type="button">Board maker</button>
             <button id="btn-guide" type="button">How to play</button>
             <button id="btn-settings" type="button">Settings</button>
             <button id="opt-reset" class="quiet" type="button">Reset stats</button>
@@ -240,6 +241,7 @@
           <button id="btn-store-maker" type="button">… or make a character from scratch</button>
           <h2 class="store-section-title">Boards</h2>
           <div class="board-grid" id="board-grid"></div>
+          <button id="btn-store-boardmaker" type="button">… or make your own board</button>
           <h2 class="store-section-title">Shirts</h2>
           <div class="board-grid" id="outfit-grid"></div>
           <h2 class="store-section-title">Accessories</h2>
@@ -294,6 +296,50 @@
             <span class="tag"><b id="maker-coins">0</b> coins</span>
             <button id="btn-maker-save" class="primary" type="button">Save &amp; skate</button>
             <button id="btn-maker-back" type="button">Back</button>
+          </div>
+        </section>
+
+        <section id="screen-boardmaker" class="screen wide" hidden>
+          <h1>Board Maker</h1>
+          <p class="tag">Build a deck of your own — style, shape, colours, block lettering and stickers — then save it and ride it.</p>
+          <div class="maker-layout">
+            <div class="maker-preview-wrap" id="bm-preview-wrap">
+              <div class="maker-preview-frame">
+                <!-- The live 3D preview: a real Board on a turntable, spinning
+                     on its own and grabbable to turn by hand. Built and driven
+                     by js/skate/board-preview.js. -->
+                <canvas id="bm-preview" class="maker-preview"></canvas>
+              </div>
+              <input id="bm-name" type="text" maxlength="40" spellcheck="false" aria-label="Board name" placeholder="My Board">
+              <p class="tag" id="bm-summary"></p>
+            </div>
+            <div class="maker-stack">
+              <section class="maker-group">
+                <h2 class="store-section-title">Your boards</h2>
+                <p class="board-type-blurb">Saved decks. Tap to equip, edit or delete.</p>
+                <div class="bm-saved-grid" id="bm-saved"></div>
+              </section>
+              <section class="maker-group">
+                <h2 class="store-section-title">Style</h2>
+                <div class="maker-grid" id="bm-style"></div>
+                <h2 class="store-section-title">Shape</h2>
+                <div class="maker-grid" id="bm-type"></div>
+                <h2 class="store-section-title">Colours</h2>
+                <p class="board-type-blurb">The board’s own paint: deck, grip, trucks and wheels.</p>
+                <div class="bm-color-rows" id="bm-colors"></div>
+              </section>
+              <!-- The per-style controls: lettering, checker colours, the pixel
+                   editor and the sticker rack all render in here. -->
+              <section class="maker-group" id="bm-options">
+                <h2 class="store-section-title">Pattern</h2>
+                <div class="bm-options-body" id="bm-options-body"></div>
+              </section>
+            </div>
+          </div>
+          <div class="maker-actions">
+            <span class="tag" id="bm-coins">0 coins</span>
+            <button id="btn-bm-save" class="primary" type="button">Save board</button>
+            <button id="btn-bm-back" type="button">Back</button>
           </div>
         </section>
 

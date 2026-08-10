@@ -21,6 +21,7 @@
 import * as THREE from '../game/three.js';
 import { box, piece, merge } from '../game/geo.js';
 import * as C from './config.js';
+import { buildDesignBlocks } from './board-design.js';
 
 export const DEFAULT_PALETTE = {
   deck: 0x9b6a3f,   // maple plys, seen from below
@@ -62,7 +63,12 @@ function kickEnd(entries, sign, color, w, t, dy, flat, kickL) {
   entries.push(box(color, w, t, kickL, 0, cy, cz, -sign * kick, 0, 0));
 }
 
-function buildDeck(p, shape) {
+// Deck top above the art blocks: the art is a thin printed layer sitting proud
+// of the grip tape, drawn as its own set of boxes so a deck can carry a whole
+// block-letter logo, a checkerboard or a pixel drawing at zero texture cost.
+export const ART_H = 0.0035;
+
+function buildDeck(p, shape, design) {
   const entries = [];
   const W = shape.deckW;
   const T = C.DECK_T;
@@ -82,13 +88,23 @@ function buildDeck(p, shape) {
   kickEnd(entries, 1, p.grip, W - 0.008, g, T / 2 + g / 2, flat, kickL);
   kickEnd(entries, -1, p.grip, W - 0.008, g, T / 2 + g / 2, flat, kickL);
 
-  // The one graphic every skin gets: a stripe down the middle of the grip,
-  // the closest thing to board art this engine can draw without a texture.
-  entries.push(box(p.accent, W * 0.32, g * 0.7, flat * 1.9, 0, T / 2 + g + 0.0005, 0));
-
   // A pale stripe along each edge, standing in for the visible ply lines.
   for (const s of [-1, 1]) {
     entries.push(box(p.ply, 0.006, T * 0.9, flat * 2, (s * (W - 0.006)) / 2, 0, 0));
+  }
+
+  // Board art. With no design every skin gets the one accent stripe down the
+  // middle of the grip; a design replaces that stripe with its own blocks —
+  // chunky coloured boxes proud of the tape, merged into the same draw call
+  // as the deck, never a texture.
+  const art = buildDesignBlocks(shape, design);
+  if (art.skipStripe) {
+    const y = T / 2 + g + ART_H / 2;
+    for (const b of art.blocks) {
+      entries.push(box(b.color, b.w, ART_H, b.d, b.x, y, b.z, 0, b.rot || 0, 0));
+    }
+  } else {
+    entries.push(box(p.accent, W * 0.32, g * 0.7, flat * 1.9, 0, T / 2 + g + 0.0005, 0));
   }
 
   return entries;
@@ -132,7 +148,7 @@ function buildWheels(p) {
 }
 
 export class Board {
-  constructor(palette = DEFAULT_PALETTE, shape = DEFAULT_SHAPE) {
+  constructor(palette = DEFAULT_PALETTE, shape = DEFAULT_SHAPE, design = null) {
     this.group = new THREE.Group();
     this.material = new THREE.MeshPhongMaterial({
       vertexColors: true,
@@ -140,21 +156,23 @@ export class Board {
       specular: 0x3a3d42,
     });
     this.spin = 0;
-    this.build(palette, shape);
+    this.build(palette, shape, design);
   }
 
-  /** (Re)builds the deck and wheel meshes from a palette and a shape. Safe to
-   * call again on a live board — the store re-skins the one instance in
-   * place rather than handing the ride model a new one to track. */
-  build(palette, shape = this.shape || DEFAULT_SHAPE) {
+  /** (Re)builds the deck and wheel meshes from a palette, a shape and an
+   * optional board-maker design. Safe to call again on a live board — the
+   * store re-skins the one instance in place rather than handing the ride
+   * model a new one to track. */
+  build(palette, shape = this.shape || DEFAULT_SHAPE, design = null) {
     for (const child of [...this.group.children]) {
       this.group.remove(child);
       child.geometry.dispose();
     }
     this.palette = palette;
     this.shape = shape;
+    this.design = design;
 
-    const entries = buildDeck(palette, shape);
+    const entries = buildDeck(palette, shape, design);
     const a1 = buildTruck(entries, C.WHEELBASE / 2, palette);
     const a2 = buildTruck(entries, -C.WHEELBASE / 2, palette);
     // uvScale 8: the deck is 20 cm across, so a texture repeating every three
