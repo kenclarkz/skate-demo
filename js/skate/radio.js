@@ -1213,22 +1213,33 @@ export class Radio {
     if (this.el.scroll && this.el.track.scrollWidth > this.el.scroll.clientWidth) {
       this.el.track.classList.add('scroll');
     }
-    const controllable = this.enabled && this.connected && this.station && !this.station.builtin;
+    // The transport buttons work for both halves of the radio: a connected
+    // Spotify station drives the SDK, the built-in Skate FM station drives the
+    // local playlist in audio.js (see next()/previous()/playPause()).
+    const builtin = this.station?.builtin;
+    const controllable = this.enabled && this.station && (builtin || this.connected);
     this.el.prevBtn.disabled = !controllable;
     this.el.nextBtn.disabled = !controllable;
     if (this.el.playBtn) {
       this.el.playBtn.disabled = !controllable;
-      this.el.playBtn.textContent = this.playing ? '⏸' : '▶';
-      this.el.playBtn.setAttribute('aria-label', this.playing ? 'Pause' : 'Play');
+      const playing = builtin ? !this.ctx.audio?.musicPaused : this.playing;
+      this.el.playBtn.textContent = playing ? '⏸' : '▶';
+      this.el.playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
     }
   }
 
-  // All three controls go straight to the same spotifyPlayer instance. They
-  // are deliberately NOT async: on iPhone Safari the SDK commands must run
-  // inside the user's gesture, so nothing may await between the tap and the
-  // SDK method call.
+  // All three controls go straight to whichever player is the radio right now:
+  // the built-in Skate FM station is answered by audio.js's local playlist, a
+  // Spotify station by the same spotifyPlayer instance. They are deliberately
+  // NOT async: on iPhone Safari the SDK commands must run inside the user's
+  // gesture, so nothing may await between the tap and the SDK method call.
   next() {
-    if (!this.enabled || !this.connected || !this.station || this.station.builtin) return;
+    if (!this.enabled || !this.station) return;
+    if (this.station.builtin) {
+      this.ctx.audio?.nextTrack();
+      return;
+    }
+    if (!this.connected) return;
     try {
       this.provider.nextTrack();
     } catch (e) {
@@ -1237,7 +1248,12 @@ export class Radio {
   }
 
   previous() {
-    if (!this.enabled || !this.connected || !this.station || this.station.builtin) return;
+    if (!this.enabled || !this.station) return;
+    if (this.station.builtin) {
+      this.ctx.audio?.previousTrack();
+      return;
+    }
+    if (!this.connected) return;
     try {
       this.provider.previousTrack();
     } catch (e) {
@@ -1246,7 +1262,13 @@ export class Radio {
   }
 
   playPause() {
-    if (!this.enabled || !this.connected || !this.station || this.station.builtin) return;
+    if (!this.enabled || !this.station) return;
+    if (this.station.builtin) {
+      this.ctx.audio?.togglePlay();
+      this.renderPlayback();
+      return;
+    }
+    if (!this.connected) return;
     try {
       this.provider.togglePlay();
     } catch (e) {
