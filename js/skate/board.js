@@ -184,6 +184,10 @@ export class Board {
    * Roll the wheels. ω = v / r, which at 8 m/s on 54 mm wheels is 296 rad/s —
    * genuinely 47 revolutions a second, so the dark bearing core smears into a
    * grey ring exactly as it does on a real board.
+   *
+   * `speed` is signed by the direction of travel, so rolling fakie spins the
+   * wheels back the way they came instead of forwards — a board moving
+   * tail-first does not spin its wheels the way one moving nose-first does.
    */
   roll(dt, speed) {
     this.spin = (this.spin + (speed / C.WHEEL_R) * dt) % (Math.PI * 2);

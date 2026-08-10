@@ -214,8 +214,10 @@ export class ChaseCamera {
     if (_dir.lengthSq() < 1e-8) _dir.set(0, 0, 1);
     _dir.normalize();
 
-    // Close and low: this is a board shot, not a chase shot.
-    _eye.copy(this.target).addScaledVector(_dir, -1.75).addScaledVector(upv, 0.75);
+    // Very close and low: this is a board shot, not a chase shot — the lens
+    // sits right behind the deck so the board fills the frame and the rolling
+    // wheels read at the bottom of it.
+    _eye.copy(this.target).addScaledVector(_dir, -0.9).addScaledVector(upv, 0.35);
     const floor = this.park.heightAt(_eye.x, _eye.z) + 0.45;
     if (_eye.y < floor) _eye.y = floor;
 
