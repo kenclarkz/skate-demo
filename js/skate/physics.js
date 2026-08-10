@@ -241,7 +241,9 @@ export class Ride {
     this.updatePose(dt);
     this.applyTransforms();
     if (this.mode !== BAIL) this.skater.pose(this.state, dt);
-    this.board.roll(dt, this.wheelSpeed);
+    // Signed by travel direction so the wheels spin the right way rolling
+    // fakie — see Board.roll().
+    this.board.roll(dt, this.wheelSpeed * Math.sign(this.speed));
     return this.events;
   }
 
