@@ -2139,8 +2139,50 @@ button:disabled.primary {
   align-items: center;
 }
 
+/* "Show it full screen": a small chip over the preview's own corner, so the
+   dressing-room mirror stays a mirror until you ask for the whole room. */
+.maker-expand {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  min-height: 0;
+  padding: 9px 11px;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 10px;
+  background: rgba(14, 18, 24, 0.82);
+}
+
+.maker-expand:hover {
+  background: rgba(30, 37, 46, 0.95);
+}
+
+/* The four-corner expand arrows, drawn in CSS rather than shipped as art: a
+   font glyph would fall back to a box on some systems, and the preview's own
+   corner is no place to find that out. */
+.maker-expand-ico {
+  display: block;
+  width: 13px;
+  height: 13px;
+  background:
+    linear-gradient(var(--ink), var(--ink)) 0 0 / 6px 2px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) 0 0 / 2px 6px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) 100% 0 / 6px 2px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) 100% 0 / 2px 6px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) 0 100% / 6px 2px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) 0 100% / 2px 6px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) 100% 100% / 6px 2px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) 100% 100% / 2px 6px no-repeat;
+}
+
 /* 3:4 like the card portraits, so the preview never has to guess its own
    shape — the canvas fills it and the turntable keeps the frame fixed. */
+.maker-preview-frame {
+  position: relative;
+  width: 100%;
+}
+
 .maker-preview {
   width: 100%;
   aspect-ratio: 3 / 4;
@@ -2278,6 +2320,45 @@ button:disabled.primary {
   margin: 0 auto 0 0;
 }
 
+/* The maker's full-screen view: the whole viewport becomes the mirror, with
+   just a bar up top to get back. The canvas fills everything below the bar —
+   the base .maker-preview sizing (fixed 3:4 frame) is the window's shape, and
+   this is the one place it must not keep it. */
+#maker-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  /* minmax(0, 1fr) so the frame can shrink below the canvas's own intrinsic
+     3:4 size — the preview must follow the screen, not the other way round. */
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #10141a;
+  padding: calc(10px + var(--pad-t)) calc(16px + var(--pad-r)) calc(10px + var(--pad-b)) calc(16px + var(--pad-l));
+}
+
+.maker-fullscreen-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 10px;
+}
+
+.maker-fullscreen-bar .tag {
+  margin: 0;
+}
+
+#maker-fullscreen .maker-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #171c23;
+}
+
 /* The maker's canvas sits inside the wide screen's text-left context, and the
    whole rack of tiny chips would look lost full-width; keep it comfortably
    under the board grid's own max. */
@@ -2291,10 +2372,10 @@ button:disabled.primary {
   }
 
   .maker-preview-wrap {
-    position: static;
+    position: relative;
   }
 
-  .maker-preview {
+  .maker-preview-frame {
     max-width: 240px;
   }
 }
