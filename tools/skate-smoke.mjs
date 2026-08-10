@@ -2996,6 +2996,34 @@ section('Character Maker');
   });
   ok(preview > 0, `and the maker preview is actually rendering (${preview} triangles)`);
 
+  // The preview can go full screen — the very same canvas, moved to an overlay
+  // that covers the whole screen, and back to its window again.
+  const full = await run(() => {
+    const g = window.__skate;
+    const hud = g.hud;
+    const canvas = document.getElementById('maker-preview');
+    const fs = document.getElementById('maker-fullscreen');
+    hud.setMakerFullscreen(true);
+    const open = {
+      inOverlay: fs.contains(canvas),
+      hidden: fs.hidden,
+      w: canvas.clientWidth,
+      h: canvas.clientHeight,
+      vw: window.innerWidth,
+      title: document.getElementById('maker-fullscreen-title').textContent,
+    };
+    hud.setMakerFullscreen(false);
+    return {
+      ...open,
+      backHome: hud.makerPreviewWrapEl.contains(canvas),
+      closed: fs.hidden,
+    };
+  });
+  ok(full.inOverlay && !full.hidden, 'the preview can go full screen');
+  ok(full.w >= full.vw - 80 && full.h > 0, `and it fills the screen (${full.w} x ${full.h})`);
+  ok(full.title.length > 0, 'and the full-screen bar names the look');
+  ok(full.backHome && full.closed, 'and it returns to its window on close');
+
   // Paid clothes cost coins once, then they are owned for good. Coins are set
   // to a known amount first: earlier sections earn and spend in the same
   // session, so the maker must not assume a fresh save.

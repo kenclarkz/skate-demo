@@ -260,8 +260,11 @@
           <h1>Character Maker</h1>
           <p class="tag">Build a rider from scratch. The body is free — clothes cost coins, once, and they are yours for good.</p>
           <div class="maker-layout">
-            <div class="maker-preview-wrap">
-              <canvas id="maker-preview" class="maker-preview"></canvas>
+            <div class="maker-preview-wrap" id="maker-preview-wrap">
+              <div class="maker-preview-frame">
+                <button id="btn-maker-expand" class="maker-expand" type="button" aria-label="Show the preview full screen" title="Show the preview full screen"><span class="maker-expand-ico" aria-hidden="true"></span></button>
+                <canvas id="maker-preview" class="maker-preview"></canvas>
+              </div>
               <p class="tag" id="maker-summary"></p>
             </div>
             <div class="maker-stack">
@@ -334,6 +337,17 @@
         <!-- There is no slam screen. A fall ends a combo, not a run: the rider
              gets back up where they landed and the reason appears as a callout
              over the game, so nothing interrupts. -->
+
+        <!-- The maker's preview blown up to the whole screen: the same live
+             turntable, just with no racks around it. The canvas is moved here
+             while it is open and moved back when it closes, so the 3D scene is
+             the very same object at either size — nothing re-imports or re-lights. -->
+        <div id="maker-fullscreen" hidden>
+          <div class="maker-fullscreen-bar">
+            <span class="tag" id="maker-fullscreen-title">Character preview</span>
+            <button id="btn-maker-expand-back" class="primary" type="button">Back</button>
+          </div>
+        </div>
       </div>
 
       <!-- The park editor. Not an overlay: the whole screen is the design

@@ -359,6 +359,9 @@ export class Hud {
     // tutorial's, so the figure can turn while every rack around it re-renders.
     this.makerPreviewEl = document.getElementById('maker-preview');
     this.makerPreview = this.makerPreviewEl ? new CharacterPreview(this.makerPreviewEl) : null;
+    this.makerPreviewWrapEl = document.getElementById('maker-preview-wrap');
+    this.makerFullscreenEl = document.getElementById('maker-fullscreen');
+    this.makerFullscreenTitleEl = document.getElementById('maker-fullscreen-title');
     this.makerCoinsEl = document.getElementById('maker-coins');
     this.makerSummaryEl = document.getElementById('maker-summary');
     this.makerGrids = {};
@@ -467,6 +470,14 @@ export class Hud {
     click('btn-charselect-maker', () => this.on.maker?.());
     click('btn-maker-save', () => this.on.makeSave?.());
     click('btn-maker-back', () => this.on.back?.());
+    click('btn-maker-expand', () => this.setMakerFullscreen(true));
+    click('btn-maker-expand-back', () => this.setMakerFullscreen(false));
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.makerFullscreenEl && !this.makerFullscreenEl.hidden) {
+        e.preventDefault();
+        this.setMakerFullscreen(false);
+      }
+    });
     click('btn-settings', () => this.on.settings?.());
     click('btn-settings-back', () => this.on.back?.());
     click('btn-pause', () => this.on.pause?.());
@@ -714,6 +725,7 @@ export class Hud {
 
   // --- screens -----------------------------------------------------------
   show(name) {
+    this.setMakerFullscreen(false);
     for (const n of SCREENS) this.screens[n].hidden = n !== name;
     this.overlay.hidden = false;
     this.current = name;
@@ -728,6 +740,7 @@ export class Hud {
   }
 
   hide() {
+    this.setMakerFullscreen(false);
     this.overlay.hidden = true;
     this.stats.hidden = false;
     this.current = null;
@@ -738,6 +751,27 @@ export class Hud {
 
   get visible() {
     return !this.overlay.hidden;
+  }
+
+  /**
+   * The maker preview's full-screen view: the same live canvas, moved to an
+   * overlay that covers the whole screen, with a bar up top to get back.
+   * Moving the canvas keeps the WebGL scene alive — the renderer holds the
+   * element, so it just re-sizes itself to wherever it now sits, exactly like
+   * a window resize.
+   */
+  setMakerFullscreen(on) {
+    if (!this.makerFullscreenEl || !this.makerPreviewEl || !this.makerPreviewWrapEl) return;
+    if (on && this.makerFullscreenEl.hidden) {
+      if (this.makerFullscreenTitleEl && this.makerSummaryEl) {
+        this.makerFullscreenTitleEl.textContent = this.makerSummaryEl.textContent || 'Character preview';
+      }
+      this.makerFullscreenEl.appendChild(this.makerPreviewEl);
+      this.makerFullscreenEl.hidden = false;
+    } else if (!on && !this.makerFullscreenEl.hidden) {
+      this.makerFullscreenEl.hidden = true;
+      this.makerPreviewWrapEl.insertBefore(this.makerPreviewEl, this.makerSummaryEl);
+    }
   }
 
   /**
