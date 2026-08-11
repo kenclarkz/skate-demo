@@ -233,7 +233,6 @@ function read() {
     s.boards = Array.isArray(parsed.boards)
       ? [...new Set([DEFAULT_BOARD_ID, ...parsed.boards.filter((id) => byId[id])])]
       : freshBoards();
-    s.boardId = typeof s.boardId === 'string' && s.boards.includes(s.boardId) ? s.boardId : DEFAULT_BOARD_ID;
     // The board maker's deck. Each saved board keeps its own id (or is given
     // one), so boardId can point at 'custom:<id>' without colliding with the
     // catalogue.
@@ -251,12 +250,16 @@ function read() {
       : freshCustomBoards();
     s.boardDraft = cleanBoardDraft(parsed.boardDraft);
     s.boardMakerSaved = parsed.boardMakerSaved === true;
+    // boardId is checked *after* the custom boards are parsed, so a
+    // 'custom:<id>' value can be matched against them — checked against the
+    // catalogue only, as it used to be, an equipped made board silently fell
+    // back to the starter every reload.
     const customEquipped =
       typeof s.boardId === 'string' &&
       s.boardId.startsWith('custom:') &&
       s.customBoards.some((b) => b.id === s.boardId.slice(7));
-    if (customEquipped) s.boardId = s.boardId;
-    else if (!s.boards.includes(s.boardId)) s.boardId = DEFAULT_BOARD_ID;
+    const catalogueEquipped = typeof s.boardId === 'string' && s.boards.includes(s.boardId);
+    if (!customEquipped && !catalogueEquipped) s.boardId = DEFAULT_BOARD_ID;
     s.outfits = Array.isArray(parsed.outfits)
       ? [...new Set([DEFAULT_OUTFIT_ID, ...parsed.outfits.filter((id) => outfitById[id])])]
       : freshOutfits();
@@ -545,6 +548,11 @@ export const save = {
     state.customBoards.push(board);
     state.boardId = `custom:${id}`;
     state.boardMakerSaved = true;
+    // The saved deck is on the rack now; the working draft goes back to a
+    // fresh board so the next visit to the maker starts blank instead of
+    // still holding the deck that was just saved — otherwise "make another
+    // one" re-opens the last board and saving again just keeps the same deck.
+    state.boardDraft = freshBoardDraft();
     flush();
     return id;
   },
