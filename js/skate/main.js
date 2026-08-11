@@ -527,7 +527,12 @@ function pickBoardType(id) {
 
 function pickBoardColor(role, hex) {
   updateBoardDraft((d) => {
-    d.colors[role] = parseInt(hex.slice(1), 16);
+    const value = parseInt(hex.slice(1), 16);
+    if (role === 'styleColor' || role === 'styleColor2') {
+      d[role] = value;
+    } else {
+      d.colors[role] = value;
+    }
   });
 }
 
