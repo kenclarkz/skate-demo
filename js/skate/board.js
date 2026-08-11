@@ -16,7 +16,9 @@
 // Every colour on the board comes from a palette (see boards.js for the
 // catalogue), so a skin is nothing more than a different set of seven colours
 // plus one accent stripe down the grip tape — there is no texture anywhere on
-// it, the same way there is nowhere else in this game.
+// it, the same way there is nowhere else in this game. The one thing a
+// palette does not own is the neon under glow, which comes from the board
+// maker's design and is drawn as its own self-lit emissive strips.
 
 import * as THREE from '../game/three.js';
 import { box, piece, merge } from '../game/geo.js';
@@ -147,6 +149,72 @@ function buildWheels(p) {
   return geo;
 }
 
+// --- neon under glow -------------------------------------------------------
+// A neon tube hugs the underside edge of the deck all the way round — along
+// both long sides, over the kicks, and across the nose and tail tips. It is
+// drawn as two layers, a wide dim halo under a narrow hot core, both emissive
+// and self-lit so it reads as neon at any hour of the day or night. Like every
+// other part of the board it is plain geometry, no texture.
+const GLOW_GAP = 0.004; // how far the tube hangs below the deck's underside
+const GLOW_CORE_H = 0.006; // the bright core's height (thickness in y)
+const GLOW_HALO_H = 0.011; // the dim halo's height
+const GLOW_HALO_PAD = 0.012; // how much wider the halo is than the core, each side
+const GLOW_EDGE = 0.004; // the tube's inset from the deck's outer edge
+const GLOW_CORE_W = 0.005; // the core's width along the deck
+const GLOW_TIP_W = 0.006; // the tip bars' thickness along the kick
+
+/**
+ * The under-glow geometry, in the same deck-local space buildDeck uses (the
+ * deck's origin at its centre, +Y up through the grip tape). Returns the
+ * boxes for the halo and the core separately, because they need different
+ * emissive intensities and therefore different materials.
+ */
+function buildGlow(shape, glowColor) {
+  const halo = [];
+  const core = [];
+  const W = shape.deckW;
+  const flat = shape.kickStart;
+  const kickL = (shape.deckLen - 2 * flat) / 2;
+  const edge = W / 2 - GLOW_EDGE;
+  const ly = -C.DECK_T / 2 - GLOW_GAP;
+  // One run of tube: a dim halo sitting a hair above the hot core, so their
+  // faces never coincide and there is no z-fighting in the overlap.
+  const tube = (cx, cy, cz, rx, span, d) => {
+    halo.push(box(glowColor, span + GLOW_HALO_PAD, GLOW_HALO_H, d, cx, cy + 0.0015, cz, rx, 0, 0));
+    core.push(box(glowColor, span, GLOW_CORE_H, d, cx, cy - 0.0015, cz, rx, 0, 0));
+  };
+  // The flat middle and both kicked ends, down each long edge.
+  for (const s of [-1, 1]) {
+    tube(s * edge, ly, 0, 0, GLOW_CORE_W, flat * 2);
+    for (const sign of [1, -1]) {
+      // Mirror kickEnd(): the kick is a box rotated about +X and parked at the
+      // end of the flat; the tube rides the same rotation, offset below it.
+      const kick = C.NOSE_KICK;
+      const cz = sign * (flat + (Math.cos(kick) * kickL) / 2);
+      const cy = (Math.sin(kick) * kickL) / 2;
+      const rx = -sign * kick;
+      tube(s * edge, cy + ly * Math.cos(rx), cz + ly * Math.sin(rx), rx, GLOW_CORE_W, kickL);
+    }
+  }
+  // A bar across each kick tip, closing the perimeter.
+  for (const sign of [1, -1]) {
+    const kick = C.NOSE_KICK;
+    const cz = sign * (flat + (Math.cos(kick) * kickL) / 2);
+    const cy = (Math.sin(kick) * kickL) / 2;
+    const rx = -sign * kick;
+    const lz = (sign * kickL) / 2;
+    tube(
+      0,
+      cy + ly * Math.cos(rx) - lz * Math.sin(rx),
+      cz + ly * Math.sin(rx) + lz * Math.cos(rx),
+      rx,
+      W * 0.9,
+      GLOW_TIP_W
+    );
+  }
+  return { halo, core };
+}
+
 export class Board {
   constructor(palette = DEFAULT_PALETTE, shape = DEFAULT_SHAPE, design = null) {
     this.group = new THREE.Group();
@@ -167,6 +235,13 @@ export class Board {
     for (const child of [...this.group.children]) {
       this.group.remove(child);
       child.geometry.dispose();
+    }
+    // The glow tubes carry their own per-board materials (each design can pick
+    // a different colour), so they are disposed here rather than reused like
+    // the shared deck material.
+    if (this._glowMats) {
+      for (const m of this._glowMats) m.dispose();
+      this._glowMats = null;
     }
     this.palette = palette;
     this.shape = shape;
@@ -195,6 +270,26 @@ export class Board {
       m.position.set(0, C.WHEEL_R, z);
       this.group.add(m);
       this.axles.push(m);
+    }
+
+    // The neon under glow, if the design asks for one. Self-lit emissive
+    // strips under the deck edges; two meshes so the halo can be a dim wash
+    // under the hot core.
+    this.glow = [];
+    const glowColor = design && design.underGlow != null ? design.underGlow : null;
+    if (glowColor != null) {
+      const { halo, core } = buildGlow(shape, glowColor);
+      this._glowMats = [
+        new THREE.MeshPhongMaterial({ color: 0x05070b, emissive: glowColor, emissiveIntensity: 0.55 }),
+        new THREE.MeshPhongMaterial({ color: 0x05070b, emissive: glowColor, emissiveIntensity: 2.2 }),
+      ];
+      const y = C.WHEEL_R + C.TRUCK_H;
+      const haloMesh = new THREE.Mesh(merge(halo, 8), this._glowMats[0]);
+      const coreMesh = new THREE.Mesh(merge(core, 8), this._glowMats[1]);
+      haloMesh.position.y = y;
+      coreMesh.position.y = y;
+      this.group.add(haloMesh, coreMesh);
+      this.glow = [haloMesh, coreMesh];
     }
   }
 

@@ -522,6 +522,8 @@ export class Hud {
       makeSave: null,
       // The Board Maker's rack events. Style/type pick by id; colour picks by
       // role name and hex; the block-art grid paints one cell at a time.
+      // The under-glow toggle turns the neon strip on and off, and its colour
+      // pick is a plain hex.
       boardMaker: null,
       bmStyle: null,
       bmType: null,
@@ -534,6 +536,8 @@ export class Hud {
       bmLayer: null,
       bmLayerChange: null,
       bmLayerDelete: null,
+      bmGlowToggle: null,
+      bmGlowColor: null,
       bmSave: null,
       bmSavedAction: null,
       dismount: null,
@@ -607,6 +611,8 @@ export class Hud {
       if (layer) { this.on.bmLayer?.(Number(layer.dataset.bmlayer)); return; }
       const del = e.target.closest('[data-bmldel]');
       if (del) { this.on.bmLayerDelete?.(Number(del.dataset.bmldel)); return; }
+      const glow = e.target.closest('[data-bmglowtoggle]');
+      if (glow) { this.on.bmGlowToggle?.(); return; }
     });
     // Paint the block-art grid on pointer-down and keep painting while the
     // pointer is held down and drags across — a tap paints one cell, a swipe
@@ -642,6 +648,8 @@ export class Hud {
       if (lr) { this.on.bmLayerChange?.(Number(lr.dataset.bmlr), 'rot', Number(lr.value)); return; }
       const ls = e.target.closest('[data-bmls]');
       if (ls) { this.on.bmLayerChange?.(Number(ls.dataset.bmls), 'scale', Number(ls.value)); return; }
+      const glow = e.target.closest('[data-bmglowcolor]');
+      if (glow) { this.on.bmGlowColor?.(glow.value); return; }
     });
     // The main colour rack lives in its own container, so the same delegation
     // hangs off it too.
@@ -1491,6 +1499,16 @@ export class Hud {
           `</div></div>`;
       }
       html +=
+        `<div class="bm-glow">` +
+        `<div class="bm-glow-head">` +
+        `<label for="bm-glow">Neon under glow</label>` +
+        `<button type="button" class="bm-glow-toggle${config.underGlow != null ? ' on' : ''}" data-bmglowtoggle aria-pressed="${config.underGlow != null}">${config.underGlow != null ? 'On' : 'Off'}</button>` +
+        `</div>` +
+        `<div class="bm-glow-body">` +
+        `<input type="color" id="bm-glow" class="bm-glow-color" data-bmglowcolor value="${hex(config.underGlow ?? 0x35ffe0)}"${config.underGlow != null ? '' : ' disabled'}>` +
+        `<span class="bm-glow-hint">Pick a colour on the wheel — the deck glows neon underneath.</span>` +
+        `</div>` +
+        `</div>` +
         `<div class="bm-sticker-bar">` +
         `<span class="bm-sticker-label">Stickers — tap one to stick it on the deck</span>` +
         `<div class="bm-sticker-icons">` +

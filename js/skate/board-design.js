@@ -1004,6 +1004,9 @@ export const DEFAULT_BOARD_DRAFT = {
   text: 'SKATE',
   styleColor: 0xd3323f,
   styleColor2: 0x35ffe0,
+  // Neon under glow: `null` is off, a hex colour is a glowing strip
+  // underneath the deck. Built by board.js into its own emissive meshes.
+  underGlow: null,
   pixels: defaultPixels(),
   pixelBrush: 3,
   layers: [],
@@ -1046,5 +1049,6 @@ export function summarizeDesign(draft) {
   const style = styleById[draft.style]?.name || 'Plain';
   const type = typeById[draft.type]?.name || 'Shortboard';
   const extras = draft.layers.length ? ` +${draft.layers.length} sticker${draft.layers.length === 1 ? '' : 's'}` : '';
-  return `${type} · ${style}${extras}`;
+  const glow = draft.underGlow != null ? ' · neon glow' : '';
+  return `${type} · ${style}${extras}${glow}`;
 }

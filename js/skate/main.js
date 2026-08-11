@@ -485,6 +485,10 @@ function saveMadeCharacter() {
  * state, so it does not live in the draft itself (and so cannot be saved). */
 let boardSelectedLayer = null;
 
+/** The last colour the under-glow was set to, kept so toggling it back on
+ * resumes the player's own pick instead of resetting to the default. */
+let boardGlowColor = 0x35ffe0;
+
 /** The Board Maker's whole working state, in one place, so it cannot drift. */
 function boardDraft() {
   return save.boardDraft;
@@ -538,6 +542,21 @@ function pickBoardColor(role, hex) {
     } else {
       d.colors[role] = value;
     }
+  });
+}
+
+/** The under-glow's colour wheel: remember the pick and paint the deck with it. */
+function pickBoardGlowColor(hex) {
+  boardGlowColor = parseInt(hex.slice(1), 16);
+  updateBoardDraft((d) => {
+    d.underGlow = boardGlowColor;
+  });
+}
+
+/** Flip the neon strip on and off; turning it on resumes the last pick. */
+function toggleBoardGlow() {
+  updateBoardDraft((d) => {
+    d.underGlow = d.underGlow != null ? null : boardGlowColor;
   });
 }
 
@@ -733,6 +752,8 @@ hud.on.bmAddSticker = (icon) => addBoardSticker(icon);
 hud.on.bmLayer = (i) => selectBoardLayer(i);
 hud.on.bmLayerChange = (i, key, value) => changeBoardLayer(i, key, value);
 hud.on.bmLayerDelete = (i) => deleteBoardLayer(i);
+hud.on.bmGlowToggle = () => toggleBoardGlow();
+hud.on.bmGlowColor = (hex) => pickBoardGlowColor(hex);
 hud.on.bmSave = () => saveMadeBoard();
 hud.on.bmSavedAction = (id, action) => boardSavedAction(id, action);
 hud.on.pause = () => togglePause();
