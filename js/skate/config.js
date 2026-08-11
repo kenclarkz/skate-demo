@@ -203,8 +203,8 @@ export const COMBO_WINDOW = 1.35;    // seconds on the ground before a combo ban
 
 // --- camera ---------------------------------------------------------------
 export const CAM_DIST = 4.0;
-export const CAM_HEIGHT = 1.32;      // low, like the game it is copying
-export const CAM_LOOK_H = 1.05;
+export const CAM_HEIGHT = 1.5;       // raised a little — roughly the rider's head height
+export const CAM_LOOK_H = 1.2;       // aim at the rider, not the deck
 export const CAM_LAG = 3.4;          // position spring, 1/s
 export const CAM_YAW_LAG = 2.9;      // heading spring, 1/s
 export const CAM_FOV = 62;

@@ -4,10 +4,10 @@
 // the same problem (put the lens somewhere, point it at the board) with a
 // different anchor.
 //
-// The chase camera is low, close, and behind — a skate game's camera sits at
-// about the height of the rider's hips, because that is the angle from which a
-// board's rotation is readable and an ollie looks like it left the ground. A
-// camera up at head height makes every trick look flat.
+// The chase camera is close and behind, sitting a little higher than it used
+// to — roughly the rider's head height now — so the rider reads head to toe
+// while the board's rotation stays readable and an ollie still looks like it
+// left the ground.
 //
 // Two rules make it feel like a camera rather than a boom arm. It follows the
 // direction of *travel* rather than the direction the board is pointing, so a
