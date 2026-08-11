@@ -34,7 +34,7 @@ ok(await page.isHidden('#screen-start'), 'start screen hidden behind it');
 
 // Racks populate from the catalogue.
 const styleCount = await page.locator('#bm-style .maker-option').count();
-ok(styleCount === 11, `style rack has 11 entries (got ${styleCount})`);
+ok(styleCount === 21, `style rack has 21 entries (got ${styleCount})`);
 const typeCount = await page.locator('#bm-type .maker-option').count();
 ok(typeCount === 7, `type rack has 7 entries (got ${typeCount})`);
 const colorCount = await page.locator('#bm-colors .bm-color-row').count();

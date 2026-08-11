@@ -47,6 +47,16 @@ const STYLE_SWATCH = {
   stickers: 'radial-gradient(#ffc93f 30%,#ff2fa0 70%)',
   arcade: 'linear-gradient(#9a5cf6,#12141a)',
   shop: 'repeating-linear-gradient(45deg,#e6392e,#e6392e 5px,#12141a 5px,#12141a 10px)',
+  retro: 'linear-gradient(#ff2fa0,#ffc93f,#12141a)',
+  tiger: 'repeating-linear-gradient(90deg,#12141a 0 8px,#e6392e 8px 16px)',
+  space: 'radial-gradient(circle at 35% 40%,#2f7fd1 0 9px,#0d1020 10px)',
+  argyle: 'repeating-linear-gradient(45deg,#ffffff 0 6px,#12141a 6px 12px), repeating-linear-gradient(-45deg,#12141a 0 6px,#ffffff 6px 12px)',
+  splat: 'radial-gradient(#ff2fa0 35%,#35ffe0 70%)',
+  circuit: 'repeating-linear-gradient(0deg,#39e75f 0 2px,#0a1f12 2px 8px)',
+  sunburst: 'conic-gradient(#ffc93f 0 15%,#12141a 15% 30%,#ffc93f 30% 45%,#12141a 45% 60%,#ffc93f 60% 75%,#12141a 75% 90%,#ffc93f 90% 100%)',
+  chevron: 'repeating-linear-gradient(-45deg,#2f7fd1 0 8px,#35ffe0 8px 16px)',
+  shield: 'linear-gradient(#d3323f,#8a1f2a)',
+  darts: 'radial-gradient(circle,#ffc93f 0 18%,#e6392e 18% 38%,#ffc93f 38% 58%,#e6392e 58% 78%,#ffc93f 78% 100%)',
   blockart: 'conic-gradient(#ff2fa0,#35ffe0,#ffc93f,#9a5cf6,#ff2fa0)',
 };
 
@@ -1453,7 +1463,7 @@ export class Hud {
           `<div class="bm-color-row"><label for="bmc-sb">Pattern B</label><input type="color" id="bmc-sb" data-bmcolor="styleColor2" value="${hex(config.styleColor2)}"></div>` +
           `</div>`;
       }
-      if (config.style === 'graffiti' || config.style === 'shop') {
+      if (config.style === 'graffiti' || config.style === 'shop' || config.style === 'shield') {
         html +=
           `<div class="bm-text-field"><label for="bm-text">Block lettering</label>` +
           `<input type="text" id="bm-text" data-bmtext value="${escapeHtml(config.text)}" maxlength="12" spellcheck="false" placeholder="SKATE"></div>`;
