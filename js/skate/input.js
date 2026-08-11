@@ -387,6 +387,13 @@ export class Input {
   key(e, downNow) {
     if (e.repeat) return;
     const code = e.code;
+    // Typing in a text box must reach the box: this global handler would
+    // otherwise preventDefault() every key the game also uses (WASD, arrows,
+    // space, the trick keys, the grab digits) and swallow them as input.
+    const tag = e.target?.tagName;
+    const isField =
+      tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable;
+    if (isField) return;
     if (code === 'Escape' || code === 'KeyP') {
       if (downNow) this.onPause?.();
       return;
