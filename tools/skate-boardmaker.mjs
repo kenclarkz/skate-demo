@@ -101,6 +101,13 @@ ok(/On now/.test(cardText), 'saved deck is equipped on save');
 const cardCount = await page.locator('.bm-saved-card').count();
 ok(cardCount === 1, `exactly one saved deck card (got ${cardCount})`);
 
+// Re-opening after a save has to start a fresh board, not the deck that was
+// just saved — "make another one" is a new deck, not re-saving the same one.
+const draftAfterSave = await page.inputValue('#bm-name');
+ok(draftAfterSave !== 'Hot Pink Deck', `after a save the maker opens a fresh board, not the saved one (got "${draftAfterSave}")`);
+const freshDraftStyle = await page.locator('.maker-option.current[data-bmstyle]').getAttribute('data-bmstyle');
+ok(freshDraftStyle === 'plain', `after a save the maker opens with the default style (got ${freshDraftStyle})`);
+
 // Tapping a saved card to equip it puts that deck on the turntable, while the
 // working draft (still being built) is left alone in the racks.
 await page.fill('#bm-name', 'Work In Progress');
@@ -126,12 +133,40 @@ await page.waitForTimeout(300);
 const afterDel = await page.textContent('#bm-saved');
 ok(/No custom boards/.test(afterDel), 'delete clears the saved deck');
 
+// Two decks in a row: saving the second one adds it without clobbering the
+// first, and the freshly saved deck is the one equipped.
+await page.fill('#bm-name', 'Second Deck');
+await page.click('#btn-bm-save');
+await page.waitForTimeout(400);
+await page.click('#btn-boardmaker');
+await page.waitForTimeout(400);
+await page.fill('#bm-name', 'Third Deck');
+await page.click('#btn-bm-save');
+await page.waitForTimeout(400);
+await page.click('#btn-boardmaker');
+await page.waitForTimeout(400);
+const secondCards = await page.locator('.bm-saved-card').count();
+ok(secondCards === 2, `saving another deck adds it to the rack (got ${secondCards} cards)`);
+const secondText = await page.textContent('#bm-saved');
+ok(
+  /Second Deck/.test(secondText) && /Third Deck/.test(secondText),
+  'both saved decks are on the rack'
+);
+const secondEquipped = await page.evaluate(() => window.__skate.save.boardId);
+ok(secondEquipped.startsWith('custom:'), `the new deck is equipped (${secondEquipped})`);
+
 // Round-trip: a saved deck survives a reload.
 await page.fill('#bm-name', 'Keeper');
 await page.click('#btn-bm-save');
 await page.waitForTimeout(300);
+const equippedId = await page.evaluate(() => window.__skate.save.boardId);
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(1200);
+const equippedAfterReload = await page.evaluate(() => window.__skate.save.boardId);
+ok(
+  equippedAfterReload === equippedId,
+  `the equipped custom deck survives a reload (${equippedAfterReload})`
+);
 await page.click('#btn-boardmaker');
 await page.waitForTimeout(400);
 const kept = await page.textContent('#bm-saved');
