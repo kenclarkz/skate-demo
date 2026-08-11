@@ -538,6 +538,8 @@ export class Hud {
       bmLayerDelete: null,
       bmGlowToggle: null,
       bmGlowColor: null,
+      bmFace: null,
+      bmPlace: null,
       bmSave: null,
       bmSavedAction: null,
       dismount: null,
@@ -613,6 +615,8 @@ export class Hud {
       if (del) { this.on.bmLayerDelete?.(Number(del.dataset.bmldel)); return; }
       const glow = e.target.closest('[data-bmglowtoggle]');
       if (glow) { this.on.bmGlowToggle?.(); return; }
+      const face = e.target.closest('[data-bmface]');
+      if (face) { this.on.bmFace?.(face.dataset.bmface); return; }
     });
     // Paint the block-art grid on pointer-down and keep painting while the
     // pointer is held down and drags across — a tap paints one cell, a swipe
@@ -650,6 +654,14 @@ export class Hud {
       if (ls) { this.on.bmLayerChange?.(Number(ls.dataset.bmls), 'scale', Number(ls.value)); return; }
       const glow = e.target.closest('[data-bmglowcolor]');
       if (glow) { this.on.bmGlowColor?.(glow.value); return; }
+      const ppx = e.target.closest('[data-bmpx]');
+      if (ppx) { this.on.bmPlace?.('px', Number(ppx.value)); return; }
+      const ppz = e.target.closest('[data-bmpz]');
+      if (ppz) { this.on.bmPlace?.('pz', Number(ppz.value)); return; }
+      const ppr = e.target.closest('[data-bmpr]');
+      if (ppr) { this.on.bmPlace?.('prot', Number(ppr.value)); return; }
+      const pps = e.target.closest('[data-bmps]');
+      if (pps) { this.on.bmPlace?.('pscale', Number(pps.value)); return; }
     });
     // The main colour rack lives in its own container, so the same delegation
     // hangs off it too.
@@ -1382,9 +1394,14 @@ export class Hud {
   /** Rebuilds every rack of the Board Maker from the working draft. Called on
    * every change, so the preview, the swatches and the options stay in step;
    * the racks are cheap to rebuild, the WebGL deck is not, so the deck just
-   * gets a `.set(draft)` from main.js instead of being recreated here. */
-  renderBoardMaker(config, save, selectedLayer = null) {
+   * gets a `.set(draft)` from main.js instead of being recreated here.
+   * `face` is the face the racks are editing — 'top' or 'back' — and every
+   * per-design rack (style, pattern colours, lettering, pixels, stickers)
+   * reads that face's own design, so the two faces never share a stroke. */
+  renderBoardMaker(config, save, selectedLayer = null, face = 'top') {
     const hex = colorHex;
+    // The top of the deck is the draft itself; the back lives in draft.back.
+    const faceDesign = face === 'back' && config.back ? config.back : config;
     if (this.bmCoinsEl) this.bmCoinsEl.textContent = save.coins.toLocaleString();
     // Never clobber the name field while the player is typing in it — the
     // render runs on every keystroke, and resetting .value here would fight
@@ -1416,10 +1433,11 @@ export class Hud {
     }
 
     // Style rack. The chip swatch is a CSS gradient hint, not the real deck —
-    // that lives in the preview.
+    // that lives in the preview. It shows the active face's style, so the same
+    // rack edits whichever side the toggle is pointed at.
     if (this.bmStyleEl) {
       this.bmStyleEl.innerHTML = STYLES.map((s) => {
-        const cur = config.style === s.id;
+        const cur = faceDesign.style === s.id;
         const glyph = STYLE_SWATCH[s.id] || STYLE_SWATCH.plain;
         return (
           `<button type="button" class="maker-option${cur ? ' current' : ''}" data-bmstyle="${s.id}">` +
@@ -1463,8 +1481,9 @@ export class Hud {
         .join('');
     }
 
-    // The per-style options panel: pattern colours, block lettering, the
-    // pixel editor, and the sticker rack. Only the parts that apply.
+    // The per-style options panel: the face toggle, pattern colours, block
+    // lettering, the pixel editor, the sticker rack and the base-pattern
+    // placement. Only the parts that apply to the active face's style.
     if (this.bmOptionsEl) {
       // Rebuilding this body on every keystroke would destroy the lettering
       // box while the player is typing in it — the field would lose focus
@@ -1474,27 +1493,35 @@ export class Hud {
       // redraw from main.js do the live update.
       const typingText = this.bmOptionsEl.querySelector('[data-bmtext]') === document.activeElement;
       let html = '';
-      if (config.style !== 'plain') {
+      // The top/back switch: which face every rack below is editing. Each face
+      // keeps its own complete design, so this just repoints the racks.
+      html +=
+        `<div class="bm-face-toggle">` +
+        `<span class="bm-face-label">Designing</span>` +
+        `<button type="button" class="bm-face-btn${face === 'top' ? ' on' : ''}" data-bmface="top">Top of deck</button>` +
+        `<button type="button" class="bm-face-btn${face === 'back' ? ' on' : ''}" data-bmface="back">Back of deck</button>` +
+        `</div>`;
+      if (faceDesign.style !== 'plain') {
         html +=
           `<div class="bm-color-rows">` +
-          `<div class="bm-color-row"><label for="bmc-sa">Pattern A</label><input type="color" id="bmc-sa" data-bmcolor="styleColor" value="${hex(config.styleColor)}"></div>` +
-          `<div class="bm-color-row"><label for="bmc-sb">Pattern B</label><input type="color" id="bmc-sb" data-bmcolor="styleColor2" value="${hex(config.styleColor2)}"></div>` +
+          `<div class="bm-color-row"><label for="bmc-sa">Pattern A</label><input type="color" id="bmc-sa" data-bmcolor="styleColor" value="${hex(faceDesign.styleColor)}"></div>` +
+          `<div class="bm-color-row"><label for="bmc-sb">Pattern B</label><input type="color" id="bmc-sb" data-bmcolor="styleColor2" value="${hex(faceDesign.styleColor2)}"></div>` +
           `</div>`;
       }
-      if (config.style === 'graffiti' || config.style === 'shop' || config.style === 'shield') {
+      if (faceDesign.style === 'graffiti' || faceDesign.style === 'shop' || faceDesign.style === 'shield') {
         html +=
           `<div class="bm-text-field"><label for="bm-text">Block lettering</label>` +
-          `<input type="text" id="bm-text" data-bmtext value="${escapeHtml(config.text)}" maxlength="12" spellcheck="false" placeholder="SKATE"></div>`;
+          `<input type="text" id="bm-text" data-bmtext value="${escapeHtml(faceDesign.text)}" maxlength="12" spellcheck="false" placeholder="SKATE"></div>`;
       }
-      if (config.style === 'blockart') {
+      if (faceDesign.style === 'blockart') {
         html +=
           `<div class="bm-pixel-wrap">` +
           `<canvas class="bm-pixel" data-bmpixel width="${BLOCKART_COLS * 16}" height="${BLOCKART_ROWS * 16}"></canvas>` +
           `<div class="bm-brushes">` +
-          `<button type="button" class="bm-brush bm-brush--eraser${config.pixelBrush === 0 ? ' current' : ''}" data-bmbrush="0" title="Erase">⌫</button>` +
+          `<button type="button" class="bm-brush bm-brush--eraser${faceDesign.pixelBrush === 0 ? ' current' : ''}" data-bmbrush="0" title="Erase">⌫</button>` +
           PIXEL_PAINT.map(
             (c, i) =>
-              `<button type="button" class="bm-brush${config.pixelBrush === i + 1 ? ' current' : ''}" data-bmbrush="${i + 1}" style="background:${hex(c)}" title="Paint"></button>`
+              `<button type="button" class="bm-brush${faceDesign.pixelBrush === i + 1 ? ' current' : ''}" data-bmbrush="${i + 1}" style="background:${hex(c)}" title="Paint"></button>`
           ).join('') +
           `</div></div>`;
       }
@@ -1516,9 +1543,9 @@ export class Hud {
           (id) => `<button type="button" class="bm-sticker-btn" data-bmicon="${id}" title="${id}">${STICKER_GLYPH[id] || '✳'}</button>`
         ).join('') +
         `</div>` +
-        (config.layers.length
+        (faceDesign.layers.length
           ? `<div class="bm-layers">` +
-            config.layers
+            faceDesign.layers
               .map(
                 (l, i) =>
                   `<button type="button" class="bm-layer-chip${i === selectedLayer ? ' current' : ''}" data-bmlayer="${i}">${STICKER_GLYPH[l.icon] || '✳'} ${i + 1}</button>`
@@ -1527,7 +1554,7 @@ export class Hud {
             `</div>`
           : '') +
         `</div>`;
-      const layer = selectedLayer != null ? config.layers[selectedLayer] : null;
+      const layer = selectedLayer != null ? faceDesign.layers[selectedLayer] : null;
       if (layer) {
         html +=
           `<div class="bm-layer-inspector">` +
@@ -1538,12 +1565,24 @@ export class Hud {
           `<button type="button" class="bm-layer-del" data-bmldel="${selectedLayer}">Delete sticker</button>` +
           `</div>`;
       }
+      // Move the whole base design, the way the sticker inspector moves a
+      // single sticker. Only meaningful once there is a pattern to move.
+      if (faceDesign.style !== 'plain') {
+        html +=
+          `<div class="bm-placement">` +
+          `<span class="bm-placement-label">Move the design</span>` +
+          `<label>Across<input type="range" data-bmpx min="-0.18" max="0.18" step="0.005" value="${faceDesign.px ?? 0}"></label>` +
+          `<label>Along<input type="range" data-bmpz min="-0.3" max="0.3" step="0.005" value="${faceDesign.pz ?? 0}"></label>` +
+          `<label>Spin<input type="range" data-bmpr min="-180" max="180" step="5" value="${Math.round(((faceDesign.prot ?? 0) * 180) / Math.PI)}"></label>` +
+          `<label>Size<input type="range" data-bmps min="0.5" max="2" step="0.05" value="${faceDesign.pscale ?? 1}"></label>` +
+          `</div>`;
+      }
       if (!typingText) this.bmOptionsEl.innerHTML = html;
     }
 
     // Redraw the block-art grid (only exists when the block-art style is on).
     const pixel = this.bmOptionsEl?.querySelector('[data-bmpixel]');
-    if (pixel) this.drawPixelGrid(pixel, config.pixels);
+    if (pixel) this.drawPixelGrid(pixel, faceDesign.pixels);
   }
 
   /** Paints the block-art grid into its canvas — a full redraw each time a

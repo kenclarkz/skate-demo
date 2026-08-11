@@ -219,6 +219,68 @@ await page.waitForTimeout(400);
 const kept = await page.textContent('#bm-saved');
 ok(/Keeper/.test(kept), 'saved deck survives a page reload');
 
+// --- The back of the deck --------------------------------------------------
+// The maker edits two faces of a deck: the top and the underside, each with
+// its own complete design, and the base pattern of either face can be moved
+// around the deck instead of sitting where the generator put it.
+{
+  ok(await page.locator('[data-bmface="top"]').isVisible(), 'face toggle shows a Top of deck button');
+  ok(await page.locator('[data-bmface="back"]').isVisible(), 'face toggle shows a Back of deck button');
+  const topClass = await page.locator('[data-bmface="top"]').getAttribute('class');
+  ok(topClass.includes('on'), 'top of deck is the face being designed by default');
+
+  // Flip to the back: every rack now reads and edits the underside's design.
+  await page.click('[data-bmface="back"]');
+  await page.waitForTimeout(200);
+  const backClass = await page.locator('[data-bmface="back"]').getAttribute('class');
+  ok(backClass.includes('on'), 'toggling to the back highlights it');
+  const backPlain = await page.evaluate(() => window.__skate.save.boardDraft.back.style);
+  ok(backPlain === 'plain', `the back of a fresh board starts plain (got ${backPlain})`);
+
+  // The preview deck has no back art yet; give the back a style and the
+  // underside really gains the geometry — the same merged draw call, more
+  // vertices.
+  const vertsBefore = await page.evaluate(
+    () => window.__skate.hud.bmPreview?.board.deck.geometry.attributes.position.count ?? 0
+  );
+  await page.click('[data-bmstyle="checker"]');
+  await page.waitForTimeout(200);
+  const faces = await page.evaluate(() => ({
+    top: window.__skate.save.boardDraft.style,
+    back: window.__skate.save.boardDraft.back.style,
+  }));
+  ok(faces.back === 'checker', `the back takes the picked style (got ${faces.back})`);
+  ok(faces.top === 'plain', 'and the top of the deck is left untouched');
+  const vertsAfter = await page.evaluate(
+    () => window.__skate.hud.bmPreview?.board.deck.geometry.attributes.position.count ?? 0
+  );
+  ok(vertsAfter > vertsBefore, `the back design really renders on the deck (${vertsBefore} → ${vertsAfter} verts)`);
+
+  // Moving the design: with a pattern on the face, the placement inspector
+  // appears and its knobs move the whole base pattern in the draft.
+  ok(await page.locator('.bm-placement').isVisible(), 'Move-the-design inspector appears once the back has a pattern');
+  const pxBefore = await page.evaluate(() => window.__skate.save.boardDraft.back.px);
+  await page.locator('[data-bmpx]').evaluate((el) => {
+    el.value = '0.09';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(200);
+  const pxAfter = await page.evaluate(() => window.__skate.save.boardDraft.back.px);
+  ok(pxAfter === 0.09, `dragging the pattern across moves it in the draft (${pxBefore} → ${pxAfter})`);
+  const topPx = await page.evaluate(() => window.__skate.save.boardDraft.px);
+  ok(topPx === 0, 'and the top of the deck keeps its own placement');
+
+  // The back design travels with the deck: save it and the saved card mentions
+  // it, and the reload round-trip keeps it.
+  await page.fill('#bm-name', 'Two-Sided Deck');
+  await page.click('#btn-bm-save');
+  await page.waitForTimeout(300);
+  await page.click('#btn-boardmaker');
+  await page.waitForTimeout(300);
+  const backCard = await page.textContent('#bm-saved');
+  ok(/back: Checker Deck/.test(backCard), 'saved deck card mentions the back design');
+}
+
 ok(errors.length === 0, `no page errors (${errors.length})`);
 for (const e of errors.slice(0, 5)) console.log('   ', e.slice(0, 250));
 
