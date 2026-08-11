@@ -112,7 +112,9 @@ export class ParkDesigner {
     this.redoBtn?.addEventListener('click', () => this.redo());
     this.nameInput?.addEventListener('change', () => {
       if (!this.file) return;
-      this.file.name = this.nameInput.value.trim().slice(0, 40) || 'My park';
+      // Take the field as typed — even empty. The default name is applied at
+      // save time (validate()), never while the player is editing the box.
+      this.file.name = this.nameInput.value.trim().slice(0, 40);
       this._scheduleSave();
     });
     this.scrimEl?.addEventListener('click', () => {
@@ -210,7 +212,9 @@ export class ParkDesigner {
 
   _save() {
     if (!this.file) return;
-    this.file.name = this.nameInput?.value.trim().slice(0, 40) || this.file.name;
+    // A default name only lands here, at save time — never on the live field
+    // while the player is typing, so they can clear the box and type afresh.
+    this.file.name = this.nameInput?.value.trim().slice(0, 40) || this.file.name || 'My park';
     putFile(validate(this.file));
   }
 
