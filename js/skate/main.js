@@ -490,11 +490,16 @@ function boardDraft() {
   return save.boardDraft;
 }
 
-/** Re-render the Board Maker's racks and its turntable from the draft. */
-function renderBoardMaker() {
+/** Re-render the Board Maker's racks and its turntable from the draft. An
+ * optional `preview` board (a saved deck) is shown on the turntable instead of
+ * the draft while the racks still describe the deck under construction — so
+ * tapping a saved card answers "what does that look like?" without discarding
+ * the work in progress. */
+function renderBoardMaker(preview = null) {
   const d = boardDraft();
   hud.renderBoardMaker(d, save, boardSelectedLayer);
-  hud.bmPreview?.setBoard(designPalette(d), boardTypeById[d.type]?.shape, d);
+  const show = preview || d;
+  hud.bmPreview?.setBoard(designPalette(show), boardTypeById[show.type]?.shape, show);
 }
 
 function showBoardMaker() {
@@ -619,7 +624,10 @@ function boardSavedAction(id, action) {
     }
   } else if (save.setCustomBoard(id)) {
     applyBoard();
-    renderBoardMaker();
+    // Put the just-equipped saved deck on the turntable so tapping a saved card
+    // shows what it looks like; the working draft is left untouched.
+    const b = save.customBoards.find((x) => x.id === id);
+    renderBoardMaker(b);
   }
 }
 

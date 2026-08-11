@@ -101,6 +101,17 @@ ok(/On now/.test(cardText), 'saved deck is equipped on save');
 const cardCount = await page.locator('.bm-saved-card').count();
 ok(cardCount === 1, `exactly one saved deck card (got ${cardCount})`);
 
+// Tapping a saved card to equip it puts that deck on the turntable, while the
+// working draft (still being built) is left alone in the racks.
+await page.fill('#bm-name', 'Work In Progress');
+await page.waitForTimeout(200);
+await page.click('.bm-saved-card');
+await page.waitForTimeout(300);
+const previewName = await page.evaluate(() => window.__skate.hud.bmPreview?.board.design?.name);
+ok(previewName === 'Hot Pink Deck', `tapping a saved card shows it on the turntable (got ${previewName})`);
+const draftAfter = await page.inputValue('#bm-name');
+ok(draftAfter === 'Work In Progress', 'tapping a saved card leaves the working draft untouched');
+
 // Edit loads the deck back into the draft.
 await page.click('[data-bmaction="edit"]');
 await page.waitForTimeout(300);
