@@ -163,6 +163,16 @@ const GLOW_EDGE = 0.004; // the tube's inset from the deck's outer edge
 const GLOW_CORE_W = 0.005; // the core's width along the deck
 const GLOW_TIP_W = 0.006; // the tip bars' thickness along the kick
 
+// The strips are the tube, but a neon tube's point is the light it throws —
+// so a lit design also carries a small point light hanging under the deck,
+// throwing a pool of the same colour onto the ground the board rolls over.
+// These tune that pool: how far below the deck's underside it hangs (kept
+// tight so the pool hugs the board rather than washing the park), how far it
+// reaches before fading out, and how strong it is at the ground beneath.
+const GLOW_LIGHT_DROP = 0.008;   // light below the deck's underside
+const GLOW_LIGHT_DIST = 2.8;     // metres before the glow fades out
+const GLOW_LIGHT_INTENSITY = 3.0; // candela; the pool's strength at the ground
+
 /**
  * The under-glow geometry, in the same deck-local space buildDeck uses (the
  * deck's origin at its centre, +Y up through the grip tape). Returns the
@@ -234,7 +244,7 @@ export class Board {
   build(palette, shape = this.shape || DEFAULT_SHAPE, design = null) {
     for (const child of [...this.group.children]) {
       this.group.remove(child);
-      child.geometry.dispose();
+      if (child.geometry) child.geometry.dispose();
     }
     // The glow tubes carry their own per-board materials (each design can pick
     // a different colour), so they are disposed here rather than reused like
@@ -276,6 +286,7 @@ export class Board {
     // strips under the deck edges; two meshes so the halo can be a dim wash
     // under the hot core.
     this.glow = [];
+    this.glowLight = null;
     const glowColor = design && design.underGlow != null ? design.underGlow : null;
     if (glowColor != null) {
       const { halo, core } = buildGlow(shape, glowColor);
@@ -290,6 +301,14 @@ export class Board {
       coreMesh.position.y = y;
       this.group.add(haloMesh, coreMesh);
       this.glow = [haloMesh, coreMesh];
+
+      // The neon's actual light: the emissive strips paint the deck, but the
+      // glow they sell belongs on the ground beneath it. A short-distance
+      // point light in the same colour, riding the deck's own transform so it
+      // tips with a carve, spins with a flip and falls with a ragdoll.
+      this.glowLight = new THREE.PointLight(glowColor, GLOW_LIGHT_INTENSITY, GLOW_LIGHT_DIST, 2);
+      this.glowLight.position.set(0, y - C.DECK_T / 2 - GLOW_LIGHT_DROP, 0);
+      this.group.add(this.glowLight);
     }
   }
 
