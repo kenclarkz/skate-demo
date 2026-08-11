@@ -54,8 +54,9 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
 - **Eight skaters**, each with their own headwear and palette, picked from a
   skater rack in the shop — from the everyday four up to the legendaries
   (a tiger, the not-quite-Birdman, a bunny, and a garden gnome); a shop full
-  of purchasable boards across four shapes (shortboard, longboard, penny, and
-  cruiser decks, each in a couple of skins), shirts, and headwear accessories
+  of purchasable boards across seven shapes (shortboard, longboard, penny,
+  cruiser, old-school, freestyle, and mini-cruiser decks, each in a couple of
+  skins), shirts, and headwear accessories
   (hats and shades), paid for with coins earned from tricks and combos.
 - **Thirteen ambient AI skaters per park** — five tour the patrol loop the
   whole time, popping tricks with the exact same ride model the player

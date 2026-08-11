@@ -36,7 +36,7 @@ ok(await page.isHidden('#screen-start'), 'start screen hidden behind it');
 const styleCount = await page.locator('#bm-style .maker-option').count();
 ok(styleCount === 11, `style rack has 11 entries (got ${styleCount})`);
 const typeCount = await page.locator('#bm-type .maker-option').count();
-ok(typeCount === 4, `type rack has 4 entries (got ${typeCount})`);
+ok(typeCount === 7, `type rack has 7 entries (got ${typeCount})`);
 const colorCount = await page.locator('#bm-colors .bm-color-row').count();
 ok(colorCount === 6, `colour rack has 6 rows (got ${colorCount})`);
 const noSaved = await page.textContent('#bm-saved');
