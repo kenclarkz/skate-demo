@@ -543,7 +543,11 @@ function pickBoardColor(role, hex) {
 
 function setBoardName(name) {
   updateBoardDraft((d) => {
-    d.name = name.trim().slice(0, 40) || 'My Board';
+    // Keep the name exactly as typed — spaces, case, even empty. Cleaning
+    // (trim, a default name) happens when the board is saved, not while the
+    // player is still typing, or they can never delete the field or use a
+    // space in the middle of a name.
+    d.name = name.slice(0, 40);
   });
 }
 

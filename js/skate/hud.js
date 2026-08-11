@@ -1378,7 +1378,10 @@ export class Hud {
   renderBoardMaker(config, save, selectedLayer = null) {
     const hex = colorHex;
     if (this.bmCoinsEl) this.bmCoinsEl.textContent = save.coins.toLocaleString();
-    if (this.bmNameEl) this.bmNameEl.value = config.name;
+    // Never clobber the name field while the player is typing in it — the
+    // render runs on every keystroke, and resetting .value here would fight
+    // the field and make spaces and a fully-deleted field impossible.
+    if (this.bmNameEl && document.activeElement !== this.bmNameEl) this.bmNameEl.value = config.name;
     if (this.bmSummaryEl) this.bmSummaryEl.textContent = summarizeDesign(config);
 
     // Saved boards: equip, re-open for editing, or delete. The card shows the
@@ -1455,6 +1458,13 @@ export class Hud {
     // The per-style options panel: pattern colours, block lettering, the
     // pixel editor, and the sticker rack. Only the parts that apply.
     if (this.bmOptionsEl) {
+      // Rebuilding this body on every keystroke would destroy the lettering
+      // box while the player is typing in it — the field would lose focus
+      // after the first character and every key after that would go to the
+      // game instead. While the lettering box is focused, leave the body in
+      // place (its value is already in the draft) and let the preview's own
+      // redraw from main.js do the live update.
+      const typingText = this.bmOptionsEl.querySelector('[data-bmtext]') === document.activeElement;
       let html = '';
       if (config.style !== 'plain') {
         html +=
@@ -1510,7 +1520,7 @@ export class Hud {
           `<button type="button" class="bm-layer-del" data-bmldel="${selectedLayer}">Delete sticker</button>` +
           `</div>`;
       }
-      this.bmOptionsEl.innerHTML = html;
+      if (!typingText) this.bmOptionsEl.innerHTML = html;
     }
 
     // Redraw the block-art grid (only exists when the block-art style is on).

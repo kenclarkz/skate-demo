@@ -97,7 +97,7 @@ const clampNum = (v, lo, hi) => {
 function cleanBoardDraft(raw) {
   const d = freshBoardDraft();
   if (!raw || typeof raw !== 'object') return d;
-  if (typeof raw.name === 'string' && raw.name.trim()) d.name = raw.name.trim().slice(0, 40);
+  if (typeof raw.name === 'string') d.name = raw.name.trim().slice(0, 40);
   if (typeof raw.type === 'string' && typeById[raw.type]) d.type = raw.type;
   if (raw.colors && typeof raw.colors === 'object') {
     for (const k of PALETTE_KEYS) {
@@ -540,6 +540,10 @@ export const save = {
    */
   saveCustomBoard(draft) {
     const d = cleanBoardDraft(draft);
+    // The draft may legitimately have an empty name mid-edit; a saved deck
+    // needs a label, so give it the default here — not while the player is
+    // typing in the field.
+    if (!d.name.trim()) d.name = 'My Board';
     const id = `b${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
     const board = { id, ...d };
     state.customBoards.push(board);
@@ -554,6 +558,7 @@ export const save = {
     const i = state.customBoards.findIndex((b) => b.id === id);
     if (i === -1) return false;
     const d = cleanBoardDraft(draft);
+    if (!d.name.trim()) d.name = 'My Board';
     state.customBoards[i] = { id, ...d };
     state.boardId = `custom:${id}`;
     state.boardMakerSaved = true;
