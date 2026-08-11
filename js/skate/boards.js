@@ -32,6 +32,24 @@ export const TYPES = [
     blurb: 'Between the two: a street deck stretched for a smoother ride.',
     shape: { deckLen: 0.92, deckW: 0.215, kickStart: 0.3 },
   },
+  {
+    id: 'oldschool',
+    name: 'Old School',
+    blurb: 'The wide, stubby pool deck of the eighties: a lot of board, very little kick.',
+    shape: { deckLen: 0.82, deckW: 0.25, kickStart: 0.3 },
+  },
+  {
+    id: 'freestyle',
+    name: 'Freestyle',
+    blurb: 'A flat deck, nose and tail nearly level — made for manuals and rail flips.',
+    shape: { deckLen: 0.78, deckW: 0.195, kickStart: 0.35 },
+  },
+  {
+    id: 'mini',
+    name: 'Mini Cruiser',
+    blurb: 'A pocket plastic cruiser: shorter than a penny, no wider than a street deck.',
+    shape: { deckLen: 0.68, deckW: 0.2, kickStart: 0.16 },
+  },
 ];
 
 export const typeById = Object.fromEntries(TYPES.map((t) => [t.id, t]));
