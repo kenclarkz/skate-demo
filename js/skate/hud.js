@@ -33,7 +33,7 @@ import {
   colorHex,
 } from './board-design.js';
 
-const SCREENS = ['start', 'paused', 'guide', 'parks', 'myparks', 'store', 'charselect', 'maker', 'boardmaker', 'settings'];
+const SCREENS = ['start', 'paused', 'guide', 'parks', 'store', 'charselect', 'maker', 'boardmaker', 'settings'];
 
 /** A two-colour hint of each style, drawn in CSS for its chip. */
 const STYLE_SWATCH = {
@@ -495,7 +495,6 @@ export class Hud {
       reset: null,
       parks: null,
       selectPark: null,
-      myParks: null,
       newPark: null,
       playPark: null,
       editPark: null,
@@ -564,8 +563,6 @@ export class Hud {
     click('btn-guide-back', () => this.on.back?.());
     click('btn-parks', () => this.on.parks?.());
     click('btn-parks-back', () => this.on.back?.());
-    click('btn-myparks', () => this.on.myParks?.());
-    click('btn-myparks-back', () => this.on.back?.());
     click('btn-mypark-new', () => this.on.newPark?.());
     click('btn-store', () => this.on.store?.());
     click('btn-store-back', () => this.on.back?.());

@@ -86,7 +86,7 @@ ok(draftText === 'SKATE PRO', `draft text matches (got "${draftText}")`);
 // --- Park Designer: the park name ------------------------------------------
 await page.click('#btn-bm-back');
 await page.waitForTimeout(300);
-await page.evaluate(() => window.__skate.showMyParks());
+await page.evaluate(() => window.__skate.showParks());
 await page.waitForTimeout(300);
 await page.click('#btn-mypark-new');
 await page.waitForTimeout(400);

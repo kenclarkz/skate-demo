@@ -3891,14 +3891,14 @@ section('The park editor');
   });
   ok(retested.features >= retested.before + 3, `re-testing rebuilds the park with the new edit (${retested.before} objects → ${retested.features} surfaces)`);
 
-  // The My Parks screen lists the saved park, and Delete removes it.
+  // The Parks screen lists the saved park, and Delete removes it.
   await run(() => {
     const g = window.__skate;
     g.freeze();
-    g.showMyParks();
+    g.showParks();
   });
   const listed = await run(() => document.getElementById('mypark-grid')?.textContent || '');
-  ok(listed.includes('Smoke ramp'), 'My Parks lists the park just built');
+  ok(listed.includes('Smoke ramp'), 'Parks lists the park just built');
   await run(() => document.querySelector('[data-act="delete"]')?.click());
   const afterDelete = await run(() => ({
     grid: document.getElementById('mypark-grid')?.textContent || '',
@@ -3906,7 +3906,7 @@ section('The park editor');
     current: window.__skate.state,
   }));
   ok(!afterDelete.grid.includes('Smoke ramp') && afterDelete.files === 0, 'Delete removes it from the grid and from storage');
-  ok(afterDelete.current === 'myparks', 'and the screen stays put');
+  ok(afterDelete.current === 'parks', 'and the screen stays put');
 
   await run(() => window.__skate.showStart());
 }
