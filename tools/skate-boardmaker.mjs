@@ -74,6 +74,50 @@ ok(deckVal === '#ff00aa', `deck colour picker reflects the pick (got ${deckVal})
 const deckDraft = await page.evaluate(() => window.__skate.save.boardDraft.colors.deck);
 ok(deckDraft === 0xff00aa, `deck colour landed in the draft (got #${deckDraft?.toString(16)})`);
 
+// Neon under glow: the toggle starts off, and the colour wheel is disabled
+// with it.
+const glowToggle = page.locator('[data-bmglowtoggle]');
+ok(await glowToggle.isVisible(), 'under-glow toggle is visible');
+ok((await glowToggle.textContent()) === 'Off', `under-glow starts off (got "${await glowToggle.textContent()}")`);
+ok(await page.locator('[data-bmglowcolor]').isDisabled(), 'glow colour wheel is disabled while off');
+
+// Toggle it on: the wheel enables and a neon colour lands in the draft.
+await glowToggle.click();
+await page.waitForTimeout(200);
+ok((await glowToggle.textContent()) === 'On', 'toggling the under-glow turns it on');
+ok(await page.locator('[data-bmglowcolor]').isEnabled(), 'glow colour wheel enables when on');
+const glowSeed = await page.evaluate(() => window.__skate.save.boardDraft.underGlow);
+ok(glowSeed === 0x35ffe0, `turning it on seeds the default neon colour (got #${glowSeed?.toString(16)})`);
+
+// Pick a colour on the wheel; the draft follows.
+await page.locator('[data-bmglowcolor]').evaluate((el) => {
+  el.value = '#ff2fa0';
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+});
+await page.waitForTimeout(200);
+const glowPicked = await page.evaluate(() => window.__skate.save.boardDraft.underGlow);
+ok(glowPicked === 0xff2fa0, `the colour wheel drives the glow colour (got #${glowPicked?.toString(16)})`);
+const glowColorVal = await page.locator('[data-bmglowcolor]').inputValue();
+ok(glowColorVal === '#ff2fa0', `glow colour picker reflects the pick (got ${glowColorVal})`);
+
+// Toggle back off: the draft goes null and the wheel disables again.
+await glowToggle.click();
+await page.waitForTimeout(200);
+const glowOff = await page.evaluate(() => window.__skate.save.boardDraft.underGlow);
+ok(glowOff === null, 'toggling off clears the glow colour');
+ok(await page.locator('[data-bmglowcolor]').isDisabled(), 'glow colour wheel disables when off');
+
+// Back on: the pick is remembered, and the preview deck really builds its glow.
+await glowToggle.click();
+await page.waitForTimeout(200);
+const glowResumed = await page.evaluate(() => window.__skate.save.boardDraft.underGlow);
+ok(glowResumed === 0xff2fa0, `toggling back on resumes the remembered colour (got #${glowResumed?.toString(16)})`);
+const glowMeshes = await page.evaluate(() => {
+  const b = window.__skate.hud.bmPreview?.board;
+  return b ? b.glow.length : -1;
+});
+ok(glowMeshes === 2, `preview board builds the glow meshes (got ${glowMeshes})`);
+
 // Stickers: add one, then select it.
 await page.click('[data-bmicon="star"]');
 await page.waitForTimeout(200);
@@ -98,6 +142,7 @@ await page.waitForTimeout(400);
 const cardText = await page.textContent('#bm-saved');
 ok(/Hot Pink Deck/.test(cardText), 'saved deck shows under its name');
 ok(/On now/.test(cardText), 'saved deck is equipped on save');
+ok(/neon glow/.test(cardText), 'saved deck card mentions the neon glow');
 const cardCount = await page.locator('.bm-saved-card').count();
 ok(cardCount === 1, `exactly one saved deck card (got ${cardCount})`);
 
@@ -126,6 +171,8 @@ const draftName = await page.inputValue('#bm-name');
 ok(draftName === 'Hot Pink Deck', `editing loads the deck back into the draft (got ${draftName})`);
 const draftStyle = await page.locator('.maker-option.current[data-bmstyle]').getAttribute('data-bmstyle');
 ok(draftStyle === 'blockart', `editing restores the block-art style (got ${draftStyle})`);
+const editGlow = await page.evaluate(() => window.__skate.save.boardDraft.underGlow);
+ok(editGlow === 0xff2fa0, `editing restores the glow colour (got #${editGlow?.toString(16)})`);
 
 // Delete removes the saved deck.
 await page.click('[data-bmaction="delete"]');

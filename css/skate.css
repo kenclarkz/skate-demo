@@ -2503,6 +2503,89 @@ button:disabled.primary {
   border-radius: 8px;
 }
 
+/* The neon under glow: an on/off toggle next to the wheel the colour is
+   picked on. The wheel disables while the glow is off. */
+.bm-glow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.bm-glow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bm-glow-head label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.bm-glow-toggle {
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.bm-glow-toggle.on {
+  color: #06120f;
+  background: #35ffe0;
+  border-color: #35ffe0;
+  box-shadow: 0 0 12px rgba(53, 255, 224, 0.45);
+}
+
+.bm-glow-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bm-glow-color {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 46px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bm-glow-color:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.bm-glow-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.bm-glow-color::-webkit-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+}
+
+.bm-glow-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+
 .bm-options-body {
   display: flex;
   flex-direction: column;

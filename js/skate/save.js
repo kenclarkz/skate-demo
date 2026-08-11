@@ -111,6 +111,13 @@ function cleanBoardDraft(raw) {
   if (Number.isInteger(sc)) d.styleColor = (sc >>> 0) & 0xffffff;
   const sc2 = Number(raw.styleColor2);
   if (Number.isInteger(sc2)) d.styleColor2 = (sc2 >>> 0) & 0xffffff;
+  // Under glow is off (null) or a single hex colour.
+  if (raw.underGlow == null) {
+    d.underGlow = null;
+  } else {
+    const ug = Number(raw.underGlow);
+    d.underGlow = Number.isInteger(ug) ? (ug >>> 0) & 0xffffff : null;
+  }
   if (Array.isArray(raw.pixels)) {
     for (let r = 0; r < BLOCKART_ROWS; r++) {
       const row = raw.pixels[r];
