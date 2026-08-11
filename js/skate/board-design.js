@@ -213,6 +213,56 @@ export const STYLES = [
     blurb: 'Bold geometric stripes and a big block-letter logo.',
   },
   {
+    id: 'retro',
+    name: 'Retro Wave',
+    blurb: 'A ringed sunset sun over a scanline grid.',
+  },
+  {
+    id: 'tiger',
+    name: 'Tiger Deck',
+    blurb: 'Wandering dark stripes in your pattern colour.',
+  },
+  {
+    id: 'space',
+    name: 'Space Deck',
+    blurb: 'A ringed planet drifting across a starfield.',
+  },
+  {
+    id: 'argyle',
+    name: 'Argyle Deck',
+    blurb: 'A lattice of diamonds in your two colours.',
+  },
+  {
+    id: 'splat',
+    name: 'Paint Splat',
+    blurb: 'Big blobs of paint with drips running off them.',
+  },
+  {
+    id: 'circuit',
+    name: 'Circuit Deck',
+    blurb: 'Glowing traces and nodes on a dark board.',
+  },
+  {
+    id: 'sunburst',
+    name: 'Sunburst',
+    blurb: 'Rays of colour radiating from the middle of the deck.',
+  },
+  {
+    id: 'chevron',
+    name: 'Chevron Wave',
+    blurb: 'A row of chunky chevrons, shaded like a surf crest.',
+  },
+  {
+    id: 'shield',
+    name: 'Shield Crest',
+    blurb: 'A tapered crest with block lettering down the middle.',
+  },
+  {
+    id: 'darts',
+    name: 'Dartboard',
+    blurb: 'Concentric scoring rings, right on the deck.',
+  },
+  {
     id: 'blockart',
     name: 'Custom Block Art',
     blurb: 'Paint your own design on a grid, block by block.',
@@ -300,6 +350,19 @@ function textBlocks(text, cell, cx, cz, colorMap, offset = { dx: 0, dz: 0 }) {
           d: cell,
           color,
         });
+      }
+    }
+  }
+  return blocks;
+}
+
+/** A chunky filled disc of `cell` blocks at (cx, cz) out to radius `r`. */
+function discBlocks(cx, cz, r, cell, color) {
+  const blocks = [];
+  for (let x = cx - r; x <= cx + r; x += cell) {
+    for (let z = cz - r; z <= cz + r; z += cell) {
+      if (Math.hypot(x + cell / 2 - cx, z + cell / 2 - cz) <= r) {
+        blocks.push({ x: x + cell / 2, z: z + cell / 2, w: cell, d: cell, color });
       }
     }
   }
@@ -626,6 +689,255 @@ function genShop(shape, draft) {
   return blocks;
 }
 
+function genRetro(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const cell = Math.min(shape.deckW / 16, 0.015);
+  const front = draft.styleColor;
+  const alt = draft.styleColor2;
+  const dark = shade(draft.colors.deck, 0.4);
+  // The retro sky: a dark base, then a big ringed sun hanging low.
+  for (let z = -halfL; z <= halfL; z += cell) {
+    blocks.push({ x: 0, z: z + cell / 2, w: halfW * 2, d: cell, color: dark });
+  }
+  const sunR = halfW * 0.42;
+  const sunC = { x: 0, z: -halfL * 0.35 };
+  blocks.push(...discBlocks(sunC.x, sunC.z, sunR, cell, 0xffc93f));
+  blocks.push(...discBlocks(sunC.x, sunC.z, sunR - cell * 0.9, cell, front));
+  blocks.push(...discBlocks(sunC.x, sunC.z, sunR - cell * 1.8, cell, 0xffc93f));
+  // Horizontal scanlines across the lower half, for the classic grid.
+  const rows = Math.floor((halfL * 0.6) / (cell * 1.2));
+  for (let i = 0; i < rows; i++) {
+    const cz = halfL - cell * 0.5 - i * cell * 1.2;
+    blocks.push({ x: 0, z: cz, w: halfW * 2, d: cell, color: alt });
+  }
+  return blocks;
+}
+
+function genTiger(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const cell = Math.min(shape.deckW / 14, 0.016);
+  const r = rng(0x74f1);
+  const stripes = 5 + Math.floor(r() * 2);
+  const band = (halfW * 2) / (stripes + 1);
+  for (let s = 0; s < stripes; s++) {
+    let x = -halfW + (s + 1) * band;
+    for (let z = -halfL; z <= halfL; z += cell) {
+      x += (r() - 0.5) * cell * 0.7;
+      x = Math.max(-halfW + cell, Math.min(halfW - cell, x));
+      blocks.push({
+        x,
+        z: z + cell / 2,
+        w: cell * (1.1 + r() * 0.7),
+        d: cell,
+        color: draft.styleColor,
+      });
+    }
+  }
+  return blocks;
+}
+
+function genSpace(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const cell = Math.min(shape.deckW / 16, 0.015);
+  const dark = 0x0d1020;
+  for (let z = -halfL; z <= halfL; z += cell) {
+    blocks.push({ x: 0, z: z + cell / 2, w: halfW * 2, d: cell, color: dark });
+  }
+  // A ringed planet in the corner, then scattered stars.
+  const px = halfW * 0.35;
+  const pz = halfL * 0.42;
+  const pr = halfW * 0.32;
+  blocks.push(...discBlocks(px, pz, pr, cell, draft.styleColor));
+  blocks.push(...discBlocks(px, pz, pr - cell, cell, shade(draft.styleColor, 0.55)));
+  blocks.push({ x: px, z: pz, w: pr * 2.4, d: cell * 0.55, color: draft.styleColor2, rot: -0.35 });
+  const r = rng(0x57a9);
+  const stars = 24;
+  for (let i = 0; i < stars; i++) {
+    const sx = (r() * 2 - 1) * halfW * 0.85;
+    const sz = (r() * 2 - 1) * halfL * 0.85;
+    const c = r() < 0.7 ? 0xffffff : 0xffc93f;
+    blocks.push({ x: sx, z: sz, w: cell * (0.6 + r() * 0.6), d: cell * (0.6 + r() * 0.6), color: c });
+  }
+  return blocks;
+}
+
+function genArgyle(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const a = draft.styleColor;
+  const b = draft.styleColor2;
+  const cell = Math.min(shape.deckW / 10, 0.016);
+  const pitch = cell * 3;
+  const size = pitch * 0.72;
+  const halfDiag = size / Math.SQRT2;
+  for (let i = 0; i * pitch < halfW * 2 + pitch; i++) {
+    for (let j = 0; j * pitch < halfL * 2 + pitch; j++) {
+      const cx = Math.max(-halfW + halfDiag, Math.min(halfW - halfDiag, -halfW + i * pitch + pitch / 2));
+      const cz = Math.max(-halfL + halfDiag, Math.min(halfL - halfDiag, -halfL + j * pitch + pitch / 2));
+      if ((i + j) % 2) continue;
+      blocks.push({ x: cx, z: cz, w: size, d: size, color: a, rot: Math.PI / 4 });
+    }
+  }
+  // A small outline diamond in the empty slots, for the lattice look.
+  for (let i = 0; i * pitch < halfW * 2 + pitch; i++) {
+    for (let j = 0; j * pitch < halfL * 2 + pitch; j++) {
+      const cx = Math.max(-halfW + halfDiag, Math.min(halfW - halfDiag, -halfW + i * pitch + pitch / 2));
+      const cz = Math.max(-halfL + halfDiag, Math.min(halfL - halfDiag, -halfL + j * pitch + pitch / 2));
+      if ((i + j) % 2 === 0) continue;
+      blocks.push({ x: cx, z: cz, w: pitch * 0.42, d: pitch * 0.42, color: b, rot: Math.PI / 4 });
+    }
+  }
+  return blocks;
+}
+
+function genSplat(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const r = rng(0x5ecc);
+  const cell = Math.min(shape.deckW / 14, 0.016);
+  const a = draft.styleColor;
+  const b = draft.styleColor2;
+  const n = 3 + Math.floor(r() * 3);
+  for (let i = 0; i < n; i++) {
+    const rad = cell * (2 + r() * 3);
+    const cx = (r() * 2 - 1) * (halfW - rad);
+    const cz = (r() * 2 - 1) * (halfL - rad);
+    const color = i % 2 ? a : b;
+    blocks.push(...discBlocks(cx, cz, rad, cell, color));
+    const drips = 2 + Math.floor(r() * 3);
+    for (let j = 0; j < drips; j++) {
+      const dx = Math.max(-halfW + cell, Math.min(halfW - cell, cx + (r() * 2 - 1) * rad * 0.8));
+      const dz = Math.max(-halfL + cell, Math.min(halfL - cell, cz + rad * (0.7 + r() * 0.7)));
+      blocks.push({ x: dx, z: dz, w: cell, d: cell * (1 + r() * 1.4), color });
+    }
+  }
+  return blocks;
+}
+
+function genCircuit(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const cell = Math.min(shape.deckW / 16, 0.014);
+  const dark = shade(draft.colors.deck, 0.35);
+  const trace = draft.styleColor;
+  const node = draft.styleColor2;
+  for (let z = -halfL; z <= halfL; z += cell) {
+    blocks.push({ x: 0, z: z + cell / 2, w: halfW * 2, d: cell, color: dark });
+  }
+  // Orthogonal traces, then the pads at their joints.
+  const r = rng(0x4ca9);
+  for (let i = 0; i < 6; i++) {
+    const cz = -halfL * 0.8 + r() * halfL * 1.6;
+    const len = halfW * 2 * (0.35 + r() * 0.55);
+    blocks.push({ x: 0, z: cz, w: len, d: cell * 0.7, color: trace });
+  }
+  for (let i = 0; i < 5; i++) {
+    const cx = -halfW * 0.8 + r() * halfW * 1.6;
+    const len = halfL * 2 * (0.35 + r() * 0.55);
+    blocks.push({ x: cx, z: 0, w: cell * 0.7, d: len, color: trace });
+  }
+  for (let i = 0; i < 9; i++) {
+    const cx = (r() * 2 - 1) * halfW * 0.75;
+    const cz = (r() * 2 - 1) * halfL * 0.75;
+    blocks.push({ x: cx, z: cz, w: cell * 1.8, d: cell * 1.8, color: node });
+  }
+  return blocks;
+}
+
+function genSunburst(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const a = draft.styleColor;
+  const b = draft.styleColor2;
+  const cell = Math.min(shape.deckW / 10, 0.02);
+  const rays = 12;
+  const len = Math.min(halfW * 2, halfL * 2) * 0.98;
+  for (let i = 0; i < rays; i++) {
+    const ang = (i / rays) * Math.PI * 2;
+    blocks.push({ x: 0, z: 0, w: cell * 2, d: len, color: i % 2 ? a : b, rot: ang });
+  }
+  // A bright hub in the middle.
+  blocks.push(...discBlocks(0, 0, cell * 2.2, cell * 0.7, 0xffc93f));
+  return blocks;
+}
+
+function genChevron(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const cell = Math.min(shape.deckW / 10, 0.02);
+  const waves = 4;
+  for (let w = 0; w < waves; w++) {
+    const cz = -halfL * 0.68 + (w / (waves - 1)) * halfL * 1.36;
+    const base = w % 2 ? draft.styleColor : draft.styleColor2;
+    for (let i = -4; i <= 4; i++) {
+      blocks.push({
+        x: i * cell,
+        z: cz + Math.abs(i) * cell * 0.5,
+        w: cell,
+        d: cell,
+        color: i < 0 ? shade(base, 1.18) : base,
+      });
+    }
+  }
+  return blocks;
+}
+
+function genShield(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const cell = Math.min(shape.deckW / 10, 0.02);
+  const front = draft.styleColor;
+  const alt = draft.styleColor2;
+  const text = sanitizeText(draft.text) || 'S';
+  const w = halfW * 0.8;
+  const h = halfL * 0.72;
+  const top = halfL * 0.32;
+  // The shield body: a wide top that tapers to a point.
+  for (let z = top; z >= top - h; z -= cell) {
+    const t = (top - z) / h;
+    const half = w * (1 - t * 0.55);
+    blocks.push({ x: 0, z: z + cell / 2, w: half * 2, d: cell, color: front });
+  }
+  // A vertical centre stripe, studs top and bottom.
+  blocks.push({ x: 0, z: top - h / 2, w: w * 0.24, d: h, color: alt });
+  blocks.push({ x: 0, z: top - h * 0.82, w: cell * 1.4, d: cell * 1.4, color: 0xffffff });
+  blocks.push({ x: 0, z: top - h * 0.18, w: cell * 1.4, d: cell * 1.4, color: 0xffffff });
+  // Block lettering rides the centre stripe, sized to stay on the shield.
+  const mid = top - h / 2;
+  const tCell = Math.min(fitTextCell(shape, text.length, 0.024), (w * 0.94) / (text.length * 4 - 1));
+  blocks.push(...textBlocks(text, tCell, 0, mid, { ' ': front }, { dx: 1.4, dz: 1.4 }));
+  blocks.push(...textBlocks(text, tCell, 0, mid, { ' ': 0xffffff }));
+  return blocks;
+}
+
+function genDarts(shape, draft) {
+  const blocks = [];
+  const halfL = shape.kickStart;
+  const halfW = shape.deckW / 2;
+  const cell = Math.min(shape.deckW / 12, 0.018);
+  const a = draft.styleColor;
+  const b = draft.styleColor2;
+  const rMax = Math.min(halfW, halfL) * 0.95;
+  const rings = 5;
+  for (let ring = rings; ring >= 0; ring--) {
+    const r = (ring / rings) * rMax;
+    blocks.push(...discBlocks(0, 0, r, cell, ring % 2 ? a : b));
+  }
+  return blocks;
+}
+
 function genBlockart(shape, draft) {
   const blocks = [];
   const cells = draft.pixels;
@@ -659,6 +971,16 @@ const GENERATORS = {
   stickers: genStickers,
   arcade: genArcade,
   shop: genShop,
+  retro: genRetro,
+  tiger: genTiger,
+  space: genSpace,
+  argyle: genArgyle,
+  splat: genSplat,
+  circuit: genCircuit,
+  sunburst: genSunburst,
+  chevron: genChevron,
+  shield: genShield,
+  darts: genDarts,
   blockart: genBlockart,
 };
 
