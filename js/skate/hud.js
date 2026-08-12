@@ -22,6 +22,10 @@ import {
   SHADES,
 } from './custom.js';
 import { TYPES } from './boards.js';
+import { byId as outfitById, colorKeys as outfitColorKeys, defaultColors as outfitDefaults } from './outfits.js';
+import { byId as pantsById, colorKeys as pantsColorKeys, defaultColors as pantsDefaults } from './pants.js';
+import { byId as accessoryById, colorKeys as accessoryColorKeys, defaultColors as accessoryDefaults } from './accessories.js';
+import { drawWheel, hexToHsv, hsvToHex } from './parkDesigner.js';
 import {
   STYLES,
   ICON_LIST,
@@ -59,6 +63,11 @@ const STYLE_SWATCH = {
   darts: 'radial-gradient(circle,#ffc93f 0 18%,#e6392e 18% 38%,#ffc93f 38% 58%,#e6392e 58% 78%,#ffc93f 78% 100%)',
   blockart: 'conic-gradient(#ff2fa0,#35ffe0,#ffc93f,#9a5cf6,#ff2fa0)',
 };
+
+/** A palette hex as the `#rrggbb` string the DOM paints with. */
+function hexCss(v) {
+  return `#${v.toString(16).padStart(6, '0')}`;
+}
 
 /** A readable glyph per sticker icon, for the rack and the layer chips. */
 const STICKER_GLYPH = {
@@ -421,7 +430,19 @@ export class Hud {
     this.myParkNewBtn = document.getElementById('btn-mypark-new');
     this.boardGrid = document.getElementById('board-grid');
     this.outfitGrid = document.getElementById('outfit-grid');
+    this.pantsGrid = document.getElementById('pants-grid');
     this.accessoryGrid = document.getElementById('accessory-grid');
+    // The repaint wheels under the shirt, pants and accessory racks. Each is a
+    // small colour wheel for the currently equipped owned item — see
+    // renderRepaint(). The per-kind selected colour key and last wheel hue/sat
+    // live on the Hud so a re-render does not lose what the panel was showing.
+    this.repaintEls = {
+      outfit: document.getElementById('repaint-outfit'),
+      pants: document.getElementById('repaint-pants'),
+      accessory: document.getElementById('repaint-accessory'),
+    };
+    this._repaintKey = {};
+    this._repaintHsv = {};
     this.charGrid = document.getElementById('char-grid');
     this.csCharGrid = document.getElementById('cs-char-grid');
     this.csMakerBtn = document.getElementById('btn-charselect-maker');
@@ -514,7 +535,16 @@ export class Hud {
       store: null,
       board: null,
       outfit: null,
+      pants: null,
+      accessory: null,
       character: null,
+      // The shop's repaint wheels: `repaint(kind, id, key, hex)` fires as the
+      // wheel or its brightness slider moves (live preview), `repaintCommit(kind, id)`
+      // when the gesture lets go, and `repaintReset(kind, id)` on Reset. `kind`
+      // is one of outfit/pants/accessory.
+      repaint: null,
+      repaintCommit: null,
+      repaintReset: null,
       riders: null,
       maker: null,
       // A part picked in the maker: `(role, id)`, where role is one of
@@ -756,10 +786,57 @@ export class Hud {
       const card = e.target.closest('[data-outfit]');
       if (card) this.on.outfit?.(card.dataset.outfit);
     });
+    this.pantsGrid?.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-pants]');
+      if (card) this.on.pants?.(card.dataset.pants);
+    });
     this.accessoryGrid?.addEventListener('click', (e) => {
       const card = e.target.closest('[data-accessory]');
       if (card) this.on.accessory?.(card.dataset.accessory);
     });
+    // The repaint panels are rebuilt on every render, so their events hang off
+    // the persistent containers instead of the rebuilt buttons — the same
+    // trick the Board Maker's racks use. The wheel canvas only exists after a
+    // render, so its pointer gestures are delegated too.
+    for (const kind of ['outfit', 'pants', 'accessory']) {
+      const el = this.repaintEls[kind];
+      if (!el) continue;
+      el.addEventListener('click', (e) => {
+        const part = e.target.closest('[data-repaintpart]');
+        if (part) {
+          this._repaintKey[kind] = part.dataset.repaintpart;
+          this.renderRepaint(kind);
+          return;
+        }
+        if (e.target.closest('.repaint-reset')) {
+          this.on.repaintReset?.(kind, el.dataset.repaintid);
+        }
+      });
+      el.addEventListener('input', (e) => {
+        const slider = e.target.closest('[data-repaintbright]');
+        if (!slider) return;
+        const { h, s } = this._repaintHsv[kind] || { h: 0, s: 0 };
+        this._repaintLive(kind, hsvToHex(h, s, Number(slider.value) / 100));
+      });
+      el.addEventListener('pointerdown', (e) => {
+        const wheel = e.target.closest('[data-repaintwheel]');
+        if (!wheel) return;
+        e.preventDefault();
+        wheel.setPointerCapture?.(e.pointerId);
+        this._pickRepaint(kind, wheel, e);
+      });
+      el.addEventListener('pointermove', (e) => {
+        const wheel = e.target.closest('[data-repaintwheel]');
+        if (!wheel || !wheel.hasPointerCapture?.(e.pointerId)) return;
+        this._pickRepaint(kind, wheel, e);
+      });
+      el.addEventListener('pointerup', (e) => {
+        const wheel = e.target.closest('[data-repaintwheel]');
+        if (!wheel || !wheel.hasPointerCapture?.(e.pointerId)) return;
+        wheel.releasePointerCapture?.(e.pointerId);
+        this.on.repaintCommit?.(kind, el.dataset.repaintid);
+      });
+    }
     this.charGrid?.addEventListener('click', (e) => {
       const card = e.target.closest('[data-character]');
       if (card) this.on.character?.(card.dataset.character);
@@ -1147,11 +1224,12 @@ export class Hud {
 
   // --- board shop ------------------------------------------------------------
   /**
-   * The full shop: every real board type in its own row, each in the couple
-   * of skins it comes in — a longboard and a penny board are shaped
-   * differently in the grid the same way they are on the ground, not just
-   * coloured differently. `save` is read fresh each call so a purchase or an
-   * equip can just re-render rather than patch one card by hand.
+   * The full shop: one card per real board type, since a type is now the whole
+   * of the catalogue — the palette it ships in is what the shop advertises,
+   * and buying it unlocks that shape in the Board Maker. The shape-hinted
+   * swatches still apply, because the card's own id is the type it hints at.
+   * `save` is read fresh each call so a purchase or an equip can just
+   * re-render rather than patch one card by hand.
    */
   renderBoards(types, boards, save) {
     if (!this.boardGrid) return;
@@ -1159,28 +1237,22 @@ export class Hud {
     const equipped = save.boardId;
     this.setCoins(save.coins);
     const hex = (v) => `#${v.toString(16).padStart(6, '0')}`;
-    this.boardGrid.innerHTML = types
-      .map((t) => {
-        const cards = boards
-          .filter((b) => b.type === t.id)
-          .map((b) => {
-            const has = owned.includes(b.id);
-            const isEquipped = b.id === equipped;
-            const status = isEquipped ? 'Equipped' : has ? 'Owned — tap to equip' : `${b.price} coins`;
-            const locked = !has && save.coins < b.price;
-            return (
-              `<button type="button" class="board-card${isEquipped ? ' current' : ''}${locked ? ' locked' : ''}" data-board="${b.id}">` +
-              `<span class="board-swatch board-swatch--${t.id}" style="background:${hex(b.palette.deck)};box-shadow:inset 0 0 0 4px ${hex(b.palette.accent)}"></span>` +
-              `<b>${b.name}</b><span class="board-status">${status}</span></button>`
-            );
-          })
-          .join('');
-        return (
-          `<div class="board-type"><h3>${t.name}</h3><p class="board-type-blurb">${t.blurb}</p>` +
-          `<div class="board-type-grid">${cards}</div></div>`
-        );
-      })
-      .join('');
+    this.boardGrid.innerHTML =
+      '<div class="board-type-grid">' +
+      boards
+        .map((b) => {
+          const has = owned.includes(b.id);
+          const isEquipped = b.id === equipped;
+          const status = isEquipped ? 'Equipped' : has ? 'Owned — tap to equip' : `${b.price} coins`;
+          const locked = !has && save.coins < b.price;
+          return (
+            `<button type="button" class="board-card${isEquipped ? ' current' : ''}${locked ? ' locked' : ''}" data-board="${b.id}">` +
+            `<span class="board-swatch board-swatch--${b.id}" style="background:${hex(b.palette.deck)};box-shadow:inset 0 0 0 4px ${hex(b.palette.accent)}"></span>` +
+            `<b>${b.name}</b><span class="board-status">${status}</span></button>`
+          );
+        })
+        .join('') +
+      '</div>';
   }
 
   /**
@@ -1205,7 +1277,8 @@ export class Hud {
           const isEquipped = o.id === equipped;
           const status = isEquipped ? 'Equipped' : has ? 'Owned — tap to equip' : `${o.price} coins`;
           const locked = !has && save.coins < o.price;
-          const look = o.shirt || charPalette;
+          const repaint = save.outfitColors[o.id] || {};
+          const look = { ...(o.shirt || charPalette), ...repaint };
           return (
             `<button type="button" class="board-card${isEquipped ? ' current' : ''}${locked ? ' locked' : ''}" data-outfit="${o.id}">` +
             `<span class="board-swatch board-swatch--shirt" style="background:${hex(look.shirt)};box-shadow:inset 0 0 0 4px ${hex(look.sleeve)}"></span>` +
@@ -1214,6 +1287,40 @@ export class Hud {
         })
         .join('') +
       '</div>';
+    this.renderRepaint('outfit', save);
+  }
+
+  /**
+   * The trouser rack: one flat row, same card language as the shirts above.
+   * A card's swatch is the pair's own two colours — or, when the player has
+   * repainted that pair, the repaint wins and the swatch shows the customised
+   * pair, so the shop always advertises what you would actually put on.
+   */
+  renderPants(pants, save) {
+    if (!this.pantsGrid) return;
+    const owned = save.pants;
+    const equipped = save.pantsId;
+    this.setCoins(save.coins);
+    const hex = (v) => `#${v.toString(16).padStart(6, '0')}`;
+    const repaint = save.pantsColors;
+    this.pantsGrid.innerHTML =
+      '<div class="board-type-grid">' +
+      pants
+        .map((p) => {
+          const has = owned.includes(p.id);
+          const isEquipped = p.id === equipped;
+          const status = isEquipped ? 'Equipped' : has ? 'Owned — tap to equip' : `${p.price} coins`;
+          const locked = !has && save.coins < p.price;
+          const colors = repaint[p.id] || p.colors || { pants: 0x3a3f4a, pantsDark: 0x2a2e38 };
+          return (
+            `<button type="button" class="board-card${isEquipped ? ' current' : ''}${locked ? ' locked' : ''}" data-pants="${p.id}">` +
+            `<span class="board-swatch board-swatch--pants" style="background:${hex(colors.pants)};box-shadow:inset 0 0 0 4px ${hex(colors.pantsDark)}"></span>` +
+            `<b>${p.name}</b><span class="board-status">${status}</span></button>`
+          );
+        })
+        .join('') +
+      '</div>';
+    this.renderRepaint('pants', save);
   }
 
   /**
@@ -1232,8 +1339,11 @@ export class Hud {
     this.setCoins(save.coins);
     // An accessory is a character in all but name: the equipped rider, wearing
     // this one thing. drawPortrait() only reads palette and style, so a
-    // synthesised two-key object is all it needs.
+    // synthesised two-key object is all it needs. An owner's repaint of the
+    // accessory wins over the catalogue's own colours, exactly as it does on
+    // the rider — the rack advertises what would actually be worn.
     const wearing = (a) => {
+      const repaint = save.accessoryColors[a.id] || {};
       const palette = { ...look.palette };
       if (a.hat) {
         palette.cap = a.hat.cap;
@@ -1243,12 +1353,18 @@ export class Hud {
         palette.shades = a.shades.frame;
         palette.lens = a.shades.lens;
       }
+      if (a.pack) {
+        palette.pack = a.pack.pack;
+        palette.strap = a.pack.strap;
+      }
+      Object.assign(palette, repaint);
       return {
         palette,
         style: {
           ...look.style,
           head: a.hat ? a.hat.style : look.style.head,
           shades: !!a.shades,
+          pack: !!a.pack,
         },
       };
     };
@@ -1272,6 +1388,140 @@ export class Hud {
       const canvas = this.accessoryGrid.querySelector(`[data-accessory-portrait="${a.id}"]`);
       if (canvas) drawPortrait(canvas, wearing(a));
     }
+    this.renderRepaint('accessory', save);
+  }
+
+  /**
+   * The repaint wheels. Each rack owns a small wheel under its grid for the
+   * equipped, owned item — a shirt's body and sleeves, a pair of pants' legs
+   * and shins, a hat's cap and band (or a backpack's shell and straps) — so a
+   * purchase can be made exactly the colour the rider will wear, rather than
+   * only the shade the catalogue shipped. One key at a time: the part buttons
+   * pick which key the wheel edits, the wheel and its brightness slider paint
+   * it, and Reset throws the repaint away back to the item's own colours.
+   */
+  renderRepaint(kind, save) {
+    const el = this.repaintEls[kind];
+    if (!el) return;
+    this._save = save;
+    const item = this._repaintItem(kind, save);
+    if (!item) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    el.hidden = false;
+    el.dataset.repaintid = item.id;
+    if (!this._repaintKey[kind] || !item.keyList.includes(this._repaintKey[kind])) {
+      this._repaintKey[kind] = item.keyList[0];
+    }
+    const key = this._repaintKey[kind];
+    const hex = this._colorOf(item, key);
+    const { v } = hexToHsv(hexCss(hex));
+    el.innerHTML =
+      `<div class="repaint-parts">` +
+      item.keyList
+        .map(
+          (k) =>
+            `<button type="button" class="repaint-part${k === key ? ' on' : ''}" data-repaintpart="${k}">` +
+            `${item.labels[k]}<span class="repaint-chip" style="--chip:${hexCss(this._colorOf(item, k))}"></span></button>`
+        )
+        .join('') +
+      `</div>` +
+      `<div class="dg-color">` +
+      `<canvas class="dg-wheel" data-repaintwheel aria-label="Colour wheel"></canvas>` +
+      `<label class="dg-field dg-brightness">Brightness` +
+      `<input type="range" data-repaintbright min="0" max="100" step="1" value="${Math.round(v * 100)}">` +
+      `<output data-repaintbrightout>${Math.round(v * 100)}</output></label>` +
+      `<div class="dg-hexrow"><span class="dg-hex-chip" style="--chip:${hexCss(hex)}"></span>` +
+      `<output class="dg-hex" data-repainthex>${hexCss(hex).toUpperCase()}</output></div>` +
+      `</div>` +
+      `<button type="button" class="repaint-reset">Reset to original</button>`;
+    drawWheel(el.querySelector('[data-repaintwheel]'), hexCss(hex));
+  }
+
+  /** The equipped, owned item a repaint panel points at — or null when the
+   * equipped thing has no repaintable keys ("Original" shirt, no accessory).
+   * `save` is read fresh each call, so a purchase or an equip re-renders it. */
+  _repaintItem(kind, save) {
+    const meta = {
+      outfit: {
+        def: outfitById[save.outfitId],
+        owned: save.outfits,
+        colors: save.outfitColors,
+        keys: outfitColorKeys,
+        defaults: outfitDefaults,
+        labels: { shirt: 'Shirt', sleeve: 'Sleeves' },
+      },
+      pants: {
+        def: pantsById[save.pantsId],
+        owned: save.pants,
+        colors: save.pantsColors,
+        keys: pantsColorKeys,
+        defaults: pantsDefaults,
+        labels: { pants: 'Legs', pantsDark: 'Shins' },
+      },
+      accessory: {
+        def: accessoryById[save.accessoryId],
+        owned: save.accessories,
+        colors: save.accessoryColors,
+        keys: accessoryColorKeys,
+        defaults: accessoryDefaults,
+        labels: { cap: 'Cap', band: 'Band', shades: 'Frame', lens: 'Lenses', pack: 'Pack', strap: 'Straps' },
+      },
+    }[kind];
+    if (!meta?.def || !meta.owned.includes(meta.def.id)) return null;
+    const keyList = meta.keys(meta.def);
+    if (!keyList.length) return null;
+    return { ...meta, id: meta.def.id, keyList };
+  }
+
+  /** The colour a key currently stands at: the player's repaint wins, else the
+   * item's own default — the same two-tier truth the rack swatches use. */
+  _colorOf(item, key) {
+    const row = item.colors[item.id];
+    if (row && typeof row[key] === 'number') return row[key];
+    return item.defaults(item.def)[key];
+  }
+
+  /** A wheel gesture: compute the picked hex, then live-apply it to the panel's
+   * own DOM before the caller's `repaint` hook does the same to the rig. */
+  _pickRepaint(kind, wheel, e) {
+    const el = this.repaintEls[kind];
+    const r = wheel.getBoundingClientRect();
+    const size = r.width || 140;
+    const R = size / 2 - 3;
+    const dx = e.clientX - (r.left + size / 2);
+    const dy = e.clientY - (r.top + size / 2);
+    const hue = (Math.atan2(dy, dx) / (Math.PI * 2) + 1) % 1;
+    const sat = Math.min(1, Math.sqrt(dx * dx + dy * dy) / R);
+    this._repaintHsv[kind] = { h: hue, s: sat };
+    const slider = el.querySelector('[data-repaintbright]');
+    const v = slider ? Number(slider.value) / 100 : 1;
+    this._repaintLive(kind, hsvToHex(hue, sat, v));
+  }
+
+  /** Update a repaint panel in place while a gesture is live, without tearing
+   * the wheel down — the same trick the Park Designer uses. The `repaint` hook
+   * then rebuilds the rig, so the rider on screen changes as you drag. */
+  _repaintLive(kind, hex) {
+    const el = this.repaintEls[kind];
+    if (!el) return;
+    const item = this._repaintItem(kind, this._save);
+    if (!item) return;
+    const key = this._repaintKey[kind];
+    const chip = el.querySelector(`[data-repaintpart="${key}"] .repaint-chip`);
+    const out = el.querySelector('[data-repainthex]');
+    const brightOut = el.querySelector('[data-repaintbrightout]');
+    const slider = el.querySelector('[data-repaintbright]');
+    const wheel = el.querySelector('[data-repaintwheel]');
+    const v = Math.round(hexToHsv(hex).v * 100);
+    if (chip) chip.style.setProperty('--chip', hex);
+    if (out) out.textContent = hex.toUpperCase();
+    if (brightOut) brightOut.textContent = String(v);
+    if (slider) slider.value = String(v);
+    if (wheel) drawWheel(wheel, hex);
+    this.on.repaint?.(kind, item.id, key, hex);
   }
 
   /**

@@ -26,6 +26,7 @@ const ASSETS = [
   'js/skate/board.js',
   'js/skate/boards.js',
   'js/skate/outfits.js',
+  'js/skate/pants.js',
   'js/skate/accessories.js',
   'js/skate/characters.js',
   'js/skate/character-portrait.js',
