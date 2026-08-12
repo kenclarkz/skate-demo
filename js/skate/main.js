@@ -1300,6 +1300,9 @@ function updateHud(dt) {
   // The camera-cycle button has the same rhythm: pointless on menus, useful
   // the moment there is a camera to cycle.
   hud.setCamcycleVisible(state === PLAYING || state === WALKING);
+  // And the hide-the-HUD button rides with them: only mid-run is there a
+  // screenful of chrome worth hiding, and leaving the run brings it back.
+  hud.setHideUiVisible(state === PLAYING || state === WALKING);
 
   if (state === PLAYING) {
     hud.setSpeed(ride.groundSpeed);

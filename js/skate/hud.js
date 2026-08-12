@@ -413,6 +413,7 @@ export class Hud {
     this.cameraModeBtn = document.getElementById('opt-cameramode');
     this.pauseBtn = document.getElementById('btn-pause');
     this.camcycleBtn = document.getElementById('btn-camcycle');
+    this.hideUiBtn = document.getElementById('btn-hideui');
     this.statLines = document.getElementById('stat-lines');
     this.parkNow = document.getElementById('park-now');
     this.parkGrid = document.getElementById('park-grid');
@@ -560,6 +561,7 @@ export class Hud {
     this._best = -1;
     this._coins = -1;
     this.calloutTimer = 0;
+    this._uiHidden = false;
     this.bind();
     this.buildTutDots();
   }
@@ -675,6 +677,7 @@ export class Hud {
     click('btn-settings', () => this.on.settings?.());
     click('btn-settings-back', () => this.on.back?.());
     click('btn-pause', () => this.on.pause?.());
+    click('btn-hideui', () => this.setHideUi(!this._uiHidden));
     click('btn-dismount', () => this.on.dismount?.());
     click('btn-mount', () => this.on.mount?.());
     click('btn-sit', () => this.on.sit?.());
@@ -1031,6 +1034,30 @@ export class Hud {
    * with the pause button's visibility. */
   setCamcycleVisible(visible) {
     if (this.camcycleBtn) this.camcycleBtn.hidden = !visible;
+  }
+
+  /**
+   * Hide every in-run control and just watch the park. The button that does it
+   * stays on screen so the same tap brings it all back — nothing else survives,
+   * including the gesture trail over the canvas. Audio is deliberately
+   * untouched: hiding the chrome is not pausing the game.
+   */
+  setHideUi(on) {
+    if (on === this._uiHidden) return;
+    this._uiHidden = on;
+    document.getElementById('app').classList.toggle('hide-ui', on);
+    if (this.hideUiBtn) {
+      this.hideUiBtn.textContent = on ? 'Show UI' : 'Hide UI';
+      this.hideUiBtn.classList.toggle('off', on);
+    }
+  }
+
+  /** Same mid-run rhythm as the pause button, and leaving a run restores
+   * everything — no UI left hidden behind a menu. */
+  setHideUiVisible(visible) {
+    if (!this.hideUiBtn) return;
+    this.hideUiBtn.hidden = !visible;
+    if (!visible) this.setHideUi(false);
   }
 
   /** The speed slider and its live label — set from outside on boot and reset,
