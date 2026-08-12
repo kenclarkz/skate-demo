@@ -1280,7 +1280,7 @@ function render(dt) {
   }
   if (state !== BAILED) updateShadow();
   else shadow.material.opacity = Math.max(0, shadow.material.opacity - dt);
-  lighting.update(dt, ride.pos);
+  lighting.update(dt, ride.pos, chase.pos);
   renderer.render(scene, camera);
 }
 
