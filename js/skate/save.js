@@ -18,6 +18,7 @@ import {
   PIXEL_PALETTE,
   BLOCKART_COLS,
   BLOCKART_ROWS,
+  freshFaceDesign,
 } from './board-design.js';
 import { TYPES, typeById } from './boards.js';
 
@@ -79,6 +80,7 @@ const freshBoardDraft = () => ({
   colors: { ...DEFAULT_BOARD_DRAFT.colors },
   pixels: DEFAULT_BOARD_DRAFT.pixels.map((r) => [...r]),
   layers: [],
+  back: freshFaceDesign(),
 });
 /** The palette keys a board draft carries; every one is a hex number. */
 const PALETTE_KEYS = ['deck', 'grip', 'accent', 'ply', 'truck', 'wheel', 'bearing', 'bolt'];
@@ -88,6 +90,53 @@ const clampNum = (v, lo, hi) => {
   if (!Number.isFinite(n)) return 0;
   return Math.max(lo, Math.min(hi, n));
 };
+
+/**
+ * The per-face design fields — style, colours, lettering, pixel art, sticker
+ * layers and the base-pattern placement. Shared by the top of the deck (which
+ * lives directly on the draft) and the back (draft.back), so a hand-edited
+ * save cannot invent a style, a sticker icon or a placement on either face.
+ */
+function cleanFaceFields(raw, f = freshFaceDesign()) {
+  if (!raw || typeof raw !== 'object') return f;
+  if (typeof raw.style === 'string' && styleById[raw.style]) f.style = raw.style;
+  if (typeof raw.text === 'string') f.text = raw.text.slice(0, 12);
+  const sc = Number(raw.styleColor);
+  if (Number.isInteger(sc)) f.styleColor = (sc >>> 0) & 0xffffff;
+  const sc2 = Number(raw.styleColor2);
+  if (Number.isInteger(sc2)) f.styleColor2 = (sc2 >>> 0) & 0xffffff;
+  if (Array.isArray(raw.pixels)) {
+    for (let r = 0; r < BLOCKART_ROWS; r++) {
+      const row = raw.pixels[r];
+      for (let c = 0; c < BLOCKART_COLS; c++) {
+        const v = row && row[c];
+        if (Number.isInteger(v)) {
+          f.pixels[r][c] = Math.max(0, Math.min(PIXEL_PALETTE.length - 1, v));
+        }
+      }
+    }
+  }
+  if (Number.isInteger(raw.pixelBrush)) {
+    f.pixelBrush = Math.max(0, Math.min(PIXEL_PALETTE.length - 1, raw.pixelBrush));
+  }
+  if (Array.isArray(raw.layers)) {
+    f.layers = raw.layers
+      .filter((l) => l && typeof l.icon === 'string' && ICONS[l.icon])
+      .map((l) => ({
+        icon: l.icon,
+        x: clampNum(l.x, -0.3, 0.3),
+        z: clampNum(l.z, -0.4, 0.4),
+        rot: clampNum(l.rot, -Math.PI, Math.PI),
+        scale: clampNum(l.scale, 0.4, 2.5),
+        color: Number.isInteger(Number(l.color)) ? (Number(l.color) >>> 0) & 0xffffff : f.styleColor,
+      }));
+  }
+  f.px = clampNum(raw.px, -0.3, 0.3);
+  f.pz = clampNum(raw.pz, -0.4, 0.4);
+  f.prot = clampNum(raw.prot, -Math.PI * 2, Math.PI * 2);
+  f.pscale = clampNum(raw.pscale, 0.4, 2.5);
+  return f;
+}
 
 /**
  * Only ids and numbers the board maker knows about, and only for their own
@@ -105,12 +154,7 @@ function cleanBoardDraft(raw) {
       if (Number.isInteger(v)) d.colors[k] = (v >>> 0) & 0xffffff;
     }
   }
-  if (typeof raw.style === 'string' && styleById[raw.style]) d.style = raw.style;
-  if (typeof raw.text === 'string') d.text = raw.text.slice(0, 12);
-  const sc = Number(raw.styleColor);
-  if (Number.isInteger(sc)) d.styleColor = (sc >>> 0) & 0xffffff;
-  const sc2 = Number(raw.styleColor2);
-  if (Number.isInteger(sc2)) d.styleColor2 = (sc2 >>> 0) & 0xffffff;
+  cleanFaceFields(raw, d);
   // Under glow is off (null) or a single hex colour.
   if (raw.underGlow == null) {
     d.underGlow = null;
@@ -118,32 +162,7 @@ function cleanBoardDraft(raw) {
     const ug = Number(raw.underGlow);
     d.underGlow = Number.isInteger(ug) ? (ug >>> 0) & 0xffffff : null;
   }
-  if (Array.isArray(raw.pixels)) {
-    for (let r = 0; r < BLOCKART_ROWS; r++) {
-      const row = raw.pixels[r];
-      for (let c = 0; c < BLOCKART_COLS; c++) {
-        const v = row && row[c];
-        if (Number.isInteger(v)) {
-          d.pixels[r][c] = Math.max(0, Math.min(PIXEL_PALETTE.length - 1, v));
-        }
-      }
-    }
-  }
-  if (Number.isInteger(raw.pixelBrush)) {
-    d.pixelBrush = Math.max(0, Math.min(PIXEL_PALETTE.length - 1, raw.pixelBrush));
-  }
-  if (Array.isArray(raw.layers)) {
-    d.layers = raw.layers
-      .filter((l) => l && typeof l.icon === 'string' && ICONS[l.icon])
-      .map((l) => ({
-        icon: l.icon,
-        x: clampNum(l.x, -0.3, 0.3),
-        z: clampNum(l.z, -0.4, 0.4),
-        rot: clampNum(l.rot, -Math.PI, Math.PI),
-        scale: clampNum(l.scale, 0.4, 2.5),
-        color: Number.isInteger(Number(l.color)) ? (Number(l.color) >>> 0) & 0xffffff : d.styleColor,
-      }));
-  }
+  d.back = cleanFaceFields(raw.back);
   return d;
 }
 /** The maker's owned-clothes lists, seeded with each role's free default. */
@@ -363,7 +382,17 @@ export const save = {
   },
   /** The Board Maker's saved decks, as copies. */
   get customBoards() {
-    return state.customBoards.map((b) => ({ ...b, colors: { ...b.colors }, layers: b.layers.map((l) => ({ ...l })) }));
+    return state.customBoards.map((b) => ({
+      ...b,
+      colors: { ...b.colors },
+      pixels: b.pixels.map((r) => [...r]),
+      layers: b.layers.map((l) => ({ ...l })),
+      back: {
+        ...b.back,
+        pixels: b.back.pixels.map((r) => [...r]),
+        layers: b.back.layers.map((l) => ({ ...l })),
+      },
+    }));
   },
   /** The Board Maker's working draft, as a fresh deep-ish copy. */
   get boardDraft() {

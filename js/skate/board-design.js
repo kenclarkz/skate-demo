@@ -15,7 +15,10 @@
 // couple of colours for that style, an optional word of block-lettering, a
 // hand-drawn pixel grid (for the block-art style), and a stack of sticker
 // layers that sit on top of the base pattern and can be moved, rotated,
-// scaled and deleted individually.
+// scaled and deleted individually. The whole base pattern can also be moved
+// around the deck (its placement), and the design is per-face: the top of the
+// deck and its underside each carry their own full design, so a custom board
+// can be painted on both sides at once.
 
 import { TYPES, typeById } from './boards.js';
 
@@ -987,6 +990,35 @@ const GENERATORS = {
 // ---------------------------------------------------------------------------
 // The finished design, and the draft it starts from.
 // ---------------------------------------------------------------------------
+
+/**
+ * One face of the deck's design: its own style, colours, lettering, pixel art
+ * and sticker layers, plus where the whole base pattern sits on the deck. The
+ * top of the deck lives directly on the draft; the back (the underside) lives
+ * in `draft.back`, so the two faces never share a stroke — a deck can be
+ * painted on both sides at once.
+ */
+export function freshFaceDesign() {
+  return {
+    style: 'plain',
+    text: 'SKATE',
+    styleColor: 0xd3323f,
+    styleColor2: 0x35ffe0,
+    pixels: defaultPixels(),
+    pixelBrush: 3,
+    layers: [],
+    // Base-pattern placement: where the whole generated design sits on the
+    // deck, on top of the generator's own layout. px/pz are a shift in
+    // deck-local metres, prot a turn in radians about the deck's centre, and
+    // pscale a multiplier over the whole pattern. All defaults put the pattern
+    // exactly where the generators draw it — centred and full-bleed.
+    px: 0,
+    pz: 0,
+    prot: 0,
+    pscale: 1,
+  };
+}
+
 export const DEFAULT_BOARD_DRAFT = {
   name: 'My Board',
   type: TYPES[0].id,
@@ -1000,33 +1032,52 @@ export const DEFAULT_BOARD_DRAFT = {
     bearing: 0x8d8f93,
     bolt: 0x6e7378,
   },
-  style: 'plain',
-  text: 'SKATE',
-  styleColor: 0xd3323f,
-  styleColor2: 0x35ffe0,
   // Neon under glow: `null` is off, a hex colour is a glowing strip
   // underneath the deck. Built by board.js into its own emissive meshes.
   underGlow: null,
-  pixels: defaultPixels(),
-  pixelBrush: 3,
-  layers: [],
+  ...freshFaceDesign(),
+  back: freshFaceDesign(),
 };
 
 /**
- * Every art block the draft paints, base style and sticker layers combined.
- * Called by board.js's buildDeck, which turns each block into a box sitting
- * proud of the grip tape.
- *
- * @param {object} shape the board type's shape — deckW and kickStart matter
- * @param {object} draft a board-maker draft
- * @returns {{blocks: Array, skipStripe: boolean}}
+ * Push every block in `blocks` through a face's base-pattern placement: the
+ * whole design — not individual blocks — is shifted by (px, pz), turned by
+ * `prot` about the deck's centre and scaled by `pscale`. Generators draw
+ * centred and full-bleed; the placement is how the player drags a design to
+ * where they want it instead of being stuck with the generator's layout.
  */
-export function buildDesignBlocks(shape, draft) {
-  const d = draft || DEFAULT_BOARD_DRAFT;
+function applyPlacement(blocks, face) {
+  const px = face.px || 0;
+  const pz = face.pz || 0;
+  const prot = face.prot || 0;
+  const pscale = face.pscale == null ? 1 : face.pscale;
+  if (!px && !pz && !prot && pscale === 1) return blocks;
+  const cos = Math.cos(prot);
+  const sin = Math.sin(prot);
+  return blocks.map((b) => {
+    const bx = b.x * pscale;
+    const bz = b.z * pscale;
+    return {
+      ...b,
+      x: bx * cos - bz * sin + px,
+      z: bx * sin + bz * cos + pz,
+      w: b.w * pscale,
+      d: b.d * pscale,
+      rot: (b.rot || 0) + prot,
+    };
+  });
+}
+
+/**
+ * One face's art blocks: the style's generator output plus its sticker layers,
+ * run through the face's placement. `draft` is the whole board draft (the
+ * palette lives on it), `face` is that face's own design object.
+ */
+function faceBlocks(shape, draft, face) {
+  if (!face) return [];
+  const d = { ...face, colors: draft.colors };
   const gen = GENERATORS[d.style] || GENERATORS.plain;
-  const blocks = gen(shape, d);
-  const layerColors = { X: d.styleColor, x: d.styleColor2 };
-  // Sticker layers always sit on top of the base pattern.
+  const blocks = applyPlacement(gen(shape, d), d);
   for (const layer of d.layers || []) {
     if (!layer || !ICONS[layer.icon]) continue;
     const sprite = ICONS[layer.icon];
@@ -1035,7 +1086,24 @@ export function buildDesignBlocks(shape, draft) {
     const cell = Math.min(shape.deckW / 9, 0.024) * scale;
     blocks.push(...spriteBlocks(sprite, { X: color, x: color }, layer.x, layer.z, cell, layer.rot || 0));
   }
-  return { blocks, skipStripe: blocks.length > 0 };
+  return blocks;
+}
+
+/**
+ * Every art block the draft paints, top and back, base styles and sticker
+ * layers combined. Called by board.js's buildDeck, which turns each block into
+ * a box sitting proud of the grip tape — and, for the back set, a box hanging
+ * just below the deck's underside.
+ *
+ * @param {object} shape the board type's shape — deckW and kickStart matter
+ * @param {object} draft a board-maker draft
+ * @returns {{top: Array, back: Array, skipStripe: boolean}}
+ */
+export function buildDesignBlocks(shape, draft) {
+  const d = draft || DEFAULT_BOARD_DRAFT;
+  const top = faceBlocks(shape, d, d);
+  const back = faceBlocks(shape, d, d.back);
+  return { top, back, skipStripe: top.length > 0 };
 }
 
 /** The palette a board is built from: the draft's own colours. */
@@ -1050,5 +1118,6 @@ export function summarizeDesign(draft) {
   const type = typeById[draft.type]?.name || 'Shortboard';
   const extras = draft.layers.length ? ` +${draft.layers.length} sticker${draft.layers.length === 1 ? '' : 's'}` : '';
   const glow = draft.underGlow != null ? ' · neon glow' : '';
-  return `${type} · ${style}${extras}${glow}`;
+  const back = draft.back && draft.back.style !== 'plain' ? ` · back: ${styleById[draft.back.style]?.name || 'Plain'}` : '';
+  return `${type} · ${style}${extras}${glow}${back}`;
 }

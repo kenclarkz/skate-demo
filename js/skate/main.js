@@ -485,6 +485,12 @@ function saveMadeCharacter() {
  * state, so it does not live in the draft itself (and so cannot be saved). */
 let boardSelectedLayer = null;
 
+/** Which face of the deck the maker is editing: the grip ('top') or the
+ * underside ('back'). Like boardSelectedLayer, this is where the player is
+ * looking rather than a property of the board, so it is UI state, not part of
+ * the draft — the two faces each keep their own full design in the draft. */
+let boardFace = 'top';
+
 /** The last colour the under-glow was set to, kept so toggling it back on
  * resumes the player's own pick instead of resetting to the default. */
 let boardGlowColor = 0x35ffe0;
@@ -494,6 +500,12 @@ function boardDraft() {
   return save.boardDraft;
 }
 
+/** The face the maker is currently editing inside a draft: the top of the deck
+ * is the draft itself, the underside is draft.back. */
+function faceOf(d) {
+  return boardFace === 'back' ? d.back : d;
+}
+
 /** Re-render the Board Maker's racks and its turntable from the draft. An
  * optional `preview` board (a saved deck) is shown on the turntable instead of
  * the draft while the racks still describe the deck under construction — so
@@ -501,7 +513,7 @@ function boardDraft() {
  * the work in progress. */
 function renderBoardMaker(preview = null) {
   const d = boardDraft();
-  hud.renderBoardMaker(d, save, boardSelectedLayer);
+  hud.renderBoardMaker(d, save, boardSelectedLayer, boardFace);
   const show = preview || d;
   hud.bmPreview?.setBoard(designPalette(show), boardTypeById[show.type]?.shape, show);
 }
@@ -509,6 +521,8 @@ function renderBoardMaker(preview = null) {
 function showBoardMaker() {
   state = BOARDMAKER;
   input.enabled = false;
+  boardFace = 'top';
+  boardSelectedLayer = null;
   renderBoardMaker();
   hud.show('boardmaker');
 }
@@ -523,7 +537,7 @@ function updateBoardDraft(mutate) {
 
 function pickBoardStyle(id) {
   updateBoardDraft((d) => {
-    d.style = id;
+    faceOf(d).style = id;
     boardSelectedLayer = null;
   });
 }
@@ -538,7 +552,7 @@ function pickBoardColor(role, hex) {
   updateBoardDraft((d) => {
     const value = parseInt(hex.slice(1), 16);
     if (role === 'styleColor' || role === 'styleColor2') {
-      d[role] = value;
+      faceOf(d)[role] = value;
     } else {
       d.colors[role] = value;
     }
@@ -572,28 +586,30 @@ function setBoardName(name) {
 
 function setBoardText(text) {
   updateBoardDraft((d) => {
-    d.text = sanitizeText(text);
+    faceOf(d).text = sanitizeText(text);
   });
 }
 
 /** Paint one block-art cell with the current brush (brush 0 erases). */
 function paintBoardPixel(row, col) {
   updateBoardDraft((d) => {
-    if (!d.pixels[row]) d.pixels[row] = [];
-    d.pixels[row][col] = d.pixelBrush;
+    const f = faceOf(d);
+    if (!f.pixels[row]) f.pixels[row] = [];
+    f.pixels[row][col] = f.pixelBrush;
   });
 }
 
 function pickBoardBrush(idx) {
   updateBoardDraft((d) => {
-    d.pixelBrush = idx;
+    faceOf(d).pixelBrush = idx;
   });
 }
 
 function addBoardSticker(icon) {
   updateBoardDraft((d) => {
-    d.layers.push({ icon, x: 0, z: 0, rot: 0, scale: 1 });
-    boardSelectedLayer = d.layers.length - 1;
+    const f = faceOf(d);
+    f.layers.push({ icon, x: 0, z: 0, rot: 0, scale: 1 });
+    boardSelectedLayer = f.layers.length - 1;
   });
 }
 
@@ -605,7 +621,7 @@ function selectBoardLayer(i) {
 /** One knob of the selected sticker's inspector: position, spin, size. */
 function changeBoardLayer(i, key, value) {
   updateBoardDraft((d) => {
-    const l = d.layers[i];
+    const l = faceOf(d).layers[i];
     if (!l) return;
     l[key] = key === 'rot' ? (value * Math.PI) / 180 : value;
   });
@@ -613,8 +629,28 @@ function changeBoardLayer(i, key, value) {
 
 function deleteBoardLayer(i) {
   updateBoardDraft((d) => {
-    d.layers.splice(i, 1);
-    boardSelectedLayer = d.layers.length ? Math.min(boardSelectedLayer ?? 0, d.layers.length - 1) : null;
+    const f = faceOf(d);
+    f.layers.splice(i, 1);
+    boardSelectedLayer = f.layers.length ? Math.min(boardSelectedLayer ?? 0, f.layers.length - 1) : null;
+  });
+}
+
+/** Flip the maker between the top of the deck and its underside. Each face has
+ * its own style, colours, lettering, pixels and stickers, so switching just
+ * points every rack at the other face's design. */
+function pickBoardFace(face) {
+  if (face !== 'top' && face !== 'back') return;
+  boardFace = face;
+  boardSelectedLayer = null;
+  renderBoardMaker();
+}
+
+/** One knob of the active face's base-pattern placement: move, spin or scale
+ * the whole design on the deck, not just a single sticker. */
+function changeBoardPlacement(key, value) {
+  updateBoardDraft((d) => {
+    const f = faceOf(d);
+    f[key] = key === 'prot' ? (value * Math.PI) / 180 : value;
   });
 }
 
@@ -641,6 +677,11 @@ function boardSavedAction(id, action) {
         colors: { ...b.colors },
         pixels: b.pixels.map((r) => [...r]),
         layers: b.layers.map((l) => ({ ...l })),
+        back: {
+          ...b.back,
+          pixels: b.back.pixels.map((r) => [...r]),
+          layers: b.back.layers.map((l) => ({ ...l })),
+        },
       });
       boardSelectedLayer = null;
       renderBoardMaker();
@@ -754,6 +795,8 @@ hud.on.bmLayerChange = (i, key, value) => changeBoardLayer(i, key, value);
 hud.on.bmLayerDelete = (i) => deleteBoardLayer(i);
 hud.on.bmGlowToggle = () => toggleBoardGlow();
 hud.on.bmGlowColor = (hex) => pickBoardGlowColor(hex);
+hud.on.bmFace = (face) => pickBoardFace(face);
+hud.on.bmPlace = (key, value) => changeBoardPlacement(key, value);
 hud.on.bmSave = () => saveMadeBoard();
 hud.on.bmSavedAction = (id, action) => boardSavedAction(id, action);
 hud.on.pause = () => togglePause();

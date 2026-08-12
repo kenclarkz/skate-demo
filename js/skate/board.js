@@ -102,11 +102,20 @@ function buildDeck(p, shape, design) {
   const art = buildDesignBlocks(shape, design);
   if (art.skipStripe) {
     const y = T / 2 + g + ART_H / 2;
-    for (const b of art.blocks) {
+    for (const b of art.top) {
       entries.push(box(b.color, b.w, ART_H, b.d, b.x, y, b.z, 0, b.rot || 0, 0));
     }
   } else {
     entries.push(box(p.accent, W * 0.32, g * 0.7, flat * 1.9, 0, T / 2 + g + 0.0005, 0));
+  }
+
+  // The back of the deck: the underside carries its own design, blocks hanging
+  // a hair below the maple so the deck reads painted from underneath too —
+  // flip the board in the maker and the back pattern is there. Same flat
+  // mid-area as the grip art, same zero-texture merged draw call.
+  const by = -T / 2 - ART_H / 2;
+  for (const b of art.back) {
+    entries.push(box(b.color, b.w, ART_H, b.d, b.x, by, b.z, 0, b.rot || 0, 0));
   }
 
   return entries;
