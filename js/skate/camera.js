@@ -174,7 +174,6 @@ export class ChaseCamera {
     this.cam.position.copy(_eye);
     this.cam.up.copy(upv);
     this.cam.lookAt(_look);
-    this.cam.rotation.z = 0;
     this.setFov(ride, dt);
   }
 
