@@ -238,18 +238,15 @@
         <section id="screen-store" class="screen wide" hidden>
           <h1>Shop</h1>
           <p class="tag">Land tricks to earn coins. <b id="store-coins">0</b> coins</p>
-          <h2 class="store-section-title">Skaters</h2>
-          <p class="board-type-blurb">Free to pick, and they all ride exactly the same. Shirts below go on over the top.</p>
-          <div class="char-grid" id="char-grid"></div>
-          <button id="btn-store-maker" type="button">… or make a character from scratch</button>
           <h2 class="store-section-title">Boards</h2>
           <div class="board-grid" id="board-grid"></div>
           <button id="btn-store-boardmaker" type="button">… or make your own board</button>
           <h2 class="store-section-title">Shirts</h2>
+          <p class="board-type-blurb">Shirts go on over whichever rider you're skating.</p>
           <div class="board-grid" id="outfit-grid"></div>
           <div class="repaint" id="repaint-outfit" hidden></div>
           <h2 class="store-section-title">Pants</h2>
-          <p class="board-type-blurb">Legs and shoes live on the character below — these are the bottoms on top of them.</p>
+          <p class="board-type-blurb">Legs and shoes live on the rider — these are the bottoms that go over them.</p>
           <div class="board-grid" id="pants-grid"></div>
           <div class="repaint" id="repaint-pants" hidden></div>
           <h2 class="store-section-title">Accessories</h2>
@@ -261,9 +258,21 @@
 
         <section id="screen-charselect" class="screen wide" hidden>
           <h1>Riders</h1>
-          <p class="tag">Pick a rider to skate as. They all ride exactly the same.</p>
+          <p class="tag">Pick a rider to skate as. They all ride exactly the same. <b id="cs-coins">0</b> coins</p>
           <div class="char-grid" id="cs-char-grid"></div>
           <button id="btn-charselect-maker" class="primary" type="button">Make your own character</button>
+          <h2 class="store-section-title">Shirts</h2>
+          <p class="board-type-blurb">Shirts go on over whichever rider you pick.</p>
+          <div class="board-grid" id="cs-outfit-grid"></div>
+          <div class="repaint" id="repaint-cs-outfit" hidden></div>
+          <h2 class="store-section-title">Pants</h2>
+          <p class="board-type-blurb">Legs and shoes live on the rider — these are the bottoms that go over them.</p>
+          <div class="board-grid" id="cs-pants-grid"></div>
+          <div class="repaint" id="repaint-cs-pants" hidden></div>
+          <h2 class="store-section-title">Accessories</h2>
+          <p class="board-type-blurb">One slot, like the one shirt: pick a hat, a pair of shades, or a backpack to wear over your look.</p>
+          <div class="board-grid" id="cs-accessory-grid"></div>
+          <div class="repaint" id="repaint-cs-accessory" hidden></div>
           <button id="btn-charselect-back" type="button">Back</button>
         </section>
 

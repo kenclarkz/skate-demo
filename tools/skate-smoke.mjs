@@ -3001,12 +3001,12 @@ section('Skater picker');
   ok(layered.dressedSkin === layered.ownSkin, 'without touching their skin');
   ok(layered.backToOwn === layered.ownShirt, '"Original" puts them back in their own clothes');
 
-  // The rack itself, which lives at the top of the shop: a card each, and a
-  // portrait actually drawn on each.
+  // The rack itself, which lives on the Riders screen — not the shop. A card
+  // each, with a portrait actually drawn on each.
   const screen = await run(() => {
     const g = window.__skate;
-    g.showStore();
-    const grid = document.getElementById('char-grid');
+    g.showRiders();
+    const grid = document.getElementById('cs-char-grid');
     const cards = [...grid.querySelectorAll('[data-character]')];
     const canvases = [...grid.querySelectorAll('canvas.char-portrait')];
     // A portrait that drew nothing would still be a canvas of the right size, so
@@ -3024,23 +3024,31 @@ section('Skater picker');
       current: grid.querySelectorAll('.char-card.current').length,
       currentId: grid.querySelector('.char-card.current')?.dataset.character,
       painted,
-      hasBack: !!document.getElementById('btn-store-back'),
-      visible: !document.getElementById('screen-store').hidden,
-      // The rack has to sit above the boards and shirts it layers with, not
-      // below them, or picking a rider means scrolling past the whole shop.
-      aboveBoards:
-        grid.compareDocumentPosition(document.getElementById('board-grid')) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      hasBack: !!document.getElementById('btn-charselect-back'),
+      visible: !document.getElementById('screen-charselect').hidden,
+      // The characters have left the shop entirely — no skater rack there.
+      shopHasRack: !!document.getElementById('char-grid'),
+      // And the Riders screen carries the character's racks too: the shirts,
+      // pants and accessories the shop sells, right under the picker.
+      racks: [
+        document.getElementById('cs-outfit-grid')?.querySelectorAll('[data-outfit]').length || 0,
+        document.getElementById('cs-pants-grid')?.querySelectorAll('[data-pants]').length || 0,
+        document.getElementById('cs-accessory-grid')?.querySelectorAll('[data-accessory]').length || 0,
+      ],
     };
   });
-  ok(screen.state === 'store', 'the skater rack lives in the shop');
+  ok(screen.state === 'charselect', 'the skater rack lives on the Riders screen');
   ok(screen.visible && screen.hasBack, 'which shows, and has a back button');
-  ok(!!screen.aboveBoards, 'with the skaters above the boards');
   ok(screen.cards === 8, 'and a card per skater');
   ok(screen.current === 1 && screen.currentId === 'nova', 'and exactly one marked as the one being skated');
   ok(
     screen.painted.length === 8 && screen.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
+  );
+  ok(!screen.shopHasRack, 'and the shop no longer has a skater rack of its own');
+  ok(
+    screen.racks.every((n) => n > 0),
+    `and the Riders screen carries the shirts, pants and accessories too (${screen.racks.join(' / ')})`
   );
 
   // Tapping a card goes through the same click path the player's finger does.
@@ -3355,16 +3363,17 @@ section('Start menu: every button opens what it says');
     ok(!home.hidden && home.state === 'start', `and #${back} returns to the start screen`);
   }
 
-  // The skaters are in the shop now, so the shop button is the only way to them.
-  await page.click('#btn-store', { timeout: 4000 });
+  // The skaters live on the Riders screen now, so the Riders button is the
+  // only way to them — the shop keeps the boards and clothes, not the people.
+  await page.click('#btn-riders', { timeout: 4000 });
   const reachable = await run(() => {
-    const grid = document.getElementById('char-grid');
+    const grid = document.getElementById('cs-char-grid');
     const card = grid?.querySelector('[data-character]');
     const r = card?.getBoundingClientRect();
     return { cards: grid ? grid.querySelectorAll('[data-character]').length : 0, sized: !!r && r.width > 40 && r.height > 40 };
   });
   ok(reachable.cards === 8 && reachable.sized, 'and the eight skaters are laid out inside it');
-  await page.click('#btn-store-back', { timeout: 4000 });
+  await page.click('#btn-charselect-back', { timeout: 4000 });
 }
 
 // --------------------------------------------------------------------------

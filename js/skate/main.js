@@ -414,7 +414,6 @@ function showStore() {
   state = STOREMENU;
   input.enabled = false;
   const look = currentLook();
-  hud.renderCharacters(CHARACTERS, save.characterId);
   hud.renderBoards(BOARD_TYPES, BOARD_TYPES, save);
   hud.renderOutfits(OUTFITS, save, look.character.palette);
   hud.renderPants(PANTS, save);
@@ -422,10 +421,18 @@ function showStore() {
   hud.show('store');
 }
 
+/** The Riders screen: who you skate as, and what they wear. Characters live
+ * here and nowhere else — the shop is boards (and the clothes, shared with
+ * this screen). The shirt, pants and accessory racks are the same catalogues
+ * the shop shows, so a rider can be dressed where they are picked. */
 function showRiders() {
   state = CHARSELECT;
   input.enabled = false;
+  const look = currentLook();
   hud.renderCharSelect(CHARACTERS, save.characterId, save.customCharacters);
+  hud.renderOutfits(OUTFITS, save, look.character.palette);
+  hud.renderPants(PANTS, save);
+  hud.renderAccessories(ACCESSORIES, save, look);
   hud.show('charselect');
 }
 
@@ -929,15 +936,13 @@ function selectCharacter(id) {
   const look = currentLook();
   skater.rebuild(look.palette, look.style, look.scale);
   hud.setPreviewLook(look.palette, look.style, look.scale);
-  hud.renderCharacters(CHARACTERS, save.characterId);
   // The Riders screen carries the made characters too, so they get repainted
-  // alongside the shop's rack when a pick happens there.
+  // alongside the prebuilt rack when a pick happens there.
   hud.renderCharSelect(CHARACTERS, save.characterId, save.customCharacters);
-  // The shirt rack sits under the skaters in the same screen, and its "Original"
-  // swatch is whatever the equipped rider wears — so swapping rider has to
-  // repaint that too, or the card goes on advertising the old one's colours.
-  // The accessory portraits are drawn on the equipped rider as well, so they
-  // get repainted for the same reason.
+  // The shirt and accessory racks sit on the same Riders screen as the
+  // skaters, and the shirt rack's "Original" swatch is whatever the equipped
+  // rider wears — so swapping rider has to repaint those too, or the cards go
+  // on advertising the old rider's colours.
   hud.renderOutfits(OUTFITS, save, look.character.palette);
   hud.renderAccessories(ACCESSORIES, save, look);
   return true;

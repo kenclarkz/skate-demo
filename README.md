@@ -52,9 +52,11 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
 - **Walking mode** — step off the board to explore a park on foot, board
   carried in hand, and hop back on wherever you are.
 - **Eight skaters**, each with their own headwear and palette, picked from a
-  skater rack in the shop — from the everyday four up to the legendaries
-  (a tiger, the not-quite-Birdman, a bunny, and a garden gnome); a shop full
-  of purchasable boards across seven shapes (shortboard, longboard, penny,
+  skater rack on the Riders screen — from the everyday four up to the
+  legendaries (a tiger, the not-quite-Birdman, a bunny, and a garden gnome),
+  with the same shirt, pants and accessory racks the shop sells sitting right
+  underneath so a rider can be dressed where they are picked; a shop full of
+  purchasable boards across seven shapes (shortboard, longboard, penny,
   cruiser, old-school, freestyle, and mini-cruiser decks, each in a couple of
   skins), shirts, and headwear accessories
   (hats and shades), paid for with coins earned from tricks and combos.
