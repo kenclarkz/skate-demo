@@ -125,8 +125,8 @@ function applyBoard() {
  * body is drawn at), so the caller can hand the same figure to the builder.
  */
 function currentLook() {
-  if (save.characterId === 'custom') {
-    const c = save.custom;
+  if (save.characterId.startsWith('custom:')) {
+    const c = save.customCharacters.find((x) => x.id === save.characterId.slice(7)) ?? save.custom;
     const look = customLook(c);
     return {
       ...look,
@@ -424,7 +424,7 @@ function showStore() {
 function showRiders() {
   state = CHARSELECT;
   input.enabled = false;
-  hud.renderCharSelect(CHARACTERS, save.characterId, save.hasCustom(), save.custom);
+  hud.renderCharSelect(CHARACTERS, save.characterId, save.customCharacters);
   hud.show('charselect');
 }
 
@@ -466,18 +466,50 @@ function pickMakerPart(role, id) {
   renderMaker();
 }
 
+function setMakerName(name) {
+  const c = makeDraft();
+  // Keep the name exactly as typed — spaces, case, even empty. Cleaning (trim,
+  // a default name) happens when the character is saved, not while the player
+  // is still typing, or they can never delete the field or use a space in the
+  // middle of a name.
+  c.name = name.slice(0, 40);
+  save.setCustom(c);
+}
+
 /**
- * The maker's Save: the draft becomes the custom character and is equipped on
- * the spot. Re-saving an existing custom character just re-skins it in place —
- * it is one slot, not a collection, so there is no second price to pay for
- * going back to tweak it.
+ * The maker's Save: the draft becomes a new saved character and is equipped on
+ * the spot. Saving again makes a second rider, the way the Board Maker makes a
+ * second deck — the rack in the maker is where the old ones go to be edited or
+ * deleted, not for saving twice to mean overwriting.
  */
 function saveMadeCharacter() {
-  save.saveCustom(makeDraft());
+  save.saveCustomCharacter(makeDraft());
   const look = currentLook();
   skater.rebuild(look.palette, look.style, look.scale);
   hud.setPreviewLook(look.palette, look.style, look.scale);
   showStart();
+}
+
+/** Equip, edit or delete one of the player's saved custom characters. */
+function characterSavedAction(id, action) {
+  if (action === 'delete') {
+    save.deleteCustomCharacter(id);
+    const look = currentLook();
+    skater.rebuild(look.palette, look.style, look.scale);
+    hud.setPreviewLook(look.palette, look.style, look.scale);
+    renderMaker();
+  } else if (action === 'edit') {
+    const c = save.customCharacters.find((x) => x.id === id);
+    if (c) {
+      save.setCustom(c);
+      renderMaker();
+    }
+  } else if (save.setCustomCharacter(id)) {
+    const look = currentLook();
+    skater.rebuild(look.palette, look.style, look.scale);
+    hud.setPreviewLook(look.palette, look.style, look.scale);
+    renderMaker();
+  }
 }
 
 // --- the Board Maker -------------------------------------------------------
@@ -739,7 +771,9 @@ hud.on.settings = () => showSettings();
 hud.on.riders = () => showRiders();
 hud.on.maker = () => showMaker();
 hud.on.makePart = (role, id) => pickMakerPart(role, id);
+hud.on.makerName = (name) => setMakerName(name);
 hud.on.makeSave = () => saveMadeCharacter();
+hud.on.makerSavedAction = (id, action) => characterSavedAction(id, action);
 hud.on.boardMaker = () => showBoardMaker();
 hud.on.bmStyle = (id) => pickBoardStyle(id);
 hud.on.bmType = (id) => pickBoardType(id);
@@ -807,8 +841,8 @@ function selectOutfit(id) {
 
 /**
  * Swap rider. Free — this is a picker, not a shop, so there is no owned-list
- * and nothing to afford. 'custom' is the made character, which resolves from
- * the maker's draft; the shirt stays as it was and re-applies over whichever
+ * and nothing to afford. 'custom:<id>' is a made character, which resolves from
+ * its saved draft; the shirt stays as it was and re-applies over whichever
  * rider, which is why the rebuild goes through currentLook().
  */
 function selectCharacter(id) {
@@ -817,9 +851,9 @@ function selectCharacter(id) {
   skater.rebuild(look.palette, look.style, look.scale);
   hud.setPreviewLook(look.palette, look.style, look.scale);
   hud.renderCharacters(CHARACTERS, save.characterId);
-  // The Riders screen carries the made character too, so it gets repainted
+  // The Riders screen carries the made characters too, so they get repainted
   // alongside the shop's rack when a pick happens there.
-  hud.renderCharSelect(CHARACTERS, save.characterId, save.hasCustom(), save.custom);
+  hud.renderCharSelect(CHARACTERS, save.characterId, save.customCharacters);
   // The shirt rack sits under the skaters in the same screen, and its "Original"
   // swatch is whatever the equipped rider wears — so swapping rider has to
   // repaint that too, or the card goes on advertising the old one's colours.
@@ -1453,6 +1487,7 @@ window.__skate = {
   showMaker,
   pickMakerPart,
   saveMadeCharacter,
+  characterSavedAction,
   /** Step off the board, the way the on-screen button does. */
   dismount,
   /** Hop back on, the way the on-screen button does — possible from anywhere. */

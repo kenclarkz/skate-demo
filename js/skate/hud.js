@@ -434,6 +434,8 @@ export class Hud {
     this.makerFullscreenTitleEl = document.getElementById('maker-fullscreen-title');
     this.makerCoinsEl = document.getElementById('maker-coins');
     this.makerSummaryEl = document.getElementById('maker-summary');
+    this.makerNameEl = document.getElementById('maker-name');
+    this.makerSavedEl = document.getElementById('maker-saved');
     this.makerGrids = {};
     for (const id of ['skin', 'height', 'build', 'hair', 'pants', 'shoes', 'shirt', 'hat', 'shades']) {
       this.makerGrids[id] = document.getElementById(`maker-${id}`);
@@ -518,8 +520,12 @@ export class Hud {
       // A part picked in the maker: `(role, id)`, where role is one of
       // skin/height/build/hair/pants/shoes/shirt/hat/shades.
       makePart: null,
+      // The maker's name field typed with the current draft's name.
+      makerName: null,
       // The maker's Save pressed with the current draft.
       makeSave: null,
+      // One of the saved custom characters' cards: equip/edit/delete.
+      makerSavedAction: null,
       // The Board Maker's rack events. Style/type pick by id; colour picks by
       // role name and hex; the block-art grid paints one cell at a time.
       // The under-glow toggle turns the neon strip on and off, and its colour
@@ -757,7 +763,14 @@ export class Hud {
     makerEl?.addEventListener('click', (e) => {
       const card = e.target.closest('[data-part]');
       if (card) this.on.makePart?.(card.dataset.role, card.dataset.part);
+      const saved = e.target.closest('[data-makersaved]');
+      if (saved) {
+        const act = e.target.closest('[data-makeraction]');
+        this.on.makerSavedAction?.(saved.dataset.makersaved, act ? act.dataset.makeraction : 'equip');
+        return;
+      }
     });
+    this.makerNameEl?.addEventListener('input', (e) => this.on.makerName?.(e.target.value));
   }
 
   // --- readouts ----------------------------------------------------------
@@ -1265,21 +1278,20 @@ export class Hud {
   }
 
   /**
-   * The Riders screen: the four prebuilt characters exactly as the shop's
-   * rack shows them, with the made character leading the grid when one exists.
-   * It is a picker, not a shop, so the made card is the player's own figure —
-   * drawn from the current maker draft — rather than a price.
+   * The Riders screen: the prebuilt characters exactly as the shop's rack shows
+   * them, with the made characters leading the grid when any exist. It is a
+   * picker, not a shop, so a made card is the player's own figure — drawn from
+   * that character's saved draft — rather than a price.
    */
-  renderCharSelect(characters, equippedId, hasCustom, custom) {
+  renderCharSelect(characters, equippedId, customCharacters) {
     if (!this.csCharGrid) return;
     const cards = [];
-    if (hasCustom) {
-      const look = customLook(custom);
-      const isEquipped = equippedId === 'custom';
+    for (const c of customCharacters) {
+      const isEquipped = equippedId === `custom:${c.id}`;
       cards.push(
-        `<button type="button" class="char-card${isEquipped ? ' current' : ''}" data-character="custom">` +
-        `<canvas class="char-portrait" data-portrait="custom"></canvas>` +
-        `<b>Made by you</b><span class="char-blurb">Built in the Character Maker.</span>` +
+        `<button type="button" class="char-card${isEquipped ? ' current' : ''}" data-character="custom:${c.id}">` +
+        `<canvas class="char-portrait" data-portrait="custom:${c.id}"></canvas>` +
+        `<b>${escapeHtml(c.name)}</b><span class="char-blurb">Built in the Character Maker.</span>` +
         `<span class="board-status">${isEquipped ? 'Skating' : 'Tap to pick'}</span></button>`
       );
     }
@@ -1297,9 +1309,9 @@ export class Hud {
         .join('')
     );
     this.csCharGrid.innerHTML = cards.join('');
-    if (hasCustom) {
-      const canvas = this.csCharGrid.querySelector('[data-portrait="custom"]');
-      if (canvas) drawPortrait(canvas, customLook(custom));
+    for (const c of customCharacters) {
+      const canvas = this.csCharGrid.querySelector(`[data-portrait="custom:${c.id}"]`);
+      if (canvas) drawPortrait(canvas, customLook(c));
     }
     for (const c of characters) {
       const canvas = this.csCharGrid.querySelector(`[data-portrait="${c.id}"]`);
@@ -1376,6 +1388,38 @@ export class Hud {
           );
         })
         .join('');
+    }
+    // Never clobber the name field while the player is typing in it — the
+    // render runs on every keystroke, and resetting .value here would fight
+    // the field and make spaces and a fully-deleted field impossible.
+    if (this.makerNameEl && document.activeElement !== this.makerNameEl) this.makerNameEl.value = config.name;
+
+    // Saved characters: equip, re-open for editing, or delete. Each card shows
+    // the figure from that character's own saved draft, so editing one never
+    // repaints another, and the meta line summarises the build.
+    if (this.makerSavedEl) {
+      this.makerSavedEl.innerHTML = save.customCharacters.length
+        ? save.customCharacters
+            .map((c) => {
+              const equipped = save.characterId === `custom:${c.id}`;
+              return (
+                `<div class="bm-saved-card maker-saved-card${equipped ? ' current' : ''}" data-makersaved="${c.id}">` +
+                `<canvas class="char-portrait" data-maker-portrait="${c.id}"></canvas>` +
+                `<b>${escapeHtml(c.name)}</b>` +
+                `<span class="bm-saved-meta">${summarize(c)}</span>` +
+                `<span class="bm-saved-actions">` +
+                `<button type="button" data-makeraction="equip">${equipped ? 'On now' : 'Equip'}</button>` +
+                `<button type="button" data-makeraction="edit">Edit</button>` +
+                `<button type="button" class="bm-saved-del" data-makeraction="delete">Delete</button>` +
+                `</span></div>`
+              );
+            })
+            .join('')
+        : `<p class="tag">No characters saved yet — build one and press Save &amp; skate.</p>`;
+      for (const c of save.customCharacters) {
+        const canvas = this.makerSavedEl.querySelector(`[data-maker-portrait="${c.id}"]`);
+        if (canvas) drawPortrait(canvas, customLook(c));
+      }
     }
   }
 
