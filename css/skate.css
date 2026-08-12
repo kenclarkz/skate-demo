@@ -2490,6 +2490,32 @@ button:disabled.primary {
   .maker-preview-frame {
     max-width: 240px;
   }
+
+  /* The Board Maker breaks ranks on a phone. A board is a wide thing, so its
+     preview turns into a landscape banner — and unlike the Character Maker's
+     mirror, which scrolls away with the racks, it sticks to the top of the
+     screen. The deck stays in view the whole time you're scrolling the style,
+     shape, colour and sticker racks, so every change lands on a board you can
+     actually see. */
+  #screen-boardmaker .maker-preview-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding-bottom: 10px;
+    /* The racks scroll up underneath the banner; a soft fade keeps the board
+       reading as floating on top of the options instead of colliding with a
+       hard edge against them. */
+    background: linear-gradient(180deg, #10141a 82%, rgba(16, 20, 26, 0));
+  }
+
+  #screen-boardmaker .maker-preview-frame {
+    width: 100%;
+    max-width: 330px;
+  }
+
+  #screen-boardmaker .maker-preview {
+    aspect-ratio: 16 / 9;
+  }
 }
 
 /* "No Hat" / "No shades" have no colour to show, so their swatch is an empty
