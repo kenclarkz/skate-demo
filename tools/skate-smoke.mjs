@@ -3056,7 +3056,9 @@ section('Character Maker');
   });
   ok(poor.hat === 'none' && !poor.owned, 'an unaffordable hat is not picked');
 
-  // Save & skate makes the draft the custom rider, equipped with its own body.
+  // Save & skate makes the draft a new custom rider, equipped with its own
+  // body. It never overwrites anything — saving again later makes a second
+  // rider, the way the Board Maker makes a second deck.
   const saved = await run(() => {
     const g = window.__skate;
     g.saveMadeCharacter();
@@ -3070,7 +3072,7 @@ section('Character Maker');
       coins: g.save.coins,
     };
   });
-  ok(saved.id === 'custom', 'Save & skate equips the made rider');
+  ok(saved.id.startsWith('custom:'), 'Save & skate equips the made rider');
   ok(saved.has === true, 'and the maker is marked as saved');
   ok(Math.abs(saved.scale.height - 1.08) < 1e-6, 'and the live rig grows to the saved height');
   ok(Math.abs(saved.scale.width - 1.14) < 1e-6, 'and to the saved build');
@@ -3093,11 +3095,13 @@ section('Character Maker');
       for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
       return n;
     });
-    const picked = g.selectCharacter('custom');
+    const customId = `custom:${g.save.customCharacters[0].id}`;
+    const picked = g.selectCharacter(customId);
     return {
       state: g.state,
+      customId,
       cards: cards.length,
-      hasCustom: !!grid.querySelector('[data-character="custom"]'),
+      hasCustom: !!grid.querySelector(`[data-character="${customId}"]`),
       current: grid.querySelectorAll('.char-card.current').length,
       painted,
       picked,
@@ -3112,31 +3116,95 @@ section('Character Maker');
     riders.painted.length === 9 && riders.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${riders.painted.join(', ')} pixels)`
   );
-  ok(riders.picked === true && riders.eqId === 'custom', 'and tapping the made card equips it');
+  ok(riders.picked === true && riders.eqId === riders.customId, 'and tapping the made card equips it');
 
   // Picking a prebuilt rider puts the standard body back on the live rig, and
   // the tutorial's demo figure follows the made one too.
   const prebuilt = await run(() => {
     const g = window.__skate;
+    const customId = `custom:${g.save.customCharacters[0].id}`;
     g.selectCharacter('nova');
     const afterNova = { id: g.save.characterId, scale: g.skater.scale.height };
-    g.selectCharacter('custom');
+    g.selectCharacter(customId);
     const demo = g.hud.preview?.skater;
     return { afterNova, demo: demo ? { scale: demo.scale.height, head: demo.style.head } : null };
   });
   ok(prebuilt.afterNova.id === 'nova' && Math.abs(prebuilt.afterNova.scale - 1) < 1e-6, 'and a prebuilt rider restores the standard body');
   ok(prebuilt.demo && Math.abs(prebuilt.demo.scale - 1.08) < 1e-6, 'and the tutorial demo matches the made rider');
 
-  // The maker re-opens with the saved draft still in it, and edits re-skin the
-  // same slot rather than stacking up a second custom rider.
+  // The saved rider lives on a card in the maker's rack, with its own drawn
+  // portrait. Re-opening the maker starts a fresh character, the same as the
+  // Board Maker after a save, so "make another one" is a blank slate — the old
+  // rider is edited from its card instead.
   const reopen = await run(() => {
     const g = window.__skate;
     g.showMaker();
-    g.pickMakerPart('height', 'short');
-    const c = g.save.custom;
-    return { height: c.height, savedId: g.save.characterId };
+    const savedChar = g.save.customCharacters[0];
+    const card = document.querySelector('[data-makersaved]');
+    const portrait = card ? card.querySelector('[data-maker-portrait]') : null;
+    const ctx = portrait ? portrait.getContext('2d') : null;
+    const d = ctx ? ctx.getImageData(0, 0, portrait.width, portrait.height).data : null;
+    let painted = 0;
+    if (d) for (let i = 3; i < d.length; i += 4) if (d[i] > 0) painted++;
+    return {
+      height: g.save.custom.height,
+      savedHeight: savedChar.height,
+      cards: g.save.customCharacters.length,
+      cardShown: !!card,
+      cardName: card ? card.querySelector('b').textContent : null,
+      cardMeta: card ? card.querySelector('.bm-saved-meta').textContent : null,
+      painted,
+    };
   });
-  ok(reopen.height === 'short' && reopen.savedId === 'custom', 're-opening the maker edits the same saved rider');
+  ok(reopen.height === 'average', 'after a save the maker opens a fresh character');
+  ok(reopen.savedHeight === 'tall', 'and the saved rider keeps the saved build');
+  ok(
+    reopen.cards === 1 && reopen.cardShown && reopen.cardName === 'My Character',
+    'and the saved rider appears on its rack card'
+  );
+  ok(reopen.cardMeta.length > 0 && reopen.painted > 0, 'and the rack card draws a real portrait and a summary');
+
+  // The card's Edit loads that rider back into the draft, and saving again
+  // makes a second rider rather than overwriting the first.
+  const edit = await run(() => {
+    const g = window.__skate;
+    const savedChar = g.save.customCharacters[0];
+    document.querySelector(`[data-makersaved="${savedChar.id}"] [data-makeraction="edit"]`).click();
+    return { height: g.save.custom.height, build: g.save.custom.build };
+  });
+  ok(edit.height === 'tall' && edit.build === 'stocky', 'and Edit loads the rider back into the draft');
+
+  const second = await run(() => {
+    const g = window.__skate;
+    g.pickMakerPart('height', 'short');
+    g.saveMadeCharacter();
+    return { cards: g.save.customCharacters.length, id: g.save.characterId, height: g.save.customCharacters[1].height };
+  });
+  ok(second.cards === 2 && second.height === 'short', 'saving the edited draft makes a second rider, not an overwrite');
+
+  // Delete takes a rider off the rack; deleting the one being skated falls
+  // back to the default rider, and emptying the rack removes the made card.
+  const del = await run(
+    (equippedId) => {
+      const g = window.__skate;
+      g.showMaker();
+      const victim = g.save.customCharacters.find((c) => `custom:${c.id}` === equippedId);
+      document.querySelector(`[data-makersaved="${victim.id}"] [data-makeraction="delete"]`).click();
+      const afterFirst = { cards: g.save.customCharacters.length, id: g.save.characterId };
+      document.querySelector('[data-makersaved] [data-makeraction="delete"]').click();
+      return {
+        afterFirst,
+        cards: g.save.customCharacters.length,
+        id: g.save.characterId,
+        has: g.save.hasCustom(),
+        grid: document.querySelectorAll('[data-makersaved]').length,
+      };
+    },
+    second.id
+  );
+  ok(del.afterFirst.cards === 1, 'Delete removes the rider from the rack');
+  ok(del.cards === 0 && del.grid === 0 && del.has === false, 'and deleting the last one empties the rack');
+  ok(del.id === 'ace', 'and falls back to the default rider when the skated one is deleted');
 
   await run(() => window.__skate.hud.show('start'));
 }

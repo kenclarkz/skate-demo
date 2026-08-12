@@ -2453,6 +2453,45 @@ button:disabled.primary {
   box-shadow: inset 0 0 0 1px var(--hot);
 }
 
+/* The saved-character cards reuse the board cards' grid and layout, but the
+   figure is a full-length portrait rather than a deck-colour swatch. The
+   portrait is wider than the board swatch, so it gets its own max so a row of
+   characters stays compact, and it centres itself rather than stretching to
+   the card's edges. */
+.maker-saved-card .char-portrait {
+  max-width: 84px;
+  align-self: center;
+}
+
+/* The two makers' name fields sit under the preview figure, one line of text
+   on the dark panel. A shared style keeps the Character Maker's field
+   identical to the Board Maker's. */
+#maker-name,
+#bm-name {
+  width: 100%;
+  margin-top: 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+#maker-name::placeholder,
+#bm-name::placeholder {
+  color: var(--dim);
+}
+
+#maker-name:focus,
+#bm-name:focus {
+  outline: none;
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 1px var(--hot);
+}
+
 /* The colour rack: a labelled native colour input per slot, in a friendly
    grid. Native inputs keep the whole thing free of a bespoke wheel, and the
    swatch inside each label shows the live pick. */

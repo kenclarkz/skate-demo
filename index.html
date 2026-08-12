@@ -262,9 +262,15 @@
                 <button id="btn-maker-expand" class="maker-expand" type="button" aria-label="Show the preview full screen" title="Show the preview full screen"><span class="maker-expand-ico" aria-hidden="true"></span></button>
                 <canvas id="maker-preview" class="maker-preview"></canvas>
               </div>
+              <input id="maker-name" type="text" maxlength="40" spellcheck="false" aria-label="Character name" placeholder="My Rider">
               <p class="tag" id="maker-summary"></p>
             </div>
             <div class="maker-stack">
+              <section class="maker-group">
+                <h2 class="store-section-title">Your characters</h2>
+                <p class="board-type-blurb">Saved riders. Tap to equip, edit or delete.</p>
+                <div class="bm-saved-grid" id="maker-saved"></div>
+              </section>
               <section class="maker-group">
                 <h2 class="store-section-title">Body</h2>
                 <p class="board-type-blurb">Skin, height, build and hair — always free, for everyone.</p>
