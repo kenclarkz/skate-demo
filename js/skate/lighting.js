@@ -21,6 +21,12 @@ export const NIGHT = 'night';
 // middle of that and reads as deliberate rather than either snappy or slow.
 const FADE_SECONDS = 2.4;
 
+// The player's personal fill light hangs behind and above the rider, on the
+// side the chase camera sits, rather than directly overhead — see update().
+// BACK is how far behind the rider, UP is how far above the ground it rides.
+const PLAYER_FILL_BACK = 1.5;
+const PLAYER_FILL_UP = 1.0;
+
 // Every tunable that differs between times of day, gathered in one place so
 // adding a third preset is "copy one of these and change the numbers," not a
 // hunt through the rest of the file for every place day and night diverge.
@@ -278,7 +284,10 @@ export class LightingManager {
     // Not attached to the rider's own frame — following its world position
     // each frame instead means it survives dismounting, bailing and walking
     // without needing to be re-parented through every one of those states.
-    this.playerLight = new THREE.PointLight(0xdfe8ff, 0, 9, 1.6);
+    // It hangs *behind* the rider, on the camera's side (see update()), and
+    // stays short-range — a tight fill for the one skater the camera is
+    // behind, not a broad overhead wash that hides the board's neon under glow.
+    this.playerLight = new THREE.PointLight(0xdfe8ff, 0, 6, 1.6);
     scene.add(this.playerLight);
 
     // --- floodlights ----------------------------------------------------------
@@ -456,7 +465,7 @@ export class LightingManager {
     this._applyAll(this._cur);
   }
 
-  update(dt, followPos) {
+  update(dt, followPos, cameraPos) {
     if (this._t < 1) {
       this._t = Math.min(1, this._t + dt / FADE_SECONDS);
       const k = smoothstep(this._t);
@@ -491,7 +500,24 @@ export class LightingManager {
         followPos.y + this._keyOffset.y,
         followPos.z + this._keyOffset.z
       );
-      this.playerLight.position.set(followPos.x, followPos.y + 1.8, followPos.z);
+      // The player's fill hangs behind and above the rider instead of straight
+      // on top of them — a light sitting directly over the skater washes the
+      // character out and drowns the pool of neon the board throws onto the
+      // ground beneath it. Filling from the camera's side still does the job
+      // the light exists for (the rider never reads as a silhouette in a dark
+      // corner) while the deck and its under glow stay out of the brightest
+      // part of the falloff.
+      const fillDir = this._fillDir || (this._fillDir = new THREE.Vector3());
+      if (cameraPos && cameraPos.distanceToSquared(followPos) > 1e-6) {
+        fillDir.subVectors(followPos, cameraPos).setY(0).normalize();
+      } else {
+        fillDir.set(0, 0, 1); // no camera info (e.g. a test-locked camera): fixed direction
+      }
+      this.playerLight.position.set(
+        followPos.x + fillDir.x * PLAYER_FILL_BACK,
+        followPos.y + PLAYER_FILL_UP,
+        followPos.z + fillDir.z * PLAYER_FILL_BACK
+      );
       const wantShadow = this._cur.shadowStrength > 0.02;
       if (this.key.castShadow !== wantShadow) this.key.castShadow = wantShadow;
       if (this._casters) {
@@ -529,7 +555,7 @@ export class LightingManager {
     this.key.color.copy(colorOf(cur.keyColor));
     this.key.intensity = cur.keyIntensity;
     this._keyOffset.set(cur.keyPos[0], cur.keyPos[1], cur.keyPos[2]);
-    this.playerLight.intensity = cur.playerLightIntensity * 12;
+    this.playerLight.intensity = cur.playerLightIntensity * 8;
 
     this._starMat.opacity = cur.starOpacity;
     this._moonMat.opacity = cur.moonOpacity;

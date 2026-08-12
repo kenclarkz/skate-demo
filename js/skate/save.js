@@ -46,14 +46,16 @@ const DEFAULTS = {
   outfitColors: {},
   pantsColors: {},
   // Characters are picked, not bought — there is no `characters` owned-list to
-  // go with this the way boards and outfits have one.
+  // go with this the way boards and outfits have one. A made character's id in
+  // characterId is 'custom:<id>', so it can never collide with the catalogue.
   characterId: DEFAULT_CHARACTER_ID,
-  // The Character Maker's draft: the part ids a made character is built from.
-  // It lives here so half-finished edits survive a reload. `customSaved` is
-  // what lets characterId be 'custom' — the maker's Save button is the only
-  // thing that sets it, and without it the picker has no custom rider to show.
+  // The Character Maker's working draft: the part ids a made character is built
+  // from, plus its name. It lives here so half-finished edits survive a
+  // reload. `customCharacters` is the rack the shop, the Riders screen and the
+  // maker's own saved-grid read — every made rider, each with its own id so one
+  // can be edited or deleted without touching the rest.
   custom: {},
-  customSaved: false,
+  customCharacters: [],
   // The Board Maker's working draft and its saved decks. `customBoards` is the
   // rack the shop and the maker's own saved-grid read; `boardMakerSaved` just
   // records that at least one custom board exists. A custom board's id in
@@ -75,16 +77,17 @@ const DEFAULTS = {
   radioEnabled: true, // master switch for the whole Skate Radio — see js/skate/radio.js
 };
 
-// `boards`, `outfits` and `accessories` (which ones are owned) are arrays and
-// so cannot live in DEFAULTS itself — spreading DEFAULTS only copies the
-// reference, and the first purchase would then push onto (and permanently
-// mutate) that shared default. `custom` and the maker's per-part owned-lists
-// are the same story.
+// `boards`, `outfits`, `accessories` and `customCharacters` (which ones are
+// owned / saved) are arrays and so cannot live in DEFAULTS itself — spreading
+// DEFAULTS only copies the reference, and the first purchase or save would then
+// push onto (and permanently mutate) that shared default. `custom` and the
+// maker's per-part owned-lists are the same story.
 const freshBoards = () => [DEFAULT_BOARD_ID];
 const freshOutfits = () => [DEFAULT_OUTFIT_ID];
 const freshAccessories = () => [DEFAULT_ACCESSORY_ID];
 const freshPants = () => [DEFAULT_PANTS_ID];
 const freshCustom = () => ({ ...DEFAULT_CUSTOM });
+const freshCustomCharacters = () => [];
 const freshCustomBoards = () => [];
 const freshColorMap = () => ({});
 const freshBoardDraft = () => ({
@@ -221,6 +224,7 @@ const OWNED_ROLES = ['pants', 'shoes', 'shirt', 'hat', 'shades'];
 function cleanCustom(raw) {
   const c = freshCustom();
   if (!raw || typeof raw !== 'object') return c;
+  if (typeof raw.name === 'string') c.name = raw.name.trim().slice(0, 40);
   const slot = (key, byId) => (typeof raw[key] === 'string' && byId[raw[key]] ? raw[key] : c[key]);
   c.skin = slot('skin', skinById);
   c.height = slot('height', heightById);
@@ -258,6 +262,7 @@ function read() {
         pants: freshPants(),
         custom: freshCustom(),
         owned: freshOwned(),
+        customCharacters: freshCustomCharacters(),
         customBoards: freshCustomBoards(),
         boardDraft: freshBoardDraft(),
         accessoryColors: freshColorMap(),
@@ -273,6 +278,7 @@ function read() {
       pants: freshPants(),
       custom: freshCustom(),
       owned: freshOwned(),
+      customCharacters: freshCustomCharacters(),
       customBoards: freshCustomBoards(),
       boardDraft: freshBoardDraft(),
       accessoryColors: freshColorMap(),
@@ -356,10 +362,48 @@ function read() {
     // The maker's draft is cleaned field by field, and the owned-lists only
     // hold ids the maker actually sells. 'custom' as a character choice is
     // only legitimate once the maker's Save has actually been pressed.
+    // characterId is checked *after* the custom characters are parsed, so a
+    // 'custom:<id>' value can be matched against them — validated against the
+    // catalogue only, an equipped made character would silently fall back to
+    // the default on every reload. Each saved character keeps its own id (or is
+    // given one), so characterId can point at 'custom:<id>' without colliding
+    // with the catalogue.
+    s.customCharacters = Array.isArray(parsed.customCharacters)
+      ? parsed.customCharacters
+          .map((raw, i) => {
+            const c = cleanCustom(raw);
+            c.id =
+              raw && typeof raw.id === 'string' && raw.id
+                ? raw.id.slice(0, 40)
+                : `c${Date.now().toString(36)}${i.toString(36)}`;
+            if (!c.name.trim()) c.name = 'My Character';
+            return c;
+          })
+          .filter((c) => c.id)
+      : freshCustomCharacters();
+    // A save written before the Character Maker held more than one rider has a
+    // single made character in `custom` with `customSaved` set. Migrate it into
+    // the collection so an old custom rider keeps riding — the maker's legacy
+    // one-slot behaviour, folded into the new rack with the draft's id.
+    if (s.customCharacters.length === 0 && parsed.customSaved === true) {
+      const c = cleanCustom(parsed.custom);
+      c.id = `c${Date.now().toString(36)}0`;
+      if (!c.name.trim()) c.name = 'My Character';
+      s.customCharacters.push(c);
+    }
     s.custom = cleanCustom(parsed.custom);
-    s.customSaved = parsed.customSaved === true;
     s.owned = cleanOwned(parsed.owned);
-    if (s.characterId === 'custom' && !s.customSaved) s.characterId = DEFAULT_CHARACTER_ID;
+    s.characterId = typeof s.characterId === 'string' ? s.characterId : DEFAULT_CHARACTER_ID;
+    if (s.characterId.startsWith('custom:')) {
+      if (!s.customCharacters.some((c) => c.id === s.characterId.slice(7))) {
+        s.characterId = DEFAULT_CHARACTER_ID;
+      }
+    } else if (s.characterId === 'custom') {
+      // Legacy: the single-slot made character. Point it at the migrated entry.
+      s.characterId = s.customCharacters.length ? `custom:${s.customCharacters[0].id}` : DEFAULT_CHARACTER_ID;
+    } else if (!charById[s.characterId]) {
+      s.characterId = DEFAULT_CHARACTER_ID;
+    }
     return s;
   } catch {
     return {
@@ -370,6 +414,7 @@ function read() {
       pants: freshPants(),
       custom: freshCustom(),
       owned: freshOwned(),
+      customCharacters: freshCustomCharacters(),
       customBoards: freshCustomBoards(),
       boardDraft: freshBoardDraft(),
       accessoryColors: freshColorMap(),
@@ -452,8 +497,13 @@ export const save = {
   get custom() {
     return { ...state.custom };
   },
+  /** The maker's saved custom characters, as copies. */
+  get customCharacters() {
+    return state.customCharacters.map((c) => ({ ...c }));
+  },
+  /** @returns true if the maker has ever saved a custom character. */
   get customSaved() {
-    return state.customSaved;
+    return state.customCharacters.length > 0;
   },
   /** The Board Maker's saved decks, as copies. */
   get customBoards() {
@@ -479,6 +529,10 @@ export const save = {
   /** @returns true if the given id is one of the player's saved custom boards. */
   hasCustomBoard(id) {
     return state.customBoards.some((b) => b.id === id);
+  },
+  /** @returns true if the given id is one of the player's saved custom characters. */
+  hasCustomCharacter(id) {
+    return state.customCharacters.some((c) => c.id === id);
   },
   /** The maker's owned-clothes lists, as copies. */
   get owned() {
@@ -690,7 +744,8 @@ export const save = {
 
   /** @returns true if that is a real character and it is now equipped. */
   setCharacter(id) {
-    if (!charById[id] && !(id === 'custom' && state.customSaved)) return false;
+    if (!charById[id] && !(id.startsWith('custom:') && state.customCharacters.some((c) => c.id === id.slice(7))))
+      return false;
     state.characterId = id;
     flush();
     return true;
@@ -702,17 +757,60 @@ export const save = {
     flush();
   },
 
-  /** The maker's Save: the draft becomes the custom character and is equipped. */
-  saveCustom(config) {
-    state.custom = cleanCustom(config);
-    state.customSaved = true;
-    state.characterId = 'custom';
+  /**
+   * Save the draft as a new custom character and equip it on the spot. A fresh
+   * id each save — saving twice makes two riders, the way the board maker's
+   * save makes two decks. Editing a saved character and saving again is meant
+   * to be "save a new one", not "overwrite mine"; delete the old one if the
+   * copy was not wanted.
+   */
+  saveCustomCharacter(config) {
+    const c = cleanCustom(config);
+    if (!c.name.trim()) c.name = 'My Character';
+    const id = `c${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+    state.customCharacters.push({ id, ...c });
+    state.characterId = `custom:${id}`;
+    // The saved rider is on the rack now; the working draft goes back to a
+    // fresh character so the next visit to the maker starts blank instead of
+    // still holding the rider that was just saved — otherwise "make another
+    // one" re-opens the last build and saving again just keeps the same
+    // character. Editing a saved rider goes through its Edit card instead.
+    state.custom = freshCustom();
     flush();
+    return id;
+  },
+
+  /** Overwrite an existing saved character with the draft, keeping its id. */
+  updateCustomCharacter(id, config) {
+    const i = state.customCharacters.findIndex((c) => c.id === id);
+    if (i === -1) return false;
+    const c = cleanCustom(config);
+    if (!c.name.trim()) c.name = 'My Character';
+    state.customCharacters[i] = { id, ...c };
+    state.characterId = `custom:${id}`;
+    flush();
+    return true;
+  },
+
+  /** @returns true if the custom character exists and is now equipped. */
+  setCustomCharacter(id) {
+    if (!state.customCharacters.some((c) => c.id === id)) return false;
+    state.characterId = `custom:${id}`;
+    flush();
+    return true;
+  },
+
+  /** Remove a saved custom character; equipping falls back to the default. */
+  deleteCustomCharacter(id) {
+    state.customCharacters = state.customCharacters.filter((c) => c.id !== id);
+    if (state.characterId === `custom:${id}`) state.characterId = DEFAULT_CHARACTER_ID;
+    flush();
+    return true;
   },
 
   /** @returns true if the maker has ever saved a custom character. */
   hasCustom() {
-    return state.customSaved;
+    return state.customCharacters.length > 0;
   },
 
   /** Store the Board Maker's draft as it changes; a reload must not lose it. */
@@ -724,8 +822,8 @@ export const save = {
   /**
    * Save the draft as a new custom board and equip it on the spot. A fresh id
    * each save — saving twice makes two decks, the way the character maker's
-   * save makes one custom rider that gets overwritten. Editing a saved board
-   * and saving again is meant to be "save a new one", not "overwrite mine".
+   * save makes two riders. Editing a saved board and saving again is meant to
+   * be "save a new one", not "overwrite mine".
    */
   saveCustomBoard(draft) {
     const d = cleanBoardDraft(draft);
@@ -875,6 +973,7 @@ export const save = {
       outfits: freshOutfits(),
       accessories: freshAccessories(),
       pants: freshPants(),
+      customCharacters: freshCustomCharacters(),
       customBoards: freshCustomBoards(),
       boardDraft: freshBoardDraft(),
       accessoryColors: freshColorMap(),

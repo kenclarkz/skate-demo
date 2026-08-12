@@ -121,6 +121,10 @@ export const shadeById = byListId(SHADES);
 
 /** The parts a fresh maker starts from: free, and the shop's own defaults. */
 export const DEFAULT_CUSTOM = {
+  // The name a saved character keeps, the same way a saved deck does. Kept in
+  // the draft so an edit round-trips it and a fresh maker starts blank for the
+  // player to fill in before saving.
+  name: 'My Character',
   skin: SKIN_TONES[0].id,
   height: HEIGHTS[1].id,
   build: BUILDS[1].id,
