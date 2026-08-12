@@ -278,7 +278,9 @@ body {
 #charge {
   position: absolute;
   right: calc(20px + var(--pad-r));
-  bottom: calc(28px + var(--pad-b));
+  /* Clear the hide-UI button that owns the corner below it — a full pull
+     must never land on top of the button. */
+  bottom: calc(64px + var(--pad-b));
   width: 110px;
 }
 
@@ -448,6 +450,35 @@ body {
   padding: 6px 8px;
   border-radius: 6px;
   white-space: pre;
+}
+
+/* --- hiding the HUD ------------------------------------------------------ */
+/* The hide-the-chrome button: bottom-right corner, clear of the charge meter
+   above it and the grab row in the middle. Same pill language as the camera
+   button — it says exactly what the next tap does. */
+#btn-hideui {
+  position: absolute;
+  right: calc(14px + var(--pad-r));
+  bottom: calc(12px + var(--pad-b));
+  pointer-events: auto;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+#btn-hideui.off {
+  color: var(--dim);
+}
+
+/* With the HUD hidden, every in-run control disappears except the button that
+   undid it — no score, no joystick, no radio, no trick call-outs, and no
+   gesture trail over the canvas. The game itself and its audio carry on. */
+#app.hide-ui #hud > :not(#btn-hideui),
+#app.hide-ui #gesture-trail {
+  display: none !important;
 }
 
 /* --- the radio ------------------------------------------------------------- */

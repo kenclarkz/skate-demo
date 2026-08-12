@@ -123,6 +123,14 @@
             <span id="radio-now-station"></span>
           </button>
         </div>
+
+        <!-- Hide everything else on screen and just watch the park: one tap
+             in the bottom-right corner clears every readout, button and trail
+             for the rest of the run. The button stays put so the same tap
+             brings it all back, and hiding the chrome never touches the audio
+             — the music keeps going, this is not a pause. Shown only while
+             playing or walking; main.js drives .hidden. -->
+        <button id="btn-hideui" type="button" hidden>Hide UI</button>
       </div>
 
       <div id="overlay" hidden>
