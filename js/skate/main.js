@@ -1366,8 +1366,10 @@ function updateHud(dt) {
   // the moment there is a camera to cycle.
   hud.setCamcycleVisible(state === PLAYING || state === WALKING);
   // And the hide-the-HUD button rides with them: only mid-run is there a
-  // screenful of chrome worth hiding, and leaving the run brings it back.
-  hud.setHideUiVisible(state === PLAYING || state === WALKING);
+  // screenful of chrome worth hiding, and leaving the run brings it back. A
+  // bail is still mid-run — the rider gets straight back up and carries on, so
+  // the HUD stays off through a crash rather than flashing back on screen.
+  hud.setHideUiVisible(state === PLAYING || state === WALKING || state === BAILED);
 
   if (state === PLAYING) {
     hud.setSpeed(ride.groundSpeed);
