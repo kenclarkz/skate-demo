@@ -38,7 +38,6 @@ const PLAYING = 'playing';
 const PAUSED = 'paused';
 const GUIDE = 'guide';
 const PARKMENU = 'parks';
-const MYPARKSMENU = 'myparks';
 const STOREMENU = 'store';
 const CHARSELECT = 'charselect';
 const MAKER = 'maker';
@@ -82,8 +81,9 @@ lighting.setMode(save.lighting === NIGHT ? NIGHT : DAY, true);
 
 // --- world ----------------------------------------------------------------
 // The player's own parks, from localStorage. They ride alongside the built-in
-// ones everywhere a park is chosen; `allParks()` is the single source for the
-// combined picker, and `buildDef` turns a saved file into a real `Park` def.
+// ones everywhere a park is loaded — a saved file becomes a real `Park` def
+// through `buildDef`, and `allParks()` is the single source for the combined
+// lookup (selecting one, resuming the saved one).
 let userParks = listFiles();
 function allParks() {
   return [...PARKS, ...userParks.map((f) => buildDef(f))];
@@ -372,16 +372,10 @@ function showGuide() {
 function showParks() {
   state = PARKMENU;
   input.enabled = false;
-  hud.renderParks(allParks(), park.id);
+  hud.renderParks(PARKS, park.id);
+  hud.renderMyParks(userParks, park.id);
   hud.setLightingMode(save.lighting);
   hud.show('parks');
-}
-
-function showMyParks() {
-  state = MYPARKSMENU;
-  input.enabled = false;
-  hud.renderMyParks(userParks, park.id);
-  hud.show('myparks');
 }
 
 /** The freshest saved copy of every user park, from storage. */
@@ -732,7 +726,6 @@ hud.on.selectPark = (id) => {
   }
   showStart();
 };
-hud.on.myParks = () => showMyParks();
 hud.on.newPark = () => openDesigner(newFile());
 hud.on.editPark = (id) => {
   const file = userParks.find((f) => f.id === id);
@@ -757,7 +750,7 @@ hud.on.deletePark = (id) => {
 // the run from a clear spawn.
 designer.on.back = () => {
   leaveDesigner();
-  showMyParks();
+  showParks();
 };
 designer.on.test = () => {
   designer.save();
@@ -1220,7 +1213,6 @@ function step(dt, frameInput) {
     state === START ||
     state === GUIDE ||
     state === PARKMENU ||
-    state === MYPARKSMENU ||
     state === STOREMENU ||
     state === SETTINGSMENU ||
     state === DESIGNER
@@ -1482,8 +1474,8 @@ window.__skate = {
     return userParks;
   },
   allParks,
-  showMyParks,
   openDesigner,
+  showParks,
   showStart,
   start: startGame,
   respawn,
