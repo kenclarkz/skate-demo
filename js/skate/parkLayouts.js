@@ -23,6 +23,7 @@ function def(id, name, blurb, opts, objects) {
     blurb,
     ...opts,
     scale: 1,
+    _objects: objects,
     build(p) {
       buildObjects(p, objects);
     },
@@ -63,8 +64,9 @@ export const PARKS = [
       { type: 'ledge', x: -48.6, z: 0, ry: 90, len: 32, h: 1.6, color: 'concrete' },
       // Kicker: small quarter for airs before the south transition.
       { type: 'quarter', x: -37, z: 10, ry: 180, w: 6, R: 1.8, H: 0.9, color: 'wood' },
-      // South roll-in: smaller, for pumping back the other way.
-      { type: 'rollin', x: 0, z: -44, ry: 180, w: 40, R: 2.4, H: 1.6, deck: 15.7373, color: 'wood' },
+      // South roll-in: smaller, for pumping back the other way. Sized so its
+      // platform ends at z ≈ -58, mirroring the north roll-in's reach.
+      { type: 'rollin', x: 0, z: -44, ry: 180, w: 40, R: 2.4, H: 1.6, deck: 11.82, color: 'wood' },
       // Funbox: bank up, flat rail and ledge edges across the top, bank down.
       { type: 'bank', x: 0, z: -13, ry: 0, w: 12.8, len: 6, h: 0.65, color: 'wood' },
       { type: 'slab', x: 0, z: -7, ry: 0, w: 12.8, d: 6, h: 0.65, color: 'concrete' },
