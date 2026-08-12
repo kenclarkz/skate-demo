@@ -2410,24 +2410,20 @@ section('Board shop and coins');
     return { boards: g.save.boards, boardId: g.save.boardId, coins: g.save.coins };
   });
   ok(
-    initial.boards.length === 1 && initial.boards[0] === 'maple',
+    initial.boards.length === 1 && initial.boards[0] === 'street',
     `a fresh save owns only the starter board (${initial.boards.join(', ')})`
   );
-  ok(initial.boardId === 'maple', 'and has it equipped');
+  ok(initial.boardId === 'street', 'and has it equipped');
   ok(initial.coins === 0, 'with no coins yet');
 
-  const catalogue = await run(() => window.__skate.boards.map((b) => ({ id: b.id, type: b.type, price: b.price })));
-  ok(catalogue.length === 9, `the shop stocks nine boards (${catalogue.length})`);
+  const catalogue = await run(() => window.__skate.boards.map((b) => ({ id: b.id, price: b.price })));
+  ok(catalogue.length === 7, `the shop stocks seven boards (${catalogue.length})`);
   ok(catalogue[0].price === 0, 'the starter board is free');
   ok(catalogue.slice(1).every((b) => b.price > 0), 'and every other one costs coins');
   const types = await run(() => window.__skate.boardTypes.map((t) => t.id));
-  ok(types.length === 4, `across four real board types (${types.join(', ')})`);
-  ok(
-    catalogue.every((b) => types.includes(b.type)),
-    'and every board in the shop is one of them'
-  );
+  ok(types.length === 7, `one catalogue entry per real board type (${types.join(', ')})`);
 
-  const denied = await run(() => window.__skate.selectBoard('cruiser-chrome')); // 300 coins, none yet
+  const denied = await run(() => window.__skate.selectBoard('cruiser')); // 300 coins, none yet
   ok(denied === false, 'buying a board with no coins is refused');
 
   const bought = await run(() => {
@@ -2435,7 +2431,7 @@ section('Board shop and coins');
     g.save.addCoins(500);
     const deckBefore = g.board.palette.deck;
     const lenBefore = g.board.shape.deckLen;
-    const bought1 = g.selectBoard('cruiser-chrome');
+    const bought1 = g.selectBoard('cruiser');
     return {
       bought1,
       paletteChanged: g.board.palette.deck !== deckBefore,
@@ -2448,9 +2444,9 @@ section('Board shop and coins');
   ok(bought.bought1, 'buying it with enough coins succeeds');
   ok(bought.paletteChanged, "and the board's own palette actually changes");
   ok(bought.coins === 200, `and the price is deducted (500 → ${bought.coins})`);
-  ok(bought.boardId === 'cruiser-chrome', 'the bought board is equipped immediately');
+  ok(bought.boardId === 'cruiser', 'the bought board is equipped immediately');
   ok(
-    bought.owned.includes('cruiser-chrome') && bought.owned.includes('maple'),
+    bought.owned.includes('cruiser') && bought.owned.includes('street'),
     'and it joins the owned list without losing the starter'
   );
 
@@ -2460,7 +2456,7 @@ section('Board shop and coins');
     const g = window.__skate;
     g.save.addCoins(500);
     const lenBefore = g.board.shape.deckLen;
-    g.selectBoard('longboard-ocean');
+    g.selectBoard('longboard');
     const lenAfter = g.board.shape.deckLen;
     return { lenBefore, lenAfter };
   });
@@ -2468,22 +2464,22 @@ section('Board shop and coins');
     shapeSwap.lenAfter > shapeSwap.lenBefore + 0.1,
     `switching to a longboard actually lengthens the deck (${shapeSwap.lenBefore.toFixed(2)} → ${shapeSwap.lenAfter.toFixed(2)} m)`
   );
-  const backToMaple = await run(() => {
+  const backToStreet = await run(() => {
     const g = window.__skate;
-    g.selectBoard('maple');
+    g.selectBoard('street');
     return g.board.shape.deckLen;
   });
-  ok(backToMaple < shapeSwap.lenAfter, 'and back to the shortboard shortens it again');
+  ok(backToStreet < shapeSwap.lenAfter, 'and back to the shortboard shortens it again');
 
   const reequip = await run(() => {
     const g = window.__skate;
     const before = g.save.coins;
-    const reequipped = g.selectBoard('maple'); // already owned — no charge
+    const reequipped = g.selectBoard('street'); // already owned — no charge
     return { reequipped, coins: g.save.coins, before, boardId: g.save.boardId };
   });
   ok(reequip.reequipped, 'switching back to an owned skin succeeds');
   ok(reequip.coins === reequip.before, 'without spending anything');
-  ok(reequip.boardId === 'maple', 'and it is equipped');
+  ok(reequip.boardId === 'street', 'and it is equipped');
 
   // Coins from actually playing: a landed trick pays, and a banked combo pays
   // a bonus on top of what its tricks already paid — through handleEvents(),
@@ -2524,22 +2520,22 @@ section('Outfit shop and the wind glow');
   ok(initial.outfitId === 'street', 'and has it equipped');
 
   const catalogue = await run(() => window.__skate.outfits.map((o) => ({ id: o.id, price: o.price })));
-  ok(catalogue.length === 7, `the shop stocks seven shirts (${catalogue.length})`);
+  ok(catalogue.length === 6, `the shop stocks six shirts (${catalogue.length})`);
   ok(catalogue[0].price === 0, 'the starter shirt is free');
   ok(catalogue.slice(1).every((o) => o.price > 0), 'and every other one costs coins');
 
-  const denied = await run(() => window.__skate.selectOutfit('neon')); // 300 coins, none yet
+  const denied = await run(() => window.__skate.selectOutfit('violet')); // 200 coins, none yet
   ok(denied === false, 'buying a shirt with no coins is refused');
 
   const bought = await run(() => {
     const g = window.__skate;
     g.save.addCoins(500);
     const shirtBefore = g.skater.palette.shirt;
-    const bought1 = g.selectOutfit('neon');
+    const bought1 = g.selectOutfit('violet');
     return {
       bought1,
       changed: g.skater.palette.shirt !== shirtBefore,
-      glowColorMatches: g.skater.glowMat.color.getHex() === g.outfits.find((o) => o.id === 'neon').shirt.shirt,
+      glowColorMatches: g.skater.glowMat.color.getHex() === g.outfits.find((o) => o.id === 'violet').shirt.shirt,
       coins: g.save.coins,
       outfitId: g.save.outfitId,
       owned: g.save.outfits,
@@ -2548,10 +2544,10 @@ section('Outfit shop and the wind glow');
   ok(bought.bought1, 'buying it with enough coins succeeds');
   ok(bought.changed, "and the rider's own shirt colour actually changes");
   ok(bought.glowColorMatches, 'and the wind glow re-tints to match the new shirt, not the old one');
-  ok(bought.coins === 200, `and the price is deducted (500 → ${bought.coins})`);
-  ok(bought.outfitId === 'neon', 'the bought shirt is worn immediately');
+  ok(bought.coins === 300, `and the price is deducted (500 → ${bought.coins})`);
+  ok(bought.outfitId === 'violet', 'the bought shirt is worn immediately');
   ok(
-    bought.owned.includes('neon') && bought.owned.includes('street'),
+    bought.owned.includes('violet') && bought.owned.includes('street'),
     'and it joins the owned list without losing the starter'
   );
 
@@ -2633,7 +2629,7 @@ section('Accessory shop');
   const catalogue = await run(() =>
     window.__skate.accessories.map((a) => ({ id: a.id, price: a.price }))
   );
-  ok(catalogue.length === 7, `the shop stocks seven accessories (${catalogue.length})`);
+  ok(catalogue.length === 16, `the shop stocks sixteen accessories (${catalogue.length})`);
   ok(catalogue[0].price === 0, 'the starter accessory is free');
   ok(catalogue.slice(1).every((a) => a.price > 0), 'and every other one costs coins');
 
@@ -2734,12 +2730,126 @@ section('Accessory shop');
     };
   });
   ok(screen.demoHead === 'bucket' && screen.demoCap === 0x8a9a5c, "and the tutorial's demo rider changes to match");
-  ok(screen.cards === 7, 'with a card per accessory');
+  ok(screen.cards === 16, 'with a card per accessory');
   ok(screen.current === 1 && screen.currentId === 'bucket', 'and exactly one marked as the one being worn');
   ok(
-    screen.painted.length === 7 && screen.painted.every((n) => n > 400),
+    screen.painted.length === 16 && screen.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
   );
+
+  // Leave the game the way the rest of the suite expects to find it.
+  await run(() => {
+    const g = window.__skate;
+    g.hud.on.reset();
+    if (g.state === 'walking') {
+      g.walker.pos.set(g.board.group.position.x, g.walker.pos.y, g.board.group.position.z);
+      g.mount();
+    }
+    g.respawn();
+  });
+}
+
+// --------------------------------------------------------------------------
+section('Pants shop and the trouser rack');
+{
+  const initial = await run(() => {
+    const g = window.__skate;
+    g.hud.on.reset();
+    return { pants: g.save.pants, pantsId: g.save.pantsId };
+  });
+  ok(
+    initial.pants.length === 1 && initial.pants[0] === 'jeans',
+    `a fresh save owns only the starter pair (${initial.pants.join(', ')})`
+  );
+  ok(initial.pantsId === 'jeans', 'and has it equipped');
+
+  const catalogue = await run(() =>
+    window.__skate.pants.map((p) => ({ id: p.id, price: p.price }))
+  );
+  ok(catalogue.length === 5, `the trouser rack stocks five pairs (${catalogue.length})`);
+  ok(catalogue[0].price === 0, 'the starter pair is free');
+  ok(catalogue.slice(1).every((p) => p.price > 0), 'and every other one costs coins');
+
+  const denied = await run(() => window.__skate.selectPants('cargo')); // 150 coins, none yet
+  ok(denied === false, 'buying a pair with no coins is refused');
+
+  const bought = await run(() => {
+    const g = window.__skate;
+    g.save.addCoins(500);
+    const legsBefore = g.skater.palette.pants;
+    const shinsBefore = g.skater.palette.pantsDark;
+    const ok1 = g.selectPants('cargo');
+    return {
+      ok1,
+      legsChanged: g.skater.palette.pants !== legsBefore,
+      shinsChanged: g.skater.palette.pantsDark !== shinsBefore,
+      legs: g.skater.palette.pants,
+      shins: g.skater.palette.pantsDark,
+      coins: g.save.coins,
+      pantsId: g.save.pantsId,
+      owned: g.save.pants,
+    };
+  });
+  ok(bought.ok1, 'buying it with enough coins succeeds');
+  ok(bought.legsChanged && bought.legs === 0x6a7a5c, "and the rider's legs actually change colour");
+  ok(bought.shinsChanged && bought.shins === 0x525f44, 'and the shins take the darker half of the pair');
+  ok(bought.coins === 350, `and the price is deducted (500 → ${bought.coins})`);
+  ok(bought.pantsId === 'cargo', 'the bought pair is worn immediately');
+  ok(
+    bought.owned.includes('cargo') && bought.owned.includes('jeans'),
+    'and it joins the owned list without losing the starter'
+  );
+
+  // The colour wheel under the rack recolours the pair on the rider and on the
+  // rack, remembers it in the save, and Reset hands the pair's own colours
+  // back. The wheel passes a '#rrggbb' string, as the painted canvas hands it
+  // over — not a number — and the shop has to cope with that.
+  const repainted = await run(() => {
+    const g = window.__skate;
+    g.hud.on.repaint('pants', 'cargo', 'pants', '#ff0000');
+    const a = {
+      legs: g.skater.palette.pants,
+      shins: g.skater.palette.pantsDark,
+      saved: g.save.pantsColors.cargo,
+    };
+    g.hud.on.repaintReset('pants', 'cargo');
+    const b = {
+      legs: g.skater.palette.pants,
+      saved: g.save.pantsColors.cargo,
+    };
+    return { a, b };
+  });
+  ok(
+    repainted.a.legs === 0xff0000 && repainted.a.saved.pants === 0xff0000,
+    'the wheel recolours the worn pair and remembers it'
+  );
+  ok(repainted.a.shins === 0x525f44, 'and leaves the other half of the pair alone');
+  ok(repainted.b.legs === 0x6a7a5c && repainted.b.saved === undefined, 'and Reset hands the default pair back');
+
+  const screen = await run(() => {
+    const g = window.__skate;
+    g.showStore();
+    const grid = document.getElementById('pants-grid');
+    const cards = [...grid.querySelectorAll('[data-pants]')];
+    const panel = document.getElementById('repaint-pants');
+    const wheel = panel.querySelector('[data-repaintwheel]');
+    const ctx = wheel.getContext('2d');
+    const d = ctx.getImageData(0, 0, wheel.width, wheel.height).data;
+    let painted = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) painted++;
+    return {
+      cards: cards.length,
+      current: grid.querySelectorAll('.board-card.current').length,
+      currentId: grid.querySelector('.board-card.current')?.dataset.pants,
+      panelVisible: !panel.hidden,
+      panelId: panel.dataset.repaintid,
+      wheelPainted: painted,
+    };
+  });
+  ok(screen.cards === 5, 'with a card per pair in the store');
+  ok(screen.current === 1 && screen.currentId === 'cargo', 'and exactly one marked as the pair being worn');
+  ok(screen.panelVisible && screen.panelId === 'cargo', 'with the colour wheel open on the worn pair');
+  ok(screen.wheelPainted > 400, `and the wheel is actually painted (${screen.wheelPainted} px)`);
 
   // Leave the game the way the rest of the suite expects to find it.
   await run(() => {

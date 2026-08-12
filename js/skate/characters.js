@@ -167,31 +167,41 @@ export const DEFAULT_CHARACTER_ID = CHARACTERS[0].id;
 
 /**
  * The palette the rig is actually built from: the character, with the equipped
- * shirt painted over the top, then whatever the bought accessory re-colours.
- * An outfit with no `shirt` of its own ("Original") leaves the character in
- * their own clothes, which is the only way eight riders with eight different
- * kits can share one shirt rack without all ending up in the same off-white
- * tee. Likewise an accessory with no `hat`/`shades` ("Original") changes
- * nothing at all.
+ * shirt and pants painted over the top, then whatever the bought accessory
+ * re-colours. An outfit with no `shirt` of its own ("Original") leaves the
+ * character in their own clothes, which is the only way eight riders with
+ * eight different kits can share one shirt rack without all ending up in the
+ * same off-white tee. Likewise an accessory with no `hat`/`shades`/`pack`
+ * ("Original") changes nothing at all.
+ *
+ * `colors` carries the shop's per-item repaints — { accessory, outfit, pants }
+ * maps keyed by the equipped item's id — so a bought hat, shirt or pair of
+ * pants can be repainted from its own colour keys. Repaints only ever add to
+ * the item's own colours; nothing else is touched.
  */
-export function lookOf(character, outfit, accessory) {
+export function lookOf(character, outfit, accessory, pants, colors = {}) {
+  const repaint = (map, id) => (map && id ? map[id] : null);
   let p = { ...character.palette };
-  if (outfit?.shirt) p = { ...p, ...outfit.shirt };
-  if (accessory?.hat) p = { ...p, cap: accessory.hat.cap, band: accessory.hat.band };
-  if (accessory?.shades) p = { ...p, shades: accessory.shades.frame, lens: accessory.shades.lens };
+  if (outfit?.shirt) p = { ...p, ...outfit.shirt, ...repaint(colors.outfit, outfit.id) };
+  if (accessory?.hat) p = { ...p, cap: accessory.hat.cap, band: accessory.hat.band, ...repaint(colors.accessory, accessory.id) };
+  if (accessory?.shades) p = { ...p, shades: accessory.shades.frame, lens: accessory.shades.lens, ...repaint(colors.accessory, accessory.id) };
+  if (accessory?.pack) p = { ...p, pack: accessory.pack.pack, strap: accessory.pack.strap, ...repaint(colors.accessory, accessory.id) };
+  if (pants?.colors) p = { ...p, ...pants.colors, ...repaint(colors.pants, pants.id) };
   return p;
 }
 
 /**
  * The style the rig is built from: the character's own headwear and sleeves,
- * with an equipped hat swapping the headwear for its own and an equipped pair
- * of shades flagging the face piece headParts() adds. `style` is what tells
- * the geometry builder which head to draw; `lookOf` supplies its colours.
+ * with an equipped hat swapping the headwear for its own, an equipped pair of
+ * shades flagging the face piece headParts() adds, and an equipped backpack
+ * flagging the pack geometry skater.js builds. `style` is what tells the
+ * geometry builder which head to draw; `lookOf` supplies its colours.
  */
 export function styleOf(character, accessory) {
   return {
     ...character.style,
     head: accessory?.hat ? accessory.hat.style : character.style.head,
     shades: !!accessory?.shades,
+    pack: !!accessory?.pack,
   };
 }

@@ -19,9 +19,10 @@ import { GestureTrail } from './trail.js';
 import { Hud } from './hud.js';
 import { Audio } from './audio.js';
 import { save } from './save.js';
-import { BOARDS, TYPES as BOARD_TYPES, byId as boardById, typeById as boardTypeById } from './boards.js';
+import { TYPES as BOARD_TYPES, byId as boardById, typeById as boardTypeById } from './boards.js';
 import { OUTFITS, byId as outfitById } from './outfits.js';
 import { ACCESSORIES, byId as accessoryById } from './accessories.js';
+import { PANTS, byId as pantsById } from './pants.js';
 import { CHARACTERS, byId as charById, lookOf, styleOf } from './characters.js';
 import { customLook, heightById, buildById } from './custom.js';
 import { designPalette, sanitizeText } from './board-design.js';
@@ -108,7 +109,7 @@ function boardSetup() {
     if (draft) return { palette: designPalette(draft), shape: boardTypeById[draft.type]?.shape, design: draft };
   }
   const def = boardById[id];
-  return { palette: def?.palette, shape: boardTypeById[def?.type]?.shape, design: null };
+  return { palette: def?.palette, shape: def?.shape, design: null };
 }
 
 /** Rebuild the in-game board to match whatever save.boardId now points at. */
@@ -137,9 +138,14 @@ function currentLook() {
   const character = charById[save.characterId] ?? CHARACTERS[0];
   const outfit = outfitById[save.outfitId];
   const accessory = accessoryById[save.accessoryId];
+  const pants = pantsById[save.pantsId];
   return {
     character,
-    palette: lookOf(character, outfit, accessory),
+    palette: lookOf(character, outfit, accessory, pants, {
+      accessory: save.accessoryColors,
+      outfit: save.outfitColors,
+      pants: save.pantsColors,
+    }),
     style: styleOf(character, accessory),
     scale: { height: 1, width: 1 },
   };
@@ -409,8 +415,9 @@ function showStore() {
   input.enabled = false;
   const look = currentLook();
   hud.renderCharacters(CHARACTERS, save.characterId);
-  hud.renderBoards(BOARD_TYPES, BOARDS, save);
+  hud.renderBoards(BOARD_TYPES, BOARD_TYPES, save);
   hud.renderOutfits(OUTFITS, save, look.character.palette);
+  hud.renderPants(PANTS, save);
   hud.renderAccessories(ACCESSORIES, save, look);
   hud.show('store');
 }
@@ -795,8 +802,44 @@ hud.on.bmSavedAction = (id, action) => boardSavedAction(id, action);
 hud.on.pause = () => togglePause();
 hud.on.board = (id) => selectBoard(id);
 hud.on.outfit = (id) => selectOutfit(id);
+hud.on.pants = (id) => selectPants(id);
 hud.on.accessory = (id) => selectAccessory(id);
 hud.on.character = (id) => selectCharacter(id);
+
+// The shop's repaint wheels. `repaint` fires as a wheel drags or its slider
+// moves — repaint the save and rebuild the rig live, so the rider on screen
+// (and the tutorial's demo rider) change as you pick. `repaintCommit` fires
+// when the gesture lets go and re-renders the whole store, which is the one
+// point it is worth drawing every portrait again. `repaintReset` throws the
+// repaint away the same way, and always re-renders.
+const repaintSetter = (kind) =>
+  kind === 'outfit' ? save.setOutfitColor : kind === 'pants' ? save.setPantsColor : save.setAccessoryColor;
+const repaintResetter = (kind) =>
+  kind === 'outfit' ? save.resetOutfitColors : kind === 'pants' ? save.resetPantsColors : save.resetAccessoryColors;
+hud.on.repaint = (kind, id, key, hex) => {
+  // The wheel hands over a '#rrggbb' string; the save layer stores numbers.
+  const n = typeof hex === 'number' ? hex : parseInt(String(hex).replace('#', ''), 16);
+  if (!Number.isInteger(n)) return;
+  if (!repaintSetter(kind).call(save, id, key, n)) return;
+  const look = currentLook();
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
+};
+hud.on.repaintCommit = () => {
+  const look = currentLook();
+  hud.renderOutfits(OUTFITS, save, look.character.palette);
+  hud.renderPants(PANTS, save);
+  hud.renderAccessories(ACCESSORIES, save, look);
+};
+hud.on.repaintReset = (kind, id) => {
+  if (!repaintResetter(kind).call(save, id)) return;
+  const look = currentLook();
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
+  hud.renderOutfits(OUTFITS, save, look.character.palette);
+  hud.renderPants(PANTS, save);
+  hud.renderAccessories(ACCESSORIES, save, look);
+};
 hud.on.dismount = () => dismount();
 hud.on.mount = () => mount();
 hud.on.sit = () => walker.toggleSit();
@@ -820,8 +863,8 @@ function selectBoard(id) {
   if (!def) return false;
   if (!save.boards.includes(id) && !save.buyBoard(id)) return false; // can't afford it
   save.setBoard(id);
-  board.build(def.palette, boardTypeById[def.type].shape);
-  hud.renderBoards(BOARD_TYPES, BOARDS, save);
+  board.build(def.palette, def.shape);
+  hud.renderBoards(BOARD_TYPES, BOARD_TYPES, save);
   return true;
 }
 
@@ -875,6 +918,23 @@ function selectAccessory(id) {
   const look = currentLook();
   skater.rebuild(look.palette, look.style, look.scale);
   hud.setPreviewLook(look.palette, look.style, look.scale);
+  hud.renderAccessories(ACCESSORIES, save, look);
+  return true;
+}
+
+/** Buy the pants if they are not owned yet, then wear them either way. */
+function selectPants(id) {
+  const def = pantsById[id];
+  if (!def) return false;
+  if (!save.pants.includes(id) && !save.buyPants(id)) return false; // can't afford it
+  save.setPants(id);
+  const look = currentLook();
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
+  hud.renderPants(PANTS, save);
+  // The rider is drawn wearing the pants, so the accessory portraits and the
+  // outfit rack both get repainted along with the pants rack itself.
+  hud.renderOutfits(OUTFITS, save, look.character.palette);
   hud.renderAccessories(ACCESSORIES, save, look);
   return true;
 }
@@ -1450,9 +1510,10 @@ window.__skate = {
   birds,
   ride,
   board,
-  boards: BOARDS,
+  boards: BOARD_TYPES,
   boardTypes: BOARD_TYPES,
   outfits: OUTFITS,
+  pants: PANTS,
   accessories: ACCESSORIES,
   characters: CHARACTERS,
   grabs: GRABS,
@@ -1481,6 +1542,7 @@ window.__skate = {
   respawn,
   selectBoard,
   selectOutfit,
+  selectPants,
   selectAccessory,
   selectCharacter,
   showStore,

@@ -1861,6 +1861,87 @@ button:disabled.primary {
   mask-image: radial-gradient(circle at 50% 0%, transparent 7px, #000 7.5px);
 }
 
+/* The trouser rack: the same bar as the shirts but with a seam, so the two
+   racks read as the same language without being mistaken for each other. The
+   two tones arrive via inline background + inset ring from renderPants(). */
+.board-swatch--pants {
+  height: 34px;
+  border-radius: 8px;
+  border: 2px dashed transparent;
+  background-clip: padding-box;
+}
+
+/* The repaint wheels under each shop rack: a row of part buttons (each with
+   its colour chip) over the wheel. Reuses the designer's .dg-color/.dg-wheel
+   so a repaint feels like the same colour picker the Park Designer has. */
+.repaint {
+  margin: 12px 0 20px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.repaint-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.repaint-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.repaint-part.on {
+  border-color: var(--hot);
+  color: var(--hot);
+}
+
+.repaint-chip {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--chip, #888);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.repaint .dg-wheel {
+  width: 120px;
+  height: 120px;
+}
+
+.repaint .dg-brightness {
+  width: 120px;
+}
+
+.repaint-reset {
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.repaint-reset:hover {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
 .board-card b {
   font-size: 14px;
   font-weight: 700;

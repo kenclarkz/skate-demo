@@ -43,6 +43,10 @@ export const PALETTE = {
   // colour, used by headParts() the same way `cap`/`band` drive the hats.
   shades: 0x141416,
   lens: 0x0f1420,
+  // A bought backpack (accessories.js): the shell and the shoulder straps,
+  // used by buildGeometries() when the equipped accessory is a pack.
+  pack: 0x9a8a5f,
+  strap: 0x6a5a3c,
 };
 
 // --- scratch --------------------------------------------------------------
@@ -256,6 +260,13 @@ function headParts(p, style) {
     parts.push(box(p.cap, 0.19, 0.085, 0.2, 0, 0.115, 0));
     parts.push(box(p.cap, 0.17, 0.06, 0.18, 0, 0.08, 0));
     parts.push(box(p.cap, 0.25, 0.022, 0.26, 0, 0.135, 0));   // the wide brim
+  } else if (s === 'straw') {
+    // A straw sun hat: a low crown and a wide, flat brim that reads clearly
+    // from the chase camera, with a band where the two meet.
+    parts.push(box(p.hair, 0.168, 0.045, 0.188, 0, 0.055, -0.01));
+    parts.push(box(p.cap, 0.17, 0.09, 0.19, 0, 0.11, 0));
+    parts.push(box(p.band, 0.175, 0.035, 0.195, 0, 0.075, 0));
+    parts.push(box(p.cap, 0.3, 0.02, 0.32, 0, 0.16, 0));      // the wide flat brim
   } else if (s === 'flatcap') {
     // A flat cap: a low crown that sits forward over the brow, a little panel
     // at the back, and a stubby peak. Rounder and shallower than the 'cap'
@@ -344,6 +355,21 @@ function buildGeometries(p, style = {}, scale = { height: 1, width: 1 }) {
     // origin rather than centred on it, so rotating this mesh hinges it from
     // where it actually meets the waist instead of swinging through it.
     hem: merge([box(p.shirt, 0.28 * w, 0.16 * h, 0.03, 0, -0.08 * h, 0)], 4),
+    // A bought backpack (accessories.js): the shell rides the back, with a
+    // top flap, and two straps cross the shoulders. Built in chest-local
+    // space — the mesh is parented to the chest, so it leans and turns with
+    // the torso. `style.pack` false leaves this null and no mesh is made.
+    pack: style.pack
+      ? merge(
+          [
+            box(p.pack, 0.26 * w, 0.3 * h, 0.1, 0, -0.02 * h, -0.155),
+            box(p.pack, 0.25 * w, 0.16 * h, 0.095, 0, 0.11 * h, -0.155), // the top flap
+            box(p.strap, 0.055 * w, 0.028 * h, 0.34, 0.085 * w, 0.08 * h, -0.01),
+            box(p.strap, 0.055 * w, 0.028 * h, 0.34, -0.085 * w, 0.08 * h, -0.01),
+          ],
+          6
+        )
+      : null,
   };
 }
 
@@ -390,6 +416,14 @@ export class Skater {
     // so every rider gets it for the cost of one more mesh, not a whole new
     // shader switch the way the glow's unique-per-skater material would be.
     this.hem = mk(this.geos.hem);
+
+    // A bought backpack rides the chest, parented to it so it leans and turns
+    // with the torso instead of being solved separately every frame.
+    this.pack = null;
+    if (this.geos.pack) {
+      this.pack = mk(this.geos.pack);
+      this.chest.add(this.pack);
+    }
 
     // The shirt's own glow: a slightly oversized, unlit shell around the
     // chest, additive so it brightens rather than repaints, and invisible
@@ -756,6 +790,15 @@ export class Skater {
     this.chest.geometry = fresh.chest;
     this.head.geometry = fresh.head;
     this.hem.geometry = fresh.hem;
+    if (fresh.pack && !this.pack) {
+      this.pack = new THREE.Mesh(fresh.pack, this.material);
+      this.chest.add(this.pack);
+    } else if (!fresh.pack && this.pack) {
+      this.chest.remove(this.pack);
+      this.pack = null;
+    } else if (this.pack) {
+      this.pack.geometry = fresh.pack;
+    }
     for (const leg of this.legs) {
       leg.thigh.geometry = fresh.thigh;
       leg.shin.geometry = fresh.shin;
@@ -766,7 +809,7 @@ export class Skater {
       arm.fore.geometry = fresh.forearm;
       arm.hand.geometry = fresh.hand;
     }
-    for (const key of Object.keys(old)) old[key].dispose();
+    for (const key of Object.keys(old)) if (old[key]) old[key].dispose();
     this.geos = fresh;
     if (this.hasGlow) {
       this.glowGeo.dispose();

@@ -6,8 +6,9 @@
 // wrapped. Losing a high score is bad; crashing the game over one is worse.
 
 import { byId, DEFAULT_BOARD_ID } from './boards.js';
-import { byId as outfitById, DEFAULT_OUTFIT_ID } from './outfits.js';
-import { byId as accessoryById, DEFAULT_ACCESSORY_ID } from './accessories.js';
+import { byId as outfitById, DEFAULT_OUTFIT_ID, colorKeys as outfitColorKeys } from './outfits.js';
+import { byId as accessoryById, DEFAULT_ACCESSORY_ID, colorKeys as accessoryColorKeys } from './accessories.js';
+import { byId as pantsCatalogById, DEFAULT_PANTS_ID, colorKeys as pantsColorKeys } from './pants.js';
 import { byId as charById, DEFAULT_CHARACTER_ID } from './characters.js';
 import { DEFAULT_CUSTOM, skinById, heightById, buildById, pantsById, shoeById, hairById, shirtById, hatById, shadeById, PART_BY_ID } from './custom.js';
 import {
@@ -35,6 +36,15 @@ const DEFAULTS = {
   boardId: DEFAULT_BOARD_ID,
   outfitId: DEFAULT_OUTFIT_ID,
   accessoryId: DEFAULT_ACCESSORY_ID,
+  pantsId: DEFAULT_PANTS_ID,
+  // Per-item repaints for the shop's colour wheels. Each map is keyed by the
+  // bought item's id and holds a partial override of that item's own colour
+  // keys — a hat holds cap/band, a shirt holds shirt/sleeve, pants hold
+  // pants/pantsDark — so an owner can repaint a thing they bought without
+  // touching any other item's colours.
+  accessoryColors: {},
+  outfitColors: {},
+  pantsColors: {},
   // Characters are picked, not bought — there is no `characters` owned-list to
   // go with this the way boards and outfits have one.
   characterId: DEFAULT_CHARACTER_ID,
@@ -73,8 +83,10 @@ const DEFAULTS = {
 const freshBoards = () => [DEFAULT_BOARD_ID];
 const freshOutfits = () => [DEFAULT_OUTFIT_ID];
 const freshAccessories = () => [DEFAULT_ACCESSORY_ID];
+const freshPants = () => [DEFAULT_PANTS_ID];
 const freshCustom = () => ({ ...DEFAULT_CUSTOM });
 const freshCustomBoards = () => [];
+const freshColorMap = () => ({});
 const freshBoardDraft = () => ({
   ...DEFAULT_BOARD_DRAFT,
   colors: { ...DEFAULT_BOARD_DRAFT.colors },
@@ -84,6 +96,33 @@ const freshBoardDraft = () => ({
 });
 /** The palette keys a board draft carries; every one is a hex number. */
 const PALETTE_KEYS = ['deck', 'grip', 'accent', 'ply', 'truck', 'wheel', 'bearing', 'bolt'];
+
+/**
+ * A per-item colour-customisation map, cleaned: only ids the player owns, only
+ * colour keys the item actually paints, only integer hexes. `keysFor` answers
+ * which keys an id owns, so the same pass works for accessories, outfits and
+ * pants without each catalogue hand-writing its own loop.
+ */
+function cleanColorMap(raw, ownedIds, keysFor) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [id, colors] of Object.entries(raw)) {
+    if (!ownedIds.includes(id) || !colors || typeof colors !== 'object') continue;
+    const keys = keysFor(id);
+    if (!keys || !keys.length) continue;
+    const row = {};
+    for (const k of keys) {
+      const v = Number(colors[k]);
+      if (Number.isInteger(v)) row[k] = (v >>> 0) & 0xffffff;
+    }
+    if (Object.keys(row).length) out[id] = row;
+  }
+  return out;
+}
+
+const outfitKeysFor = (id) => outfitColorKeys(outfitById[id]);
+const pantsKeysFor = (id) => pantsColorKeys(pantsCatalogById[id]);
+const accKeysFor = (id) => accessoryColorKeys(accessoryById[id]);
 
 const clampNum = (v, lo, hi) => {
   const n = Number(v);
@@ -216,10 +255,14 @@ function read() {
         boards: freshBoards(),
         outfits: freshOutfits(),
         accessories: freshAccessories(),
+        pants: freshPants(),
         custom: freshCustom(),
         owned: freshOwned(),
         customBoards: freshCustomBoards(),
         boardDraft: freshBoardDraft(),
+        accessoryColors: freshColorMap(),
+        outfitColors: freshColorMap(),
+        pantsColors: freshColorMap(),
       };
     const parsed = JSON.parse(raw);
     const s = {
@@ -227,10 +270,14 @@ function read() {
       boards: freshBoards(),
       outfits: freshOutfits(),
       accessories: freshAccessories(),
+      pants: freshPants(),
       custom: freshCustom(),
       owned: freshOwned(),
       customBoards: freshCustomBoards(),
       boardDraft: freshBoardDraft(),
+      accessoryColors: freshColorMap(),
+      outfitColors: freshColorMap(),
+      pantsColors: freshColorMap(),
       ...parsed,
     };
     // A hand-edited or half-written record must not be able to break the game.
@@ -298,6 +345,14 @@ function read() {
         ? s.accessoryId
         : DEFAULT_ACCESSORY_ID;
     s.characterId = typeof s.characterId === 'string' && charById[s.characterId] ? s.characterId : DEFAULT_CHARACTER_ID;
+    // Pants are their own slot: owned list, equipped id, and the repaints.
+    s.pants = Array.isArray(parsed.pants)
+      ? [...new Set([DEFAULT_PANTS_ID, ...parsed.pants.filter((id) => pantsCatalogById[id])])]
+      : freshPants();
+    s.pantsId = typeof s.pantsId === 'string' && s.pants.includes(s.pantsId) ? s.pantsId : DEFAULT_PANTS_ID;
+    s.accessoryColors = cleanColorMap(parsed.accessoryColors, s.accessories, accKeysFor);
+    s.outfitColors = cleanColorMap(parsed.outfitColors, s.outfits, outfitKeysFor);
+    s.pantsColors = cleanColorMap(parsed.pantsColors, s.pants, pantsKeysFor);
     // The maker's draft is cleaned field by field, and the owned-lists only
     // hold ids the maker actually sells. 'custom' as a character choice is
     // only legitimate once the maker's Save has actually been pressed.
@@ -312,10 +367,14 @@ function read() {
       boards: freshBoards(),
       outfits: freshOutfits(),
       accessories: freshAccessories(),
+      pants: freshPants(),
       custom: freshCustom(),
       owned: freshOwned(),
       customBoards: freshCustomBoards(),
       boardDraft: freshBoardDraft(),
+      accessoryColors: freshColorMap(),
+      outfitColors: freshColorMap(),
+      pantsColors: freshColorMap(),
     };
   }
 }
@@ -369,6 +428,22 @@ export const save = {
   },
   get accessories() {
     return [...state.accessories];
+  },
+  get pantsId() {
+    return state.pantsId;
+  },
+  get pants() {
+    return [...state.pants];
+  },
+  /** The per-item repaints, as copies. */
+  get accessoryColors() {
+    return Object.fromEntries(Object.entries(state.accessoryColors).map(([id, c]) => [id, { ...c }]));
+  },
+  get outfitColors() {
+    return Object.fromEntries(Object.entries(state.outfitColors).map(([id, c]) => [id, { ...c }]));
+  },
+  get pantsColors() {
+    return Object.fromEntries(Object.entries(state.pantsColors).map(([id, c]) => [id, { ...c }]));
   },
   get characterId() {
     return state.characterId;
@@ -533,6 +608,82 @@ export const save = {
   setAccessory(id) {
     if (!accessoryById[id] || !state.accessories.includes(id)) return false;
     state.accessoryId = id;
+    flush();
+    return true;
+  },
+
+  /** @returns true if the purchase actually went through. */
+  buyPants(id) {
+    const pants = pantsCatalogById[id];
+    if (!pants || state.pants.includes(id) || state.coins < pants.price) return false;
+    state.coins -= pants.price;
+    state.pants.push(id);
+    flush();
+    return true;
+  },
+
+  /** @returns true if the pants are owned and are now equipped. */
+  setPants(id) {
+    if (!pantsCatalogById[id] || !state.pants.includes(id)) return false;
+    state.pantsId = id;
+    flush();
+    return true;
+  },
+
+  /** Repaint one colour key of a bought accessory (hat/shades/backpack). */
+  setAccessoryColor(id, key, hex) {
+    const a = accessoryById[id];
+    if (!a || !state.accessories.includes(id)) return false;
+    if (!accKeysFor(id).includes(key)) return false;
+    const n = Number(hex);
+    if (!Number.isInteger(n)) return false;
+    state.accessoryColors[id] = { ...(state.accessoryColors[id] || {}), [key]: (n >>> 0) & 0xffffff };
+    flush();
+    return true;
+  },
+
+  /** Throw away the repaint on a bought accessory, back to its own colours. */
+  resetAccessoryColors(id) {
+    if (!accessoryById[id] || !state.accessories.includes(id)) return false;
+    delete state.accessoryColors[id];
+    flush();
+    return true;
+  },
+
+  /** Repaint one colour key of a bought shirt. */
+  setOutfitColor(id, key, hex) {
+    const o = outfitById[id];
+    if (!o || !o.shirt || !state.outfits.includes(id) || !outfitKeysFor(id).includes(key)) return false;
+    const n = Number(hex);
+    if (!Number.isInteger(n)) return false;
+    state.outfitColors[id] = { ...(state.outfitColors[id] || {}), [key]: (n >>> 0) & 0xffffff };
+    flush();
+    return true;
+  },
+
+  /** Throw away the repaint on a bought shirt, back to its own colours. */
+  resetOutfitColors(id) {
+    if (!outfitById[id] || !state.outfits.includes(id)) return false;
+    delete state.outfitColors[id];
+    flush();
+    return true;
+  },
+
+  /** Repaint one colour key of a bought pair of pants. */
+  setPantsColor(id, key, hex) {
+    const p = pantsCatalogById[id];
+    if (!p || !state.pants.includes(id) || !pantsKeysFor(id).includes(key)) return false;
+    const n = Number(hex);
+    if (!Number.isInteger(n)) return false;
+    state.pantsColors[id] = { ...(state.pantsColors[id] || {}), [key]: (n >>> 0) & 0xffffff };
+    flush();
+    return true;
+  },
+
+  /** Throw away the repaint on a bought pair of pants, back to its own colours. */
+  resetPantsColors(id) {
+    if (!pantsCatalogById[id] || !state.pants.includes(id)) return false;
+    delete state.pantsColors[id];
     flush();
     return true;
   },
@@ -723,8 +874,12 @@ export const save = {
       boards: freshBoards(),
       outfits: freshOutfits(),
       accessories: freshAccessories(),
+      pants: freshPants(),
       customBoards: freshCustomBoards(),
       boardDraft: freshBoardDraft(),
+      accessoryColors: freshColorMap(),
+      outfitColors: freshColorMap(),
+      pantsColors: freshColorMap(),
     });
     flush();
   },

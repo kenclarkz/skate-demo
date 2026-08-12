@@ -1817,3 +1817,8 @@ function drawWheel(canvas, hex) {
 }
 
 export { newFile, buildDef, MAX_OBJECTS };
+
+// The colour wheel is shared with the shop's repaint wheels — the same disc,
+// the same hue/saturation math, the same brightness-on-top trick, so a colour
+// picked in the Park Designer is exactly the colour the shop would offer.
+export { drawWheel, hexToHsv, hsvToHex };
