@@ -513,7 +513,7 @@ export class LightingManager {
     // nearest LAMP_LIGHT_CAP get a real light — the rest keep their glow
     // sprite, which is still visibly "on" without adding to the per-fragment
     // light count everything in the scene pays for.
-    this.parkMaterials = [park.material, park.sceneryMaterial].filter(Boolean);
+    this.parkMaterials = [park.material, park.sceneryMaterial, park.sceneryInstanceMaterial].filter(Boolean);
     this._bulbMaterial = park.bulbMaterial || null;
     for (const g of this._lampGlows) this.scene.remove(g);
     for (const l of this._lampLights) {

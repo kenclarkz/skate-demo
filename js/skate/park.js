@@ -119,6 +119,12 @@ export const TRACK_SCALE = 2;
 export const PARK_X = 26;
 export const PARK_Z = 30;
 
+// Default edge length (metres) of a zone in the park's spatial grid. A map
+// can override it with `def.zoneSize`; the grid itself just needs to stay
+// coarse enough that a feature straddles few cells and fine enough that a
+// sample point looks up few features.
+export const ZONE_SIZE = 16;
+
 // The dirt sits a couple of centimetres below the concrete pad. Not decoration:
 // sample() resolves ties by keeping the first feature it saw, so two surfaces at
 // exactly y = 0 would leave the whole park reading as dirt.
@@ -165,6 +171,13 @@ export class Slab {
     this.x1 *= s;
     this.z0 *= s;
     this.z1 *= s;
+  }
+
+  /** The axis-aligned rectangle this feature can ever report a hit in — a
+   * conservative superset of `at()`'s coverage, so the zone grid can bucket
+   * it without ever missing a sample. */
+  bounds() {
+    return { x0: this.x0, x1: this.x1, z0: this.z0, z1: this.z1 };
   }
 }
 
@@ -221,6 +234,10 @@ export class Bank {
     const inv = 1 / Math.hypot(dy, 1);
     this.slopeN = -dy * inv;
     this.upN = inv;
+  }
+
+  bounds() {
+    return { x0: this.x0, x1: this.x1, z0: this.z0, z1: this.z1 };
   }
 }
 
@@ -296,6 +313,17 @@ export class Quarter {
       this.z0 *= s;
       this.z1 *= s;
     }
+  }
+
+  /** `at()` only covers the arc itself (a Quarter's deck is a Slab of its
+   * own, laid by the object that builds it), so bounds run the cross extent
+   * by the arc's reach along `base → base + sign·uTop`. */
+  bounds() {
+    const along0 = Math.min(this.base, this.base + this.sign * this.uTop);
+    const along1 = Math.max(this.base, this.base + this.sign * this.uTop);
+    return this.axis === 'z'
+      ? { x0: this.x0, x1: this.x1, z0: along0, z1: along1 }
+      : { x0: along0, x1: along1, z0: this.z0, z1: this.z1 };
   }
 }
 
@@ -388,6 +416,14 @@ export class Bowl {
     this.cz *= s;
     this.rim *= s;
   }
+
+  /** The elliptical footprint of pool plus rim deck: the collision radius
+   * (uTop + rim) stretched by each of the object's own horizontal scales. */
+  bounds() {
+    const r = (this.uTop + this.rim) * this.sx;
+    const rz = (this.uTop + this.rim) * this.sz;
+    return { x0: this.cx - r, x1: this.cx + r, z0: this.cz - rz, z1: this.cz + rz };
+  }
 }
 
 /** A stair set. Riding it is a bail; the handrail beside it is the point. */
@@ -432,6 +468,14 @@ export class Stairs {
     this.top *= s;
     this.run *= s;
     this.len = this.steps * this.run;
+  }
+
+  bounds() {
+    const along0 = Math.min(this.top, this.top + this.sign * this.len);
+    const along1 = Math.max(this.top, this.top + this.sign * this.len);
+    return this.axis === 'z'
+      ? { x0: this.c0, x1: this.c1, z0: along0, z1: along1 }
+      : { x0: along0, x1: along1, z0: this.c0, z1: this.c1 };
   }
 }
 
@@ -560,7 +604,15 @@ export class Park {
     this._hit = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
     this._probe = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
 
+    // The park graph (nodes/edges between skateable features) is authored
+    // alongside the layout — parkLayouts.js for the built-in maps,
+    // parkFile.js for a player's saved parks — and read off the def here, so
+    // Park itself never has to know how a graph was produced. A def without
+    // one just has no graph.
+    this.graph = def.graph || def._graph || null;
+
     this.layout();
+    this.buildZones();
     this.buildMeshes();
   }
 
@@ -599,6 +651,10 @@ export class Park {
     // size — out to TRACK_SCALE once, here, so no map's own layout ever has
     // to know the multiplier exists.
     const before = this.features.length;
+    // Everything added so far is the always-present base: the dirt and the
+    // pad. The zone grid (buildZones) keeps those out of the spatial index —
+    // a 600 m dirt slab would land in every cell — and always samples them.
+    this._baseCount = before;
     const SCALE = this.def.scale || TRACK_SCALE;
     this.def.build(this);
     if (SCALE !== 1) {
@@ -699,15 +755,161 @@ export class Park {
     out.ny = 1;
     out.nz = 0;
     out.kind = SMOOTH;
-    const fs = this.features;
-    for (let i = 0; i < fs.length; i++) {
-      if (!fs[i].at(x, z, hit)) continue;
+    // The base list (dirt, the pad, and any feature too large to bucket)
+    // is always sampled first, so it wins height ties exactly as it did when
+    // every feature lived in one array in add-order.
+    const base = this._base;
+    for (let i = 0; i < base.length; i++) {
+      const f = base[i];
+      if (!f.at(x, z, hit)) continue;
       if (hit.y <= out.y) continue;
       out.y = hit.y;
       out.nx = hit.nx;
       out.ny = hit.ny;
       out.nz = hit.nz;
       out.kind = hit.kind;
+    }
+    // Then just the features bucketed into the zone under (x, z). Each feature
+    // sits in every cell its footprint overlaps, so a single cell lookup sees
+    // every feature that could possibly report a hit here — no neighbour walk.
+    const zones = this.zones;
+    if (zones.cols > 0) {
+      const c = Math.floor((x - zones.minX) / zones.size);
+      const r = Math.floor((z - zones.minZ) / zones.size);
+      if (c >= 0 && c < zones.cols && r >= 0 && r < zones.rows) {
+        const cell = zones.cells[r * zones.cols + c];
+        for (let i = 0; i < cell.length; i++) {
+          const f = cell[i];
+          if (!f.at(x, z, hit)) continue;
+          if (hit.y <= out.y) continue;
+          out.y = hit.y;
+          out.nx = hit.nx;
+          out.ny = hit.ny;
+          out.nz = hit.nz;
+          out.kind = hit.kind;
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Bucket the park's obstacles into a uniform zone grid over the pad. The
+   * height field then only samples the base surfaces plus the handful of
+   * features in one zone, instead of every feature in the park — the first
+   * step towards streaming a much larger map, where the per-query cost has to
+   * stop growing with the park's size.
+   *
+   * The grid is public (this.zones) so a future streaming layer can cull or
+   * stream whole areas: cols/rows/minX/minZ/size describe the layout, and
+   * zoneBounds()/zonesOverlapping() translate between world rectangles and the
+   * cells that cover them.
+   */
+  buildZones() {
+    const size = this.def.zoneSize || ZONE_SIZE;
+    // A feature too wide for the grid just stays in the always-sampled base
+    // list — bucketing a 600 m slab into 40,000 cells buys nothing.
+    const huge = size * 3;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (let i = this._baseCount; i < this.features.length; i++) {
+      const f = this.features[i];
+      if (typeof f.bounds !== 'function') continue;
+      const b = f.bounds();
+      x0 = Math.min(x0, b.x0);
+      x1 = Math.max(x1, b.x1);
+      z0 = Math.min(z0, b.z0);
+      z1 = Math.max(z1, b.z1);
+    }
+    const base = [];
+    for (let i = 0; i < this.features.length; i++) {
+      if (i < this._baseCount) {
+        base.push(this.features[i]);
+        continue;
+      }
+      const f = this.features[i];
+      if (typeof f.bounds !== 'function') {
+        base.push(f);
+        continue;
+      }
+      const b = f.bounds();
+      if (!Number.isFinite(b.x0) || b.x1 - b.x0 > huge || b.z1 - b.z0 > huge) {
+        base.push(f);
+      }
+    }
+    // Nothing but the base surfaces (a park with no obstacles at all).
+    if (x0 === Infinity) {
+      this.zones = { size, cols: 0, rows: 0, minX: 0, minZ: 0, cells: [] };
+      this._base = base;
+      return;
+    }
+    // One cell of slack around the tightest fit, so a feature sitting exactly
+    // on the grid's edge can never fall outside it.
+    x0 -= size;
+    x1 += size;
+    z0 -= size;
+    z1 += size;
+    const cols = Math.max(1, Math.ceil((x1 - x0) / size));
+    const rows = Math.max(1, Math.ceil((z1 - z0) / size));
+    const cells = new Array(cols * rows);
+    for (let i = 0; i < cells.length; i++) cells[i] = [];
+    for (let i = this._baseCount; i < this.features.length; i++) {
+      const f = this.features[i];
+      if (base.indexOf(f) >= 0) continue;
+      const b = f.bounds();
+      const c0 = Math.max(0, Math.min(cols - 1, Math.floor((b.x0 - x0) / size)));
+      const c1 = Math.max(0, Math.min(cols - 1, Math.floor((b.x1 - x0) / size)));
+      const r0 = Math.max(0, Math.min(rows - 1, Math.floor((b.z0 - z0) / size)));
+      const r1 = Math.max(0, Math.min(rows - 1, Math.floor((b.z1 - z0) / size)));
+      for (let c = c0; c <= c1; c++) {
+        for (let r = r0; r <= r1; r++) {
+          cells[r * cols + c].push(f);
+        }
+      }
+    }
+    this.zones = { size, cols, rows, minX: x0, minZ: z0, cells };
+    this._base = base;
+  }
+
+  /** The zone (col, row) a world point falls in, or null when it is off the
+   * grid (which only happens past the park's own obstacles, on the pad). */
+  zoneAt(x, z) {
+    const zs = this.zones;
+    if (!zs.cols) return null;
+    const c = Math.floor((x - zs.minX) / zs.size);
+    const r = Math.floor((z - zs.minZ) / zs.size);
+    if (c < 0 || c >= zs.cols || r < 0 || r >= zs.rows) return null;
+    return { col: c, row: r };
+  }
+
+  /** The world rectangle a zone covers — for a streaming layer deciding what
+   * to load or cull. */
+  zoneBounds(col, row) {
+    const zs = this.zones;
+    return {
+      x0: zs.minX + col * zs.size,
+      x1: zs.minX + (col + 1) * zs.size,
+      z0: zs.minZ + row * zs.size,
+      z1: zs.minZ + (row + 1) * zs.size,
+    };
+  }
+
+  /** Every zone a world rectangle touches, as { col, row, bounds } — the
+   * culling query for "which areas does this region belong to". */
+  zonesOverlapping(b) {
+    const zs = this.zones;
+    const out = [];
+    if (!zs.cols) return out;
+    const c0 = Math.max(0, Math.min(zs.cols - 1, Math.floor((b.x0 - zs.minX) / zs.size)));
+    const c1 = Math.max(0, Math.min(zs.cols - 1, Math.floor((b.x1 - zs.minX) / zs.size)));
+    const r0 = Math.max(0, Math.min(zs.rows - 1, Math.floor((b.z0 - zs.minZ) / zs.size)));
+    const r1 = Math.max(0, Math.min(zs.rows - 1, Math.floor((b.z1 - zs.minZ) / zs.size)));
+    for (let c = c0; c <= c1; c++) {
+      for (let r = r0; r <= r1; r++) {
+        out.push({ col: c, row: r, bounds: this.zoneBounds(c, r) });
+      }
     }
     return out;
   }
@@ -832,9 +1034,17 @@ export class Park {
    * of it wants the ground's concrete grain — a tree trunk textured like a
    * slab of pavement is worse than a flat-coloured one — so it gets its own
    * untextured material rather than sharing `this.material`.
+   *
+   * The repeated boxes (fence posts and rails, every tree's trunk and crown)
+   * are instances of a single unit box, not merged geometry: the fence and
+   * the treeline each become one InstancedMesh, so a park's whole scenery
+   * budget stays a handful of draw calls no matter how many trees it plants.
+   * The unit box is built per park (never the shared module geometry), so a
+   * disposed park can always dispose its own geometry.
    */
   buildScenery() {
     const entries = [];
+    const instances = [];
     const ex = this.extentX;
     const ez = this.extentZ;
     const FENCE = 0x6f7580;
@@ -842,16 +1052,16 @@ export class Park {
     if (!this.noFence) {
       for (const side of [-1, 1]) {
         for (let x = -ex; x <= ex; x += 2.4) {
-          entries.push(box(FENCE, 0.06, 2.2, 0.06, x, 1.1, side * (ez + 1.2)));
+          this._addInstance(instances, FENCE, 0.06, 2.2, 0.06, x, 1.1, side * (ez + 1.2));
         }
         for (const y of [1.1, 2.15]) {
-          entries.push(box(FENCE, ex * 2, 0.05, 0.05, 0, y, side * (ez + 1.2)));
+          this._addInstance(instances, FENCE, ex * 2, 0.05, 0.05, 0, y, side * (ez + 1.2));
         }
         for (let z = -ez; z <= ez; z += 2.4) {
-          entries.push(box(FENCE, 0.06, 2.2, 0.06, side * (ex + 1.2), 1.1, z));
+          this._addInstance(instances, FENCE, 0.06, 2.2, 0.06, side * (ex + 1.2), 1.1, z);
         }
         for (const y of [1.1, 2.15]) {
-          entries.push(box(FENCE, 0.05, 0.05, ez * 2, side * (ex + 1.2), y, 0));
+          this._addInstance(instances, FENCE, 0.05, 0.05, ez * 2, side * (ex + 1.2), y, 0);
         }
       }
       for (const x of [-ex - 2.4, ex + 2.4]) {
@@ -879,7 +1089,7 @@ export class Park {
       const rad = treeNear + rng() * 48;
       const x = Math.cos(ang) * rad;
       const z = Math.sin(ang) * rad * 0.85;
-      buildTree(entries, x, z, rng, rng() < 0.3 ? 'pine' : 'broadleaf');
+      buildTree(instances, x, z, rng, rng() < 0.3 ? 'pine' : 'broadleaf', this);
     }
 
     // Benches and planters: the one decoration that lives *inside* the pad
@@ -894,6 +1104,32 @@ export class Park {
     disposeSources(entries);
     mesh.frustumCulled = false;
     this.group.add(mesh);
+
+    // The scenery instances share one unit box, one material and one draw
+    // call; colour per instance is carried by an instance-colour attribute
+    // (trees get a per-box jitter, the fence is uniform) exactly as merged
+    // geometry used to carry it per vertex.
+    if (instances.length) {
+      this.sceneryInstanceMaterial = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 5 });
+      const inst = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        this.sceneryInstanceMaterial,
+        instances.length,
+      );
+      const c = new THREE.Color();
+      for (let i = 0; i < instances.length; i++) {
+        const it = instances[i];
+        it.matrix.toArray(inst.instanceMatrix.array, i * 16);
+        inst.setColorAt(i, c.set(it.color));
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      inst.instanceColor.needsUpdate = true;
+      // Culling a park-wide treeline per instance costs more than the chance
+      // of ever dropping one; the whole scenery is either on screen or not.
+      inst.frustumCulled = false;
+      this.group.add(inst);
+      this.sceneryInstances = inst;
+    }
 
     // The lamp heads' own glow: a lit-looking bulb needs an unlit material of
     // its own, which the single merged, lit scenery mesh above cannot give
@@ -915,19 +1151,36 @@ export class Park {
     // to know how a park lays its own lamps out.
     this.lampPositions = lamps;
   }
+
+  /**
+   * Record one box in the instanced scenery: the same Euler-XYZ rotation
+   * order geo.js' `box` uses, so the fences and treelines hold exactly the
+   * shape the merged versions did.
+   */
+  _addInstance(instances, color, sx, sy, sz, px, py, pz, rx, ry, rz) {
+    _ip.set(px, py, pz);
+    _ie.set(rx || 0, ry || 0, rz || 0);
+    _iq.setFromEuler(_ie);
+    _is.set(sx, sy, sz);
+    instances.push({
+      color,
+      matrix: new THREE.Matrix4().compose(_ip, _iq, _is),
+    });
+  }
 }
 
 /** One tree: a tapered trunk, then either a conifer's stacked tiers or a
  * broadleaf's cluster of offset lobes — three boxes reading as one rounder
- * crown than a single box ever does. */
-function buildTree(entries, x, z, rng, kind) {
+ * crown than a single box ever does. Every box is an instanced scenery
+ * entry, so a whole treeline costs one draw call. */
+function buildTree(instances, x, z, rng, kind, park) {
   const th = 3.6 + rng() * 4.2;
   const trunkW = 0.3 + rng() * 0.16;
   const trunkColor = jitter(0x5a4630, rng, 0.02, 0.12);
   for (let i = 0; i < 3; i++) {
     const seg = th / 3;
     const w = trunkW * (1 - i * 0.22);
-    entries.push(box(trunkColor, w, seg + 0.02, w, x, seg * (i + 0.5), z));
+    park._addInstance(instances, trunkColor, w, seg + 0.02, w, x, seg * (i + 0.5), z);
   }
 
   if (kind === 'pine') {
@@ -938,18 +1191,18 @@ function buildTree(entries, x, z, rng, kind) {
       const w = 2.0 - t * 1.4 + rng() * 0.2;
       const y = th + t * span * 0.85 + w * 0.3;
       const yaw = (i % 2) * (Math.PI / 4);
-      entries.push(box(jitter(0x2f4a33, rng, 0.02, 0.09), w, 1.05, w, x, y, z, 0, yaw, 0));
+      park._addInstance(instances, jitter(0x2f4a33, rng, 0.02, 0.09), w, 1.05, w, x, y, z, 0, yaw, 0);
     }
   } else {
     const base = 2.3 + rng() * 2.0;
     const cy = th + base * 0.34;
-    entries.push(box(jitter(0x415f39, rng, 0.03, 0.1), base, base * 0.85, base, x, cy, z));
+    park._addInstance(instances, jitter(0x415f39, rng, 0.03, 0.1), base, base * 0.85, base, x, cy, z);
     for (let i = 0; i < 2; i++) {
       const s = base * (0.55 + rng() * 0.22);
       const ox = (rng() - 0.5) * base * 0.7;
       const oz = (rng() - 0.5) * base * 0.7;
       const oy = cy + (rng() - 0.5) * base * 0.28;
-      entries.push(box(jitter(0x466a42, rng, 0.03, 0.12), s, s * 0.8, s, x + ox, oy, z + oz));
+      park._addInstance(instances, jitter(0x466a42, rng, 0.03, 0.12), s, s * 0.8, s, x + ox, oy, z + oz);
     }
   }
 }
@@ -1001,6 +1254,14 @@ const _dir = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _mid = new THREE.Vector3();
 const _one = new THREE.Vector3(1, 1, 1);
+
+// Scratch values for the instanced-scenery transform (park._addInstance) —
+// the same compose/Euler recipe geo.js' box() uses, so ported shapes keep
+// their exact layout.
+const _ip = new THREE.Vector3();
+const _ie = new THREE.Euler();
+const _iq = new THREE.Quaternion();
+const _is = new THREE.Vector3();
 
 /**
  * A cylinder between two points. CylinderGeometry is built along +Y, so the

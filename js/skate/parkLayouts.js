@@ -21,6 +21,7 @@
 //     scenery, and the rider passes straight through them.
 
 import { buildObjects } from './parkObjects.js';
+import { buildParkGraph } from './parkGraph.js';
 
 function def(id, name, blurb, opts, objects) {
   return {
@@ -30,6 +31,10 @@ function def(id, name, blurb, opts, objects) {
     ...opts,
     scale: 1,
     _objects: objects,
+    // The connection graph between this map's skateable features — computed
+    // once here so every Park built from the def carries it without Park
+    // itself needing to know how a graph is produced.
+    _graph: buildParkGraph(objects),
     build(p) {
       buildObjects(p, objects);
     },
