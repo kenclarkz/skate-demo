@@ -567,6 +567,7 @@ function showBoardMaker() {
   boardFace = 'top';
   boardSelectedLayer = null;
   renderBoardMaker();
+  hud.bmPreview?.setFace('top');
   hud.show('boardmaker');
 }
 
@@ -688,12 +689,14 @@ function deleteBoardLayer(i) {
 
 /** Flip the maker between the top of the deck and its underside. Each face has
  * its own style, colours, lettering, pixels and stickers, so switching just
- * points every rack at the other face's design. */
+ * points every rack at the other face's design — and the preview tips the deck
+ * over so the side being designed faces the camera. */
 function pickBoardFace(face) {
   if (face !== 'top' && face !== 'back') return;
   boardFace = face;
   boardSelectedLayer = null;
   renderBoardMaker();
+  hud.bmPreview?.setFace(face);
 }
 
 /** One knob of the active face's base-pattern placement: move, spin or scale

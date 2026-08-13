@@ -2486,6 +2486,22 @@ button:disabled.primary {
   max-width: 640px;
 }
 
+/* The Board Maker gets a bigger window than the Character Maker's mirror: a
+   deck is a wide thing, so its preview is a landscape frame and the column is
+   wider — the design is big enough to read while every rack edit lands on it.
+   The board maker's whole screen is wider to make room for it. */
+#screen-boardmaker {
+  max-width: 940px;
+}
+
+#screen-boardmaker .maker-layout {
+  grid-template-columns: minmax(300px, 440px) 1fr;
+}
+
+#screen-boardmaker .maker-preview {
+  aspect-ratio: 4 / 3;
+}
+
 @media (max-width: 760px) {
   .maker-layout {
     grid-template-columns: 1fr;
@@ -2518,7 +2534,7 @@ button:disabled.primary {
 
   #screen-boardmaker .maker-preview-frame {
     width: 100%;
-    max-width: 330px;
+    max-width: 420px;
   }
 
   #screen-boardmaker .maker-preview {
