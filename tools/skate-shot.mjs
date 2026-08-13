@@ -147,50 +147,6 @@ const shots = {
     g.place(0, -10, 0, 0);
     g.hold(0.1);
   },
-  'bowl': () => {
-    const g = window.__skate;
-    g.switchPark('bowl');
-    g.place(0, -12, 0, 6);
-    g.hold(1.2);
-  },
-  'bigair': () => {
-    const g = window.__skate;
-    g.switchPark('bigair');
-    g.place(0, -18, 0, 9);
-    g.hold(1.4);
-  },
-  'pool': () => {
-    const g = window.__skate;
-    g.switchPark('pool');
-    // Placed inside the bowl's own flat interior, not out on the approach —
-    // the walls' decks are only tangent on their inward face, same as bowl's.
-    g.place(0, 0, 0, 6);
-    g.hold(1.2);
-  },
-  'rooftop': () => {
-    const g = window.__skate;
-    g.switchPark('rooftop');
-    g.place(0, -14, 0, 7);
-    g.hold(1.1);
-  },
-  'snake': () => {
-    const g = window.__skate;
-    g.switchPark('snake');
-    g.place(0, -16, 0, 6);
-    g.hold(1.4);
-  },
-  'schoolyard': () => {
-    const g = window.__skate;
-    g.switchPark('schoolyard');
-    g.place(0, -16, 0, 6);
-    g.hold(1.2);
-  },
-  'docks': () => {
-    const g = window.__skate;
-    g.switchPark('docks');
-    g.place(0, -18, 0, 7);
-    g.hold(1.2);
-  },
   // Off the board: the walk cycle mid-stride, and the standard freeze() below
   // would snap the camera onto the parked board's `ride` rather than the
   // walker, so these stay live instead.

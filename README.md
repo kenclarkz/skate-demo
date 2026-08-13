@@ -12,16 +12,11 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
 
 ## What's in it
 
-- **Fourteen parks**, built from the same height-field primitives, so the
-  physics is identical everywhere the geometry differs. Every one of them
-  but Open World — deliberately built with no fence, to be roamed past its
-  own pad — keeps every wheel, yours and the AI's, on the concrete itself.
-  Open World is the biggest of them by far: two deep four-wall bowls, two
-  mega-ramp drop-ins tall enough to need their own approach climb, and a
-  gap jump with a ring hanging over it to fly through, on top of the
-  original street spot, hill, and manual pad.
+- **Home Park**, built from the same height-field primitives you build your own
+  parks with, so the physics is identical everywhere the geometry differs.
+  Every wheel — yours and the AI's — stays on the concrete itself.
 - **A park designer** — a My Parks menu for building your own parks: place and
-  edit the same primitives the shipped parks are made of (slabs, banks,
+  edit the same primitives the built-in park is made of (slabs, banks,
   quarters, stairs, rails, ledges, and funboxes, up to 64 per park) on the
   ground of your choice, in a WYSIWYG editor whose preview rides exactly like
   the real thing. Every object — and the pad itself — can be painted from the
@@ -60,7 +55,7 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
   cruiser, old-school, freestyle, and mini-cruiser decks, each in a couple of
   skins), shirts, and headwear accessories
   (hats and shades), paid for with coins earned from tricks and combos.
-- **Thirteen ambient AI skaters per park** — five tour the patrol loop the
+- **Thirteen ambient AI skaters in the park** — five tour the patrol loop the
   whole time, popping tricks with the exact same ride model the player
   rides; the rest spend most of their time on foot near a hangout spot,
   wandering and pausing to face each other, until a shared timer calls the
