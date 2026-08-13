@@ -35,7 +35,10 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
   rather than flicked.
 - **Grinds, manuals, and powerslides**, each riding the same balance model:
   an inverted pendulum with a random bias, so holding one always takes
-  active correction.
+  active correction. Flick sideways mid-grind and you hop off the rail to
+  that side — forward speed stays on the rail's line, the pop's own height
+  buys how far you clear it, and the board turns to face the landing so it
+  comes down clean.
 - **Automatic reverts** — land with the board off the direction of travel
   and the wheels pivot it back under you in a smooth fraction of a second:
   a little speed and a wheel chirp instead of the sketchy wobble (and past
