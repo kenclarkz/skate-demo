@@ -497,9 +497,12 @@ export class Ride {
     this.pos.x = nx;
     this.pos.z = nz;
 
-    if (ahead.y < yBallistic - 0.002) {
-      // The ground dropped away faster than gravity: a launch, with no special
-      // case for ledges, lips or kickers.
+    // The ground dropped away faster than gravity: a launch, with no special
+    // case for ledges, lips or kickers. The surface has to be genuinely below
+    // the wheels too — riding up a ramp whose top is flush with a flat deck,
+    // the ballistic path is still climbing over the seam, and letting that
+    // launch the board is what leaves it stranded on the ledge.
+    if (ahead.y < yBallistic - 0.002 && ahead.y < this.pos.y - 0.01) {
       this.pos.y = yBallistic;
       this.vel.y += C.GRAVITY * dt;
       this.takeOff();
