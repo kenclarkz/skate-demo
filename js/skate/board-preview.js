@@ -21,7 +21,7 @@
 import * as THREE from '../game/three.js';
 import { box, merge } from '../game/geo.js';
 import { Board } from './board.js';
-import { DECK_Y } from './config.js';
+import { DECK_T, DECK_Y, TRUCK_H, WHEEL_R } from './config.js';
 
 // --- the room ----------------------------------------------------------------
 // All dimensions in metres, the same units the board itself is built in. The
@@ -41,15 +41,20 @@ const SHOP_Z = -0.90;      // the shopkeeper's feet
 // so the nose-to-tail art reads at a glance.
 const DISPLAY_YAW = Math.PI / 2;
 
-// The deck rocks gently on the counter like a board being shown off, instead
-// of spinning a full turn — on a counter of this size a full rotation would
-// tip the ends over the edges, and a careful shopkeeper does not let their
-// stock hang off the front. The rock is bounded to the angle where the board's
-// own diagonal still clears the counter top, and a grab-the-board drag turns
-// it within the same bound.
+// The deck rocks gently on the counter like a board being shown off — until
+// the player grabs it, when it holds exactly where they turn it. The drag is a
+// free 360° turn: a sideways drag spins the deck around (yaw), and an
+// up-and-down drag tips it over onto its grip, so every side of the deck —
+// nose, tail, top and the underside art — can be brought to face the camera.
+// The top/back face toggle simply animates that same tip to whichever side is
+// being designed.
 const SWAY_AMP = 0.15;
 const SWAY_SPEED = 0.8;    // radians of phase per second — a lazy, slow rock
-const DRAG_MAX = 0.19;     // the widest turn that keeps the deck on the counter
+
+// When the deck is tipped over to show its underside it ends up resting on
+// its grip tape with the wheels in the air, so its origin — the wheel-contact
+// plane — sits this much higher above the counter top than it does standing.
+const FLIP_Y_RISE = WHEEL_R + TRUCK_H + DECK_T / 2;
 
 // --- the swap animation ------------------------------------------------------
 // PLACE: reach down (hidden behind the counter) while the board waits at
@@ -80,11 +85,18 @@ const ELBOW_POLE = new THREE.Vector3(0, -1, -0.2);
 
 // --- helpers -----------------------------------------------------------------
 const lerp = (a, b, t) => a + (b - a) * t;
-const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (s) => {
   s = clamp01(s);
   return s * s * (3 - 2 * s);
+};
+
+/** Shortest signed angle from a to b, in [-π, π). */
+const normPi = (a) => {
+  a %= Math.PI * 2;
+  if (a > Math.PI) a -= Math.PI * 2;
+  if (a < -Math.PI) a += Math.PI * 2;
+  return a;
 };
 
 /** Progress of `t` within the window [a, b], clamped to 0..1. */
@@ -224,8 +236,10 @@ export class BoardPreview {
     this.renderer.setClearColor(0x171c23, 1);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(40, 1, 0.05, 30);
-    this.camera.position.set(0.75, 0.95, 1.5);
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.05, 30);
+    // Pulled in close so the deck's art is big enough to read while it
+    // changes, and aimed a little high so the top design catches the light.
+    this.camera.position.set(0.18, 0.92, 0.68);
     this.camera.lookAt(0, 0.55, -0.4);
 
     this.scene.add(new THREE.HemisphereLight(0xbcd6f0, 0x33302a, 2.0));
@@ -304,21 +318,30 @@ export class BoardPreview {
     this.board.group.position.set(DISPLAY_X, DISPLAY_Y, DISPLAY_Z);
     this.scene.add(this.board.group);
 
-    // Drag to turn the deck on the counter (yaw only, and only while it is
-    // resting — a hand on the board pauses the display rock).
+    // Drag to turn the deck on the counter (yaw, free all the way round) and
+    // to tip it over (pitch about its long axis, so the underside can be
+    // inspected without the face toggle). Both only while it is resting — a
+    // hand on the board pauses the display rock and cancels a face flip.
     this._dragging = false;
     this._px = 0;
+    this._py = 0;
     canvas.style.touchAction = 'none';
     canvas.addEventListener('pointerdown', (e) => {
       this._dragging = true;
+      this._touched = true;
+      this._tiltTarget = null;
       this._px = e.clientX;
+      this._py = e.clientY;
       canvas.setPointerCapture?.(e.pointerId);
     });
     canvas.addEventListener('pointermove', (e) => {
       const dx = e.clientX - this._px;
+      const dy = e.clientY - this._py;
       this._px = e.clientX;
+      this._py = e.clientY;
       if (!this._dragging || this._state !== 'idle') return;
-      this._spin = clamp(this._spin + dx * 0.012, -DRAG_MAX, DRAG_MAX);
+      this._spin += dx * 0.012;
+      this._tilt += dy * 0.012;
     });
     const up = () => {
       this._dragging = false;
@@ -335,6 +358,10 @@ export class BoardPreview {
     this._state = 'idle'; // 'idle' | 'place' | 'take'
     this._at = 0;
     this._spin = 0;
+    this._tilt = 0;        // radians about the deck's long axis, free after a drag
+    this._tiltTarget = null; // the face toggle's tip target while animating there
+    this._flipPending = null; // a face flip queued while the shopkeeper is busy
+    this._touched = false; // once the player grabs the deck, the rock stands down
 
     // The hand springs: one per arm, resting hidden below the counter top so
     // a spinning board never clips them. The +X hand (index 1) is the one that
@@ -418,6 +445,22 @@ export class BoardPreview {
     this.board.design = design;
   }
 
+  /**
+   * Tip the deck over to the face being designed: 'back' flips it onto its
+   * grip tape (wheels up, the underside art towards the camera), 'top' stands
+   * it back on its wheels. The tip animates in the loop rather than snapping.
+   */
+  setFace(face) {
+    const target = face === 'back' ? Math.PI : 0;
+    if (this._state !== 'idle') {
+      // The shopkeeper is mid-carry; remember the pick for when it settles.
+      this._flipPending = target;
+      return;
+    }
+    this._flipPending = null;
+    this._tiltTarget = target;
+  }
+
   /** Rebuild the board in place and record it as the current deck. */
   _apply(palette, shape, design) {
     this._in = { palette, shape, design };
@@ -432,6 +475,17 @@ export class BoardPreview {
     this._spin = 0;
     this._state = 'place';
     this._at = 0;
+  }
+
+  /** The board is back resting on the counter: apply any face flip queued up
+   * while the shopkeeper was busy carrying. */
+  _settle() {
+    this._state = 'idle';
+    this._at = 0;
+    if (this._flipPending != null) {
+      this._tiltTarget = this._flipPending;
+      this._flipPending = null;
+    }
   }
 
   /** Advance the swap state machine and move the board through the scene. */
@@ -449,25 +503,38 @@ export class BoardPreview {
       this._at += dt;
       if (this._at >= TAKE_TIME) {
         if (this._pending) this._beginPlace(this._pending);
-        else this._state = 'idle';
+        else this._settle();
       }
     } else if (this._state === 'place') {
       this._at += dt;
-      if (this._at >= PLACE_TIME) {
-        this._state = 'idle';
-        this._at = 0;
-      }
+      if (this._at >= PLACE_TIME) this._settle();
     }
 
+    // A deck tipped over rests on its grip tape, so as it flips it lifts by
+    // the distance from its wheel-contact origin up to the grip — the wheels
+    // end up pointing at the ceiling, like a real board turned over.
+    const flipK = (1 - Math.cos(this._tilt)) / 2;
     const pos =
       this._state === 'take' ? takePos(this._at) :
       this._state === 'place' ? placePos(this._at) :
-      { x: DISPLAY_X, y: DISPLAY_Y, z: DISPLAY_Z };
+      { x: DISPLAY_X, y: DISPLAY_Y + flipK * FLIP_Y_RISE, z: DISPLAY_Z };
     this.board.group.position.set(pos.x, pos.y, pos.z);
 
+    // The face toggle's tip animates home with a spring; a grab cancels it.
+    if (this._tiltTarget != null) {
+      const delta = normPi(this._tiltTarget - this._tilt);
+      if (Math.abs(delta) < 0.01) {
+        this._tilt = this._tiltTarget;
+        this._tiltTarget = null;
+      } else {
+        this._tilt += delta * (1 - Math.exp(-7 * dt));
+      }
+    }
+
     // The display rock; while the hand is reaching for a board, the deck slows
-    // to a stop so the grab lands on a still board.
-    if (this._state === 'idle' && !this._dragging) {
+    // to a stop so the grab lands on a still board. Once the player has
+    // grabbed the deck the rock stands down and it holds where they left it.
+    if (this._state === 'idle' && !this._dragging && !this._touched) {
       const target = SWAY_AMP * Math.sin(this.t * SWAY_SPEED);
       this._spin += (target - this._spin) * (1 - Math.exp(-3 * dt));
     }
@@ -475,7 +542,7 @@ export class BoardPreview {
     if (this._state === 'take') {
       yaw = DISPLAY_YAW + this._spin * Math.max(0, 1 - this._at / SPIN_FADE);
     }
-    this.board.group.rotation.set(0, yaw, 0);
+    this.board.group.rotation.set(this._tilt, yaw, 0);
   }
 
   /** Pose the shopkeeper: lean, head nod, and both arms. */
@@ -543,24 +610,73 @@ export class BoardPreview {
   }
 }
 
-/** The whole shop in one merged draw call: room, shelf stock and counter. */
+/** The whole shop in one merged draw call: room, shelf stock, counter, the
+ * local tagger's wall art and the decks on display. */
 function buildShop() {
   const e = [];
   // Floor and back wall.
   e.push(box(0x2e333b, 3.0, 0.08, 2.1, 0, -0.04, -0.6));
   e.push(box(0x272d36, 3.0, 2.0, 0.08, 0, 1.0, -1.46));
   e.push(box(0x333a44, 3.02, 0.16, 0.1, 0, 0.08, -1.43)); // wall base trim
+
+  // The shop's walls carry the local tagger's work — marker throw-ups, a
+  // bubble crown, spray-dot clusters and drippy blobs, all thin colour boxes
+  // pressed flat against the wall, same merged draw call as the room.
+  const GW = -1.415; // just proud of the back wall's front face
+  // A quick marker throw-up behind the shopkeeper's shoulder.
+  e.push(box(0x35ffe0, 0.10, 0.60, 0.012, 0.55, 0.85, GW, 0, 0, -0.55));
+  e.push(box(0xd6457f, 0.10, 0.48, 0.012, 0.78, 0.92, GW, 0, 0, 0.40));
+  e.push(box(0xf2c14e, 0.09, 0.42, 0.012, 0.40, 0.62, GW, 0, 0, 0.25));
+  // A drippy green blob on the other side.
+  e.push(box(0x67d36a, 0.30, 0.16, 0.012, -0.40, 0.74, GW));
+  e.push(box(0x67d36a, 0.05, 0.26, 0.012, -0.50, 0.54, GW));
+  e.push(box(0x67d36a, 0.04, 0.32, 0.012, -0.40, 0.49, GW));
+  e.push(box(0x67d36a, 0.05, 0.22, 0.012, -0.30, 0.57, GW));
+  // Spray-dot clusters, splattered low where the roller did not reach.
+  e.push(box(0x35c7ff, 0.06, 0.06, 0.012, 0.25, 0.50, GW, 0, 0, 0.785));
+  e.push(box(0x35c7ff, 0.04, 0.04, 0.012, 0.19, 0.45, GW));
+  e.push(box(0x35c7ff, 0.035, 0.035, 0.012, 0.30, 0.43, GW, 0, 0, 0.4));
+  e.push(box(0x35c7ff, 0.05, 0.05, 0.012, -0.90, 0.62, GW, 0, 0, -0.3));
+  e.push(box(0x35c7ff, 0.035, 0.035, 0.012, -0.96, 0.58, GW));
+  e.push(box(0x35c7ff, 0.04, 0.04, 0.012, -0.85, 0.55, GW, 0, 0, 0.6));
+  // A bubble crown up top, above the decks on display.
+  e.push(box(0xf2c14e, 0.28, 0.10, 0.012, 0.95, 1.06, GW));
+  e.push(box(0xf2c14e, 0.08, 0.16, 0.012, 0.83, 1.15, GW));
+  e.push(box(0xf2c14e, 0.08, 0.20, 0.012, 0.95, 1.19, GW));
+  e.push(box(0xf2c14e, 0.08, 0.16, 0.012, 1.07, 1.15, GW));
+  e.push(box(0xd6457f, 0.06, 0.06, 0.012, 0.95, 1.07, GW, 0, 0, 0.785));
+
   // A shelf of deck boxes high on the back wall, above the shopkeeper's head.
   e.push(box(0x3d4651, 1.7, 0.06, 0.18, 0, 1.5, -1.38));
   const stock = [0xc65a3a, 0x3a9aa8, 0xd6c064];
   for (let i = 0; i < stock.length; i++) {
     e.push(box(stock[i], 0.36, 0.045, 0.09, (i - 1) * 0.55, 1.55, -1.36, -0.16, 0, 0));
   }
+
+  // Decks on display: a rack leaning against the wall like the shop's own
+  // stock, each a painted top face with a stripe down the middle. They sit at
+  // staggered depths so the overlapping rack reads as a stack, not a seam.
+  const wallDecks = [
+    [0x2f9aa8, 0x0e2b30, 0.18, 0.62, 1.26, 0.52, -0.22, 0.02],
+    [0xc65a3a, 0xf2c14e, 0.17, 0.56, 1.31, 0.70, 0.12, 0.05],
+    [0x8a63c8, 0x35ffe0, 0.16, 0.48, 1.22, 0.88, 0.30, 0.08],
+    [0xd6c064, 0x1b1b1e, 0.16, 0.50, -1.05, 0.60, -0.10, 0.02],
+  ];
+  for (const [dc, ac, w, len, cx, cy, rot, dz] of wallDecks) {
+    e.push(box(dc, w, len, 0.022, cx, cy, GW + dz, 0, 0, rot));
+    e.push(box(ac, w * 0.24, len * 0.82, 0.024, cx, cy, GW + dz + 0.001, 0, 0, rot));
+  }
+
   // The counter: maple top, dark base and toe, and a pale front lip.
   e.push(box(0x8a6a48, 1.9, 0.06, 0.36, 0, 0.52, -0.4));
   e.push(box(0x5a4632, 1.8, 0.44, 0.3, 0, 0.28, -0.4));
   e.push(box(0x3c2f22, 1.86, 0.06, 0.34, 0, 0.03, -0.4));
   e.push(box(0xd8b183, 1.84, 0.016, 0.016, 0, 0.552, -0.22));
+  // A few paint spots on the counter top around where the deck sits.
+  e.push(box(0xd6457f, 0.05, 0.005, 0.05, 0.34, 0.5525, -0.30));
+  e.push(box(0x35ffe0, 0.035, 0.005, 0.035, -0.40, 0.5525, -0.50));
+  e.push(box(0x67d36a, 0.04, 0.005, 0.04, 0.10, 0.5525, -0.24));
+  e.push(box(0xf2c14e, 0.03, 0.005, 0.03, -0.15, 0.5525, -0.46));
   // The dark mat the board rests on.
   e.push(box(0x1b1b1e, 0.88, 0.012, 0.24, 0, 0.544, -0.4));
   return new THREE.Mesh(
