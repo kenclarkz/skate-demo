@@ -266,6 +266,27 @@ section('Braking');
 }
 
 // --------------------------------------------------------------------------
+section('Pushing fakie');
+{
+  // A push drives whichever way the board is already rolling: riding backwards,
+  // the same push key pushes backwards — same settings, same ceiling as forward.
+  const fakie = await run(() => {
+    const g = window.__skate;
+    g.place(-33, -18, 0, -2);
+    const before = g.ride.speed;
+    // The same eleven-push drill as the Rolling section, backwards.
+    for (let i = 0; i < 11; i++) {
+      g.drive(1 / 120, { push: true });
+      g.hold(0.5);
+    }
+    return { before, after: g.ride.speed };
+  });
+  ok(fakie.before < 0, `placed rolling fakie (${fakie.before.toFixed(2)} m/s)`);
+  ok(fakie.after < fakie.before, `and pushing builds speed backwards (${fakie.before.toFixed(2)} → ${fakie.after.toFixed(2)} m/s)`);
+  ok(fakie.after > -16, 'and cannot push past what a leg can do');
+}
+
+// --------------------------------------------------------------------------
 section('Carving');
 {
   // The claim being tested: a lean of θ commits the rider to a lateral

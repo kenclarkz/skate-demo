@@ -676,6 +676,10 @@ export class Skater {
   pushFoot(s, out, mirror) {
     const p = s.push;
     const side = s.switchStance ? 1 : -1;   // the toe side: where the foot goes
+    // A fakie push drives the other way, so the whole sweep mirrors fore and
+    // aft: the foot plants behind the direction of travel and the board slides
+    // over it the other way round.
+    const sweep = s.pushFakie ? -1 : 1;
     const ground = C.FOOT_H;                // sole on the surface, in frame space
     const tail = C.FOOT_BACK_Z * mirror;
     const deck = C.DECK_Y + C.FOOT_H;
@@ -684,19 +688,19 @@ export class Skater {
 
     if (p < reachEnd) {
       const t = p / reachEnd;
-      out.set(side * 0.20 * t, deck + (ground - deck) * t, tail + (0.16 - tail) * t);
+      out.set(side * 0.20 * t, deck + (ground - deck) * t, tail + (0.16 * sweep - tail) * t);
     } else if (p < driveEnd) {
-      // Planted: in frame space the foot sweeps backwards while the board moves
-      // forwards over it.
+      // Planted: in frame space the foot sweeps while the board moves the other
+      // way over it.
       const t = (p - reachEnd) / (driveEnd - reachEnd);
-      out.set(side * 0.20, ground, 0.16 - t * 0.62);
+      out.set(side * 0.20, ground, (0.16 - t * 0.62) * sweep);
     } else {
       const t = (p - driveEnd) / (1 - driveEnd);
       const e = t * t * (3 - 2 * t);
       out.set(
         side * 0.20 * (1 - e),
         ground + (deck - ground) * e + Math.sin(e * Math.PI) * 0.07,
-        -0.46 * (1 - e) + tail * e
+        -0.46 * (1 - e) * sweep + tail * e
       );
     }
     return out;
@@ -847,6 +851,7 @@ export function makeRideState() {
     deckYaw: 0,           // sideways on a rail
 
     push: -1,             // -1 idle, else 0..1 through the push cycle
+    pushFakie: false,     // the push drives backwards: the foot sweep mirrors
     pushPlanted: false,   // the pushing foot is on the ground right now
 
     footFrontLift: 0,     // metres each foot is off the deck
