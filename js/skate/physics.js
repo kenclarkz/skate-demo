@@ -53,6 +53,10 @@ const GRIND_COOL = 0.22;
 /** Where the frame sits below a rail's top, riding the trucks or the deck. */
 const GRIND_DROP_TRUCK = 0.055;
 const GRIND_DROP_DECK = 0.081;
+/** Where each sideways flick goes when it hops off a grind: +1 off the rider's
+ * left, -1 off the right. The shove-it family — straight across, both ways —
+ * is what reads as "slide off the rail", so those are the flicks that hop. */
+const HOP_SIDE = { shuvit: 1, shuv360: 1, fsshuvit: -1, fsshuv360: -1 };
 
 const _h = new THREE.Vector3();      // heading, in the surface plane
 const _l = new THREE.Vector3();      // lateral, in the surface plane
@@ -273,7 +277,14 @@ export class Ride {
       this.pendingTrick = null;
       const charge = this.pendingCharge;
       this.pendingCharge = undefined;
-      if (def) this.popOff(def, charge);
+      if (def) {
+        // A sideways flick mid-grind is a hop off the rail to that side (see
+        // hopOffGrind) rather than a shove-it popped along it — the whole
+        // reason a shove-it direction exists on a rail.
+        const hop = HOP_SIDE[def.id];
+        if (this.mode === GRIND && hop) this.hopOffGrind(hop, charge);
+        else this.popOff(def, charge);
+      }
     }
 
     // --- the charge -------------------------------------------------------
@@ -824,6 +835,47 @@ export class Ride {
     };
     this.takeOff();
     this.emit('pop', { trick: def.id, height: h });
+    return true;
+  }
+
+  /**
+   * Hop off a rail to the side, the way a sideways flick reads mid-grind.
+   *
+   * A plain ollie, launched across the rail rather than along it: the run's
+   * speed stays on the rail's line, the pop's own height buys a lateral reach
+   * on top of it (see HOP_OFF_LATERAL), and the board turns to face the way it
+   * is going so the landing comes down clean. Nothing is rotated, so there is
+   * nothing to finish — the hop exists to get off the rail, not to score.
+   *
+   * @param side +1 hops off the rider's left, -1 off the right — the two
+   * directions the shove-it flicks land in (see HOP_SIDE).
+   */
+  hopOffGrind(side, chargeOverride) {
+    if (this.mode !== GRIND) return false;
+
+    const charge = chargeOverride !== undefined ? chargeOverride : Math.max(this.charge, 0.2);
+    const h = C.OLLIE_H_MIN + (C.OLLIE_H_MAX - C.OLLIE_H_MIN) * Math.min(1, charge);
+    const vy = Math.sqrt(2 * -C.GRAVITY * h);
+
+    this.leaveGrind(true);
+    this.surfaceFrame(this.up);
+    _v.copy(_h).multiplyScalar(this.speed);
+    _v.addScaledVector(_l, side * vy * C.HOP_OFF_LATERAL);
+    this.vel.copy(_v).addScaledVector(this.up, vy);
+
+    // Face the board down the combined direction of travel, so it comes down
+    // pointing where it is going and the landing snaps clean rather than
+    // sliding out sideways.
+    this.yaw = Math.atan2(this.vel.x, this.vel.z);
+    this.surfaceFrame(this.up);
+
+    this.popHeight = h;
+    this.pop = 0;
+    this.charge = 0;
+    this.chargeHeld = 0;
+    this.trick = null;
+    this.takeOff();
+    this.emit('pop', { trick: 'ollie', height: h });
     return true;
   }
 
