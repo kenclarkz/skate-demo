@@ -225,8 +225,8 @@ export class BoardPreview {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.05, 30);
-    this.camera.position.set(0, 0.9, 1.9);
-    this.camera.lookAt(0, 0.55, -0.6);
+    this.camera.position.set(0.75, 0.95, 1.5);
+    this.camera.lookAt(0, 0.55, -0.4);
 
     this.scene.add(new THREE.HemisphereLight(0xbcd6f0, 0x33302a, 2.0));
     const key = new THREE.DirectionalLight(0xfff2d8, 1.9);
