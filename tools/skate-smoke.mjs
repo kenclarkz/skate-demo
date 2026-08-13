@@ -2601,13 +2601,18 @@ section('Accessory shop');
   const initial = await run(() => {
     const g = window.__skate;
     g.hud.on.reset();
-    return { accessories: g.save.accessories, accessoryId: g.save.accessoryId };
+    return { accessories: g.save.accessories, accessoryIds: g.save.accessoryIds };
   });
   ok(
     initial.accessories.length === 1 && initial.accessories[0] === 'none',
     `a fresh save owns only the starter accessory (${initial.accessories.join(', ')})`
   );
-  ok(initial.accessoryId === 'none', 'and has it equipped');
+  ok(
+    initial.accessoryIds.hat === 'none' &&
+      initial.accessoryIds.shades === 'none' &&
+      initial.accessoryIds.pack === 'none',
+    'and all three slots — hat, shades, pack — start empty'
+  );
 
   const catalogue = await run(() =>
     window.__skate.accessories.map((a) => ({ id: a.id, price: a.price }))
@@ -2632,7 +2637,7 @@ section('Accessory shop');
       head: g.skater.style.head,
       cap: g.skater.palette.cap,
       coins: g.save.coins,
-      accessoryId: g.save.accessoryId,
+      hatSlot: g.save.accessoryIds.hat,
       owned: g.save.accessories,
     };
   });
@@ -2640,15 +2645,14 @@ section('Accessory shop');
   ok(bought.headChanged && bought.head === 'tophat', "and the rider's headwear actually changes");
   ok(bought.capChanged && bought.cap === 0x1c1c20, 'and re-colours to match the hat');
   ok(bought.coins === 150, `and the price is deducted (500 → ${bought.coins})`);
-  ok(bought.accessoryId === 'tophat', 'the bought hat is worn immediately');
+  ok(bought.hatSlot === 'tophat', 'the bought hat fills the hat slot immediately');
   ok(
     bought.owned.includes('tophat') && bought.owned.includes('none'),
     'and it joins the owned list without losing the starter'
   );
 
-  // One head-slot, like the one shirt: buying shades puts the character's own
-  // headwear back and layers the glasses over that, rather than stacking on
-  // top of the hat that was there a moment ago.
+  // Three slots, one per kind: buying shades stacks on top of the hat instead
+  // of swapping it off, so the two wear at once.
   const layered = await run(() => {
     const g = window.__skate;
     g.save.addCoins(200);
@@ -2658,28 +2662,91 @@ section('Accessory shop');
       head: g.skater.style.head,
       shades: g.skater.style.shades,
       frame: g.skater.palette.shades,
+      hatSlot: g.save.accessoryIds.hat,
+      shadesSlot: g.save.accessoryIds.shades,
       coins: g.save.coins,
     };
   });
   ok(layered.ok2, 'buying shades on top also succeeds');
-  ok(layered.head === 'cap', 'and swaps back to the character\'s own headwear');
-  ok(layered.shades === true && layered.frame === 0xc9a04e, 'with the glasses added over that');
+  ok(layered.head === 'tophat', 'and the hat stays on instead of being swapped off');
+  ok(layered.shades === true && layered.frame === 0xc9a04e, 'with the glasses added over it');
+  ok(
+    layered.hatSlot === 'tophat' && layered.shadesSlot === 'gold-shades',
+    'one item per slot, hat and shades worn together'
+  );
   ok(layered.coins === 50, `and the shades cost their own price (350 → ${layered.coins})`);
+
+  // The pack is the third slot, so all three kinds can ride at once.
+  const allThree = await run(() => {
+    const g = window.__skate;
+    g.save.addCoins(300);
+    const ok3 = g.selectAccessory('neon-pack');
+    return {
+      ok3,
+      head: g.skater.style.head,
+      shades: g.skater.style.shades,
+      pack: g.skater.style.pack,
+      packColour: g.skater.palette.pack,
+      ids: g.save.accessoryIds,
+    };
+  });
+  ok(allThree.ok3, 'buying a backpack on top of both also succeeds');
+  ok(allThree.pack === true && allThree.packColour === 0x35ffe0, 'and the pack is worn');
+  ok(
+    allThree.head === 'tophat' && allThree.shades === true && allThree.pack === true,
+    'a hat, shades and a backpack — all three kinds worn at once'
+  );
+  ok(
+    allThree.ids.hat === 'tophat' && allThree.ids.shades === 'gold-shades' && allThree.ids.pack === 'neon-pack',
+    'each filling its own slot'
+  );
+
+  // Never two of the same: a second hat replaces the first in the hat slot
+  // rather than stacking, and leaves the other slots untouched.
+  const swap = await run(() => {
+    const g = window.__skate;
+    g.save.addCoins(500);
+    g.selectAccessory('bucket');
+    return {
+      head: g.skater.style.head,
+      cap: g.skater.palette.cap,
+      shades: g.skater.style.shades,
+      pack: g.skater.style.pack,
+      hatSlot: g.save.accessoryIds.hat,
+      shadesSlot: g.save.accessoryIds.shades,
+      packSlot: g.save.accessoryIds.pack,
+    };
+  });
+  ok(swap.head === 'bucket' && swap.cap === 0x8a9a5c, 'and a second hat swaps the first off the head');
+  ok(
+    swap.shades === true && swap.pack === true && swap.shadesSlot === 'gold-shades' && swap.packSlot === 'neon-pack',
+    'while the shades and the pack stay where they were'
+  );
 
   // Back to "Original" takes everything off again.
   const undone = await run(() => {
     const g = window.__skate;
     g.selectAccessory('none');
-    return { head: g.skater.style.head, shades: g.skater.style.shades };
+    return { head: g.skater.style.head, shades: g.skater.style.shades, pack: g.skater.style.pack, ids: g.save.accessoryIds };
   });
-  ok(undone.head === 'cap' && undone.shades === false, '"Original" takes the hat and glasses back off');
+  ok(
+    undone.head === 'cap' && undone.shades === false && undone.pack === false,
+    '"Original" takes the hat, glasses and pack back off'
+  );
+  ok(
+    undone.ids.hat === 'none' && undone.ids.shades === 'none' && undone.ids.pack === 'none',
+    'and empties all three slots'
+  );
 
   // The tutorial's demo rider wears it too, and the shop draws a portrait of
-  // the equipped rider with the accessory on — not a generic swatch.
+  // the equipped rider with the accessory on — not a generic swatch. With all
+  // three slots filled, exactly the three worn items are marked current.
   const screen = await run(() => {
     const g = window.__skate;
     g.save.addCoins(500);
     g.selectAccessory('bucket');
+    g.selectAccessory('gold-shades');
+    g.selectAccessory('street-pack');
     const demo = g.hud.preview?.skater;
     g.showStore();
     const grid = document.getElementById('accessory-grid');
@@ -2696,9 +2763,10 @@ section('Accessory shop');
     return {
       demoHead: demo?.style.head,
       demoCap: demo?.palette.cap,
+      demoShades: demo?.style.shades,
+      demoPack: demo?.style.pack,
       cards: cards.length,
-      current: grid.querySelectorAll('.accessory-card.current').length,
-      currentId: grid.querySelector('.accessory-card.current')?.dataset.accessory,
+      current: [...grid.querySelectorAll('.accessory-card.current')].map((c) => c.dataset.accessory).sort(),
       painted,
       bucketPainted: bucketCard
         ? (() => {
@@ -2712,9 +2780,18 @@ section('Accessory shop');
       state: g.state,
     };
   });
-  ok(screen.demoHead === 'bucket' && screen.demoCap === 0x8a9a5c, "and the tutorial's demo rider changes to match");
+  ok(
+    screen.demoHead === 'bucket' && screen.demoCap === 0x8a9a5c && screen.demoShades === true && screen.demoPack === true,
+    "and the tutorial's demo rider changes to match the whole set"
+  );
   ok(screen.cards === 16, 'with a card per accessory');
-  ok(screen.current === 1 && screen.currentId === 'bucket', 'and exactly one marked as the one being worn');
+  ok(
+    screen.current.length === 3 &&
+      screen.current[0] === 'bucket' &&
+      screen.current[1] === 'gold-shades' &&
+      screen.current[2] === 'street-pack',
+    `and exactly the three worn items marked current (${screen.current.join(', ')})`
+  );
   ok(
     screen.painted.length === 16 && screen.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
