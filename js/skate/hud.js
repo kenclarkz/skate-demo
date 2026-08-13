@@ -1194,7 +1194,7 @@ export class Hud {
   }
 
   // --- park picker ---------------------------------------------------------
-  /** Build the choice of maps, once — `parks` is the PARKS array from park.js. */
+  /** Build the choice of maps, once — `parks` is the PARKS array from parkLayouts.js. */
   renderParks(parks, currentId) {
     if (!this.parkGrid) return;
     this.parkGrid.innerHTML = parks

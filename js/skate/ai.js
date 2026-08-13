@@ -138,8 +138,8 @@ function stepPatrol(ride, bot, dt) {
   // open ground while there is still room to. Blended in progressively as the
   // edge closes rather than as a hard line, so a patrol running parallel to a
   // fence reads as an easy carve, not a swerve. The concrete's edge is what
-  // the (padOnly) parks clamp to; on Open World it is huge compared to the
-  // patrol loop, so the same rule is harmlessly inactive there.
+  // the padOnly park clamps to; far bigger than the patrol loop, so the same
+  // rule is harmlessly inactive for most of the ride.
   const ex = ride.park.extentX;
   const ez = ride.park.extentZ;
   const cx = ex - Math.abs(ride.pos.x);

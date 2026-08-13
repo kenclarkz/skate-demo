@@ -12,9 +12,9 @@
 // discontinuity, and physics.js reads a step up it cannot roll over as a wall to
 // hit. That is exactly how a curb behaves.
 //
-// Below the primitives sits `PARKS`: one spec object per map. Every map shares
-// the same pad, fence and dirt — only the obstacles inside `build()` change —
-// which is what lets six very different-feeling parks stay one small file.
+// The built-in park defs live in parkLayouts.js: one spec object per map.
+// Every map shares the same pad, fence and dirt — only the obstacles inside
+// `build()` change — which is what lets one small file describe every park.
 
 import * as THREE from '../game/three.js';
 import { box, piece, merge } from '../game/geo.js';

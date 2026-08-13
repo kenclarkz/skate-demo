@@ -1,6 +1,6 @@
 // A park file: the plain, saved description of a player-built park, and the
 // bridge to the game's own `Park` — a file becomes a def, and a def is what
-// `new Park(def)` is handed, exactly like the hand-authored maps in park.js.
+// `new Park(def)` is handed, exactly like the built-in Home Park in park.js.
 //
 // A file is deliberately small and editable: a name, a boundary, a pad surface,
 // a spawn, and a list of objects from the palette. Patrol loops and logo
@@ -10,8 +10,8 @@
 // The boundary is the park's single source of truth for footprint: the pad,
 // the fence, the playable area, the spawn limits, the AI patrol and the
 // environment all derive from it. A brand-new park inherits the same boundary
-// the standard parks are drawn on (PARK_X × PARK_Z in park.js), so an empty
-// custom park is exactly the same 52 × 60 m site as Home Park or The Bowl.
+// the built-in park is drawn on (PARK_X × PARK_Z in park.js), so an empty
+// custom park is exactly the same 52 × 60 m site as Home Park.
 
 import { buildObjects, clearAt, isHexColor, newObject, objectType, padColor } from './parkObjects.js';
 import { PARK_X, PARK_Z } from './park.js';

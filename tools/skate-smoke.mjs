@@ -1287,7 +1287,7 @@ section('Parks');
     const g = window.__skate;
     return { count: g.parks.length, ids: g.parks.map((p) => p.id), current: g.park.id };
   });
-  ok(info.count === 14, `there are fourteen parks (${info.count})`);
+  ok(info.count === 1, `there is one built-in park (${info.count})`);
   ok(new Set(info.ids).size === info.count, 'each with a distinct id');
   ok(info.current === 'home', 'and the game boots into Home Park');
 
@@ -1330,27 +1330,15 @@ section('Parks');
     ok(s.grinds >= 1, `${s.id}: at least one grindable line (${s.grinds})`);
   }
 
-  // Switching parks has to move the live ride onto the new map's spawn, not
-  // just swap the object reference out from under it.
+  // Reloading a map has to move the live ride onto its spawn, not just swap
+  // the object reference out from under it.
   const switched = await run(() => {
     const g = window.__skate;
-    g.switchPark('bowl');
+    g.switchPark('home');
     return { id: g.park.id, y: g.ride.pos.y, spawnY: g.park.heightAt(g.park.spawn.x, g.park.spawn.z) };
   });
-  ok(switched.id === 'bowl', 'switchPark loads the requested map');
+  ok(switched.id === 'home', 'switchPark loads the requested map');
   near(switched.y, switched.spawnY, 0.02, 'and drops the rider on its own spawn');
-
-  // Open World's hoop: decorative, not a feature, so nothing above checks it —
-  // confirm it actually exists and sits somewhere sane (above the ground it
-  // hangs over, not buried in it or floating off in the void).
-  const hoop = await run(() => {
-    const g = window.__skate;
-    const p = g.switchPark('open');
-    const h = p.hoops[0];
-    return h && { count: p.hoops.length, y: h.cy, groundY: p.heightAt(h.cx, h.cz), radius: h.radius };
-  });
-  ok(hoop && hoop.count >= 1, `Open World has a hoop to jump through (${hoop?.count ?? 0})`);
-  ok(hoop && hoop.y - hoop.radius > hoop.groundY + 0.3, `and it hangs clear above the ground beneath it (${hoop?.y} vs ${hoop?.groundY})`);
 
   await run(() => window.__skate.switchPark('home'));
 }
@@ -1360,9 +1348,8 @@ section('Park boundary: nowhere to fall off the edge of the world');
 {
   // Nothing is sampled past the dirt around each pad, so before rideBoundZ
   // existed, riding far enough off the edge would fall forever, chasing
-  // ground that was never there. Every park gets checked, since the bound
-  // scales with each one's own extent — including the deliberately
-  // oversized, fenceless Open World map.
+  // ground that was never there. The bound scales with the park's own
+  // extent, so it is checked on the only built-in map.
   const results = await run(() => {
     const g = window.__skate;
     return g.parks.map((def) => {
@@ -1391,21 +1378,18 @@ section('Park boundary: nowhere to fall off the edge of the world');
   // padOnly is the stricter claim: the bound has to be the concrete's own
   // edge, not the much wider dirt run-off a map without it gets — that is
   // the whole difference between "cannot fall off the world" and "cannot
-  // leave the pad at all." Every map is padOnly now except Open World,
-  // which is deliberately built to be roamed past its own pad.
+  // leave the pad at all." Home Park is padOnly, so the ride never leaves
+  // the concrete.
   const padOnly = await run(() => {
     const g = window.__skate;
-    const padded = g.parks.filter((def) => def.id !== 'open').map((def) => g.switchPark(def.id));
-    const open = g.switchPark('open');
+    const p = g.switchPark('home');
     return {
-      allConfined: padded.every((p) => p.rideBoundX === p.extentX && p.rideBoundZ === p.extentZ),
-      allTighterThanDirt: padded.every((p) => p.rideBoundZ < p.worldR),
-      openNotConfined: open.rideBoundZ === open.worldR && open.rideBoundZ > open.extentZ,
+      confined: p.rideBoundX === p.extentX && p.rideBoundZ === p.extentZ,
+      tighterThanDirt: p.rideBoundZ < p.worldR,
     };
   });
-  ok(padOnly.allConfined, 'every padOnly map clamps to its own concrete edge, not the dirt past it');
-  ok(padOnly.allTighterThanDirt, "and that edge is well inside where the dirt's own run-off would allow");
-  ok(padOnly.openNotConfined, 'while Open World is untouched — roaming past its own pad is still free');
+  ok(padOnly.confined, 'Home Park clamps to its own concrete edge, not the dirt past it');
+  ok(padOnly.tighterThanDirt, "and that edge is well inside where the dirt's own run-off would allow");
   await run(() => window.__skate.switchPark('home'));
 }
 
@@ -1598,7 +1582,6 @@ section('Collectibles');
 
   const cleared = await run(() => {
     const g = window.__skate;
-    g.switchPark('bowl');
     g.switchPark('home');
     return g.logos.every((l) => !l.collected);
   });
@@ -2867,8 +2850,8 @@ section('Pants shop and the trouser rack');
 section('Menu scrolling and back buttons, on a short screen');
 {
   // A phone-shaped viewport, short enough that the shop's four board types
-  // and the park picker's fourteen cards cannot possibly fit without
-  // scrolling — the exact case a laptop-sized test window never exercises.
+  // cannot possibly fit without scrolling — the exact case a laptop-sized
+  // test window never exercises.
   await page.setViewportSize({ width: 380, height: 640 });
 
   const store = await run(() => {
@@ -2919,20 +2902,18 @@ section('Menu scrolling and back buttons, on a short screen');
   ok(scrolled.scrollTop > 0, `scrolling the shop actually moves it (scrollTop ${scrolled.scrollTop})`);
   ok(scrolled.backOnScreen, 'and the back button scrolls into view rather than staying stranded below the fold');
 
-  // The park picker gets the same treatment — fourteen cards is a lot more
-  // than the seven this screen was designed around.
+  // The park picker gets the same treatment — with a single built-in park it
+  // no longer needs to scroll, but it still has to render its one card and a
+  // working back button on the short screen.
   const parks = await run(() => {
     const g = window.__skate;
     g.hud.renderParks(g.parks, g.park.id);
     g.hud.show('parks');
-    const el = document.getElementById('screen-parks');
-    const overflows = el.scrollHeight > el.clientHeight;
-    el.scrollTop = el.scrollHeight;
-    return { overflows, hasBack: !!document.getElementById('btn-parks-back'), scrollTop: el.scrollTop };
+    const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
+    return { cards: cards.length, card: cards[0]?.dataset.park, hasBack: !!document.getElementById('btn-parks-back') };
   });
-  ok(parks.overflows, 'the park picker is also taller than a phone screen with fourteen maps in it');
+  ok(parks.cards === 1 && parks.card === 'home', `the park picker lists Home Park (${parks.card ?? 'none'})`);
   ok(parks.hasBack, 'and it has a back button too');
-  ok(parks.scrollTop > 0, `and it scrolls the same way (scrollTop ${parks.scrollTop})`);
 
   await page.setViewportSize({ width: 900, height: 560 });
   await run(() => window.__skate.hud.show('start'));
@@ -3742,7 +3723,7 @@ section('Tutorial and menus');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
     return { count: cards.length, ids: cards.map((c) => c.dataset.park) };
   });
-  ok(picker.count === 14, `the park picker lists all fourteen maps (${picker.count})`);
+  ok(picker.count === 1, `the park picker lists the one built-in map (${picker.count})`);
   const known = await run(() => window.__skate.parks.map((p) => p.id));
   ok(
     picker.ids.every((id) => known.includes(id)),
