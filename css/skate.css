@@ -474,9 +474,11 @@ body {
 }
 
 /* With the HUD hidden, every in-run control disappears except the button that
-   undid it — no score, no joystick, no radio, no trick call-outs, and no
-   gesture trail over the canvas. The game itself and its audio carry on. */
-#app.hide-ui #hud > :not(#btn-hideui),
+   undid it and the live combo — no score, no joystick, no radio, no trick
+   call-outs, and no gesture trail over the canvas. The game itself and its
+   audio carry on. The trick chain and its multiplier are the reward readout,
+   so they stay up even when the rest of the chrome is gone. */
+#app.hide-ui #hud > :not(#btn-hideui):not(#combo),
 #app.hide-ui #gesture-trail {
   display: none !important;
 }
