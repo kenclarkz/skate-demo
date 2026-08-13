@@ -150,7 +150,7 @@ export const TUTORIAL = [
   },
   {
     title: 'Push',
-    body: 'Builds your speed. Hold it down and you keep pushing on your own — legs only move so fast, so there is still a ceiling.',
+    body: 'Builds your speed. A press is one kick; turn on "Hold to push" in Settings and holding it down keeps pushing on your own — legs only move so fast, so there is still a ceiling.',
     keys: 'Hold W',
     touch: 'Left half — hold pulled down',
     pad: 'A  or  right trigger',

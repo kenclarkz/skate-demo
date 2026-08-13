@@ -75,7 +75,7 @@ const DEFAULTS = {
   speed: 16, // top speed, in m/s — see config.js's TOP_SPEED
   camZoom: 1, // chase camera distance, 0.5 (close) .. 1 (default) — see CAM_ZOOM
   musicVolume: 0.5, // 0..1, independent of the sound on/off toggle
-  holdToPush: true, // holding the push key/thumb repeats pushes — see HOLD_TO_PUSH
+  holdToPush: false, // holding the push key/thumb repeats pushes — see HOLD_TO_PUSH; off until a player opts in via Settings
   cameraMode: 'chase', // 'chase', 'first' or 'board' — see CAMERA_MODE
   radioPlaylistId: 'builtin', // the last station picked — see js/skate/radio.js
   radioVisible: true, // whether the in-game radio bar shows at all

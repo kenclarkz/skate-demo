@@ -283,9 +283,11 @@ export function setCamZoom(v) {
 
 // Whether holding the push key/thumb/button keeps pushing on its own (input.js
 // reads this directly — see read()'s push section) or asks for a fresh press
-// every single kick, the way the game originally shipped. A boolean rather
-// than a number, but the same player-adjustable-live pattern as the two above.
-export let HOLD_TO_PUSH = true;
+// every single kick, the way the game originally shipped. Off by default: a
+// new player gets the press-per-kick behaviour until they opt in via Settings.
+// A boolean rather than a number, but the same player-adjustable-live pattern
+// as the two above.
+export let HOLD_TO_PUSH = false;
 export function setHoldToPush(v) {
   HOLD_TO_PUSH = !!v;
 }
