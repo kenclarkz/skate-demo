@@ -244,10 +244,11 @@ export class BoardPreview {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.05, 30);
-    // Pulled in close so the deck's art is big enough to read while it
-    // changes, and aimed a little high so the top design catches the light.
-    this.camera.position.set(0.15, 0.72, 0.48);
-    this.camera.lookAt(0, DISPLAY_Y, DISPLAY_Z);
+    // Raised well above the deck and aimed down at its mid-height, so the
+    // whole top design and the counter around it fall into view instead of a
+    // flat, edge-on look that barely shows the art being painted.
+    this.camera.position.set(0.15, 1.0, 0.55);
+    this.camera.lookAt(0, DISPLAY_Y + DECK_Y / 2, DISPLAY_Z);
 
     this.scene.add(new THREE.HemisphereLight(0xbcd6f0, 0x33302a, 2.0));
     const key = new THREE.DirectionalLight(0xfff2d8, 1.9);
