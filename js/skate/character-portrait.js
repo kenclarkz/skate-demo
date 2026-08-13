@@ -34,10 +34,13 @@ function levels() {
 }
 
 /**
- * Draw `character` front-on, filling `canvas`.
+ * Draw `character`, filling `canvas`.
  *
  * Rectangles go down the page in back-to-front order: legs, torso, arms, then
- * the head and whatever is on it.
+ * the head and whatever is on it. A figure wearing a backpack is drawn from
+ * the back instead of the front — the pack rides the back, so a front
+ * elevation would hide the whole point of the accessory behind the torso, and
+ * the shop card for a pack is meant to advertise the pack itself.
  */
 export function drawPortrait(canvas, character) {
   const cssW = canvas.clientWidth || 96;
@@ -55,6 +58,7 @@ export function drawPortrait(canvas, character) {
 
   const p = character.palette;
   const style = character.style || {};
+  const fromBack = !!style.pack;
   const L = levels();
 
   // One scale for both axes, so nothing is stretched: fit the full figure
@@ -105,15 +109,34 @@ export function drawPortrait(canvas, character) {
     rect(p.skin, x, L.shoulder - 0.11 - C.UPPER_ARM - C.FOREARM - 0.05, 0.075, 0.09);
   }
 
+  // --- a bought backpack: drawn from behind, where it actually lives --------
+  // In the round the shell hides inside the torso's own silhouette, so the
+  // portrait lets it clear the shoulders a little — that, the top flap, and
+  // the two straps wrapping the back are what read as a carried pack rather
+  // than the shirt recoloured.
+  if (fromBack) {
+    const top = L.shoulder + 0.10;
+    const bottom = L.shoulder - 0.14;
+    rect(p.pack, 0, bottom, 0.34, top - bottom);   // the shell over the back
+    rect(p.pack, 0, top - 0.09, 0.32, 0.06);       // the top flap
+    rect(p.strap, 0.085, bottom + 0.02, 0.05, 0.16); // the shoulder straps
+    rect(p.strap, -0.085, bottom + 0.02, 0.05, 0.16);
+  }
+
   // --- neck and head -------------------------------------------------------
   rect(p.skin, 0, L.shoulder - 0.005, 0.09, 0.11);
   rect(p.skin, 0, L.head - 0.1, 0.165, 0.2);
-  rect(p.skin, 0, L.head - 0.093, 0.09, 0.04); // jaw
+  if (!fromBack) rect(p.skin, 0, L.head - 0.093, 0.09, 0.04); // jaw
 
-  // Eyes, at the same height off the head's middle as the rig puts them.
+  // Eyes, at the same height off the head's middle as the rig puts them. A
+  // back view has none — the shade of hair the rider wears is the identity
+  // from behind, and a pair of eyes floating on the back of a head reads as
+  // a mistake rather than as the character.
   const eyeY = L.head + 0.005;
-  rect(0x1a1a1c, 0.042, eyeY, 0.026, 0.02);
-  rect(0x1a1a1c, -0.042, eyeY, 0.026, 0.02);
+  if (!fromBack) {
+    rect(0x1a1a1c, 0.042, eyeY, 0.026, 0.02);
+    rect(0x1a1a1c, -0.042, eyeY, 0.026, 0.02);
+  }
 
   // --- headwear: the thing that actually tells them apart ------------------
   if (style.head === 'beanie') {
@@ -125,7 +148,7 @@ export function drawPortrait(canvas, character) {
     for (const side of [-1, 1]) rect(p.hair, side * 0.087, L.head - 0.125, 0.028, 0.19);
   } else if (style.head === 'helmet') {
     rect(p.cap, 0, L.head + 0.033, 0.19, 0.125);
-    rect(p.cap, 0, L.head + 0.023, 0.196, 0.03); // front lip
+    if (!fromBack) rect(p.cap, 0, L.head + 0.023, 0.196, 0.03); // front lip
     for (const side of [-1, 1]) rect(p.band, side * 0.083, L.head - 0.11, 0.026, 0.14);
   } else if (style.head === 'tiger') {
     rect(p.hair, 0, L.head + 0.05, 0.175, 0.075);
@@ -162,16 +185,16 @@ export function drawPortrait(canvas, character) {
     rect(p.cap, 0, L.head + 0.058, 0.185, 0.075);
     rect(p.cap, 0, L.head + 0.088, 0.185, 0.06); // back panel
     rect(p.band, 0, L.head + 0.048, 0.19, 0.028);
-    rect(p.cap, 0, L.head + 0.038, 0.15, 0.02);  // the peak, edge-on
+    if (!fromBack) rect(p.cap, 0, L.head + 0.038, 0.15, 0.02); // the peak, edge-on
   } else {
     rect(p.hair, 0, L.head + 0.05, 0.17, 0.06);
     rect(p.cap, 0, L.head + 0.078, 0.176, 0.075);
-    rect(p.cap, 0, L.head + 0.077, 0.176, 0.022); // peak, seen edge-on from the front
+    if (!fromBack) rect(p.cap, 0, L.head + 0.077, 0.176, 0.022); // peak, seen edge-on from the front
   }
 
   // A bought pair of shades goes over the eyes, on top of whatever is on the
   // head — the last pass, so the lenses read as being out in front of the face.
-  if (style.shades) {
+  if (style.shades && !fromBack) {
     rect(p.shades, 0, eyeY - 0.01, 0.2, 0.055); // the frame bar across the bridge
     rect(p.lens, 0.05, eyeY - 0.005, 0.075, 0.045);
     rect(p.lens, -0.05, eyeY - 0.005, 0.075, 0.045);
