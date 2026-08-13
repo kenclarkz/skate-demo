@@ -13,7 +13,7 @@
 // height field to ride it correctly, and nothing else in the game has one.
 
 import * as THREE from '../game/three.js';
-import { Slab, Bank, Quarter, Stairs, Bowl, bowlU, bowlProfile, SMOOTH, CONCRETE, CONCRETE_DARK, RAMP, STEEL, PAINT, DIRT } from './park.js';
+import { Slab, Bank, Quarter, Stairs, Bowl, bowlU, bowlProfile, SMOOTH, CONCRETE, CONCRETE_DARK, RAMP, STEEL, PAINT, DIRT, COPING } from './park.js';
 
 // --- palettes -------------------------------------------------------------
 
@@ -280,7 +280,11 @@ export const OBJECTS = [
     },
     preview(o) {
       const H = Math.min(sh(o, o.H), o.R - 0.05);
-      return new THREE.Mesh(quarterGeo(o.w, o.R, H, o.deck), mat(objectColor(o.color)));
+      const color = objectColor(o.color);
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(quarterGeo(o.w, o.R, H, o.deck), mat(color)));
+      previewCoping(g, o.w, H, quarterU(o.R, H), COPING);
+      return g;
     },
   },
 
@@ -356,6 +360,7 @@ export const OBJECTS = [
       const color = objectColor(o.color);
       const g = new THREE.Group();
       g.add(new THREE.Mesh(quarterGeo(o.w, o.R, H, 0), mat(color)));
+      previewCoping(g, o.w, H, uTop, COPING);
       if (o.deck > 0) {
         const depth = slabDepth(H);
         g.add(box(o.w, depth, o.deck, 0, H - depth / 2, uTop + o.deck / 2, color));
@@ -415,6 +420,9 @@ export const OBJECTS = [
       s.rotateY(Math.PI);
       s.translate(0, 0, -half);
       g.add(new THREE.Mesh(s, mat(color)));
+      const uTop = quarterU(o.R, H);
+      previewCoping(g, o.w, H, half + uTop, COPING);
+      previewCoping(g, o.w, H, -half - uTop, COPING);
       return g;
     },
   },
@@ -477,8 +485,18 @@ export const OBJECTS = [
     },
     preview(o) {
       const H = Math.min(sh(o, o.H), o.R - 0.05);
+      const color = objectColor(o.color);
+      const g = new THREE.Group();
       const pts = bowlProfile(o.R, H, o.rim).map(([u, y]) => new THREE.Vector2(u, y));
-      return new THREE.Mesh(new THREE.LatheGeometry(pts, 32), mat(objectColor(o.color)));
+      g.add(new THREE.Mesh(new THREE.LatheGeometry(pts, 32), mat(color)));
+      // The polished coping ring let into the lip, matching the real bowl's
+      // mesh so the editor previews what a built park actually wears.
+      const ring = new THREE.TorusGeometry(bowlU(o.R, H), 0.045, 10, 32);
+      ring.rotateX(Math.PI / 2);
+      const coping = new THREE.Mesh(ring, mat(COPING));
+      coping.position.y = H;
+      g.add(coping);
+      return g;
     },
   },
 
@@ -829,6 +847,18 @@ export const OBJECTS = [
       g.add(new THREE.Mesh(back, mat(color)));
       g.add(new THREE.Mesh(right, mat(color)));
       g.add(new THREE.Mesh(left, mat(color)));
+      const uTop = quarterU(o.R, H);
+      // Coping along each of the four lips: the two along local x (the
+      // funbox's width) and the two along local z (its depth).
+      previewCoping(g, o.w, H, o.d / 2 + uTop, COPING);
+      previewCoping(g, o.w, H, -o.d / 2 - uTop, COPING);
+      const sideM = mat(COPING);
+      const sideGeo = new THREE.BoxGeometry(0.09, 0.09, o.d);
+      for (const sx of [o.w / 2 + uTop, -o.w / 2 - uTop]) {
+        const bar = new THREE.Mesh(sideGeo, sideM);
+        bar.position.set(sx, H - 0.012, 0);
+        g.add(bar);
+      }
       return g;
     },
   },
@@ -1019,6 +1049,13 @@ function box(w, h, d, x, y, z, color) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
   mesh.position.set(x, y, z);
   return mesh;
+}
+
+/** A galvanised coping bar for a preview: a slim slab laid along local x at
+ * the lip, mirroring the real park's chunkier coping — and its sunk depth —
+ * so what the editor shows is what a built park actually wears. */
+function previewCoping(g, width, h, z, color) {
+  g.add(box(width, 0.09, 0.09, 0, h - 0.012, z, color));
 }
 
 function quarterU(R, H) {
@@ -1228,6 +1265,8 @@ function halfPipePreview(o) {
   s.rotateY(Math.PI);
   s.translate(0, 0, -o.flat / 2);
   g.add(new THREE.Mesh(s, mat(color)));
+  previewCoping(g, o.w, H, o.flat / 2 + uTop, COPING);
+  previewCoping(g, o.w, H, -o.flat / 2 - uTop, COPING);
   if (o.deck > 0) {
     const depth = slabDepth(H);
     g.add(box(o.w, depth, o.deck, 0, H - depth / 2, o.flat / 2 + uTop, color));
