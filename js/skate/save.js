@@ -75,6 +75,7 @@ const DEFAULTS = {
   radioPlaylistId: 'builtin', // the last station picked — see js/skate/radio.js
   radioVisible: true, // whether the in-game radio bar shows at all
   radioEnabled: true, // master switch for the whole Skate Radio — see js/skate/radio.js
+  radioVolume: 1, // 0..1, the Spotify player's own volume — see js/skate/radio.js
 };
 
 // `boards`, `outfits`, `accessories` and `customCharacters` (which ones are
@@ -307,6 +308,10 @@ function read() {
     s.radioPlaylistId = typeof s.radioPlaylistId === 'string' ? s.radioPlaylistId : 'builtin';
     s.radioVisible = s.radioVisible !== false;
     s.radioEnabled = s.radioEnabled !== false;
+    // Same 0-is-valid reasoning as musicVolume: a muted Spotify player must
+    // stay muted across reloads.
+    const rv = Number(s.radioVolume);
+    s.radioVolume = Number.isFinite(rv) ? Math.min(1, Math.max(0, rv)) : DEFAULTS.radioVolume;
     // The starter board and the starter outfit are always owned, whatever a
     // hand-edited save says.
     s.boards = Array.isArray(parsed.boards)
@@ -573,6 +578,9 @@ export const save = {
   },
   get radioEnabled() {
     return state.radioEnabled;
+  },
+  get radioVolume() {
+    return state.radioVolume;
   },
 
   /** @returns true if this beat the previous best combo. */
@@ -959,6 +967,14 @@ export const save = {
    *  stands every radio control down — see js/skate/radio.js. */
   setRadioEnabled(on) {
     state.radioEnabled = on !== false;
+    flush();
+  },
+
+  /** 0..1, the Spotify player's own volume. Same 0-is-valid reasoning as
+   *  setMusicVolume — a muted player stays muted. */
+  setRadioVolume(v) {
+    const n = Number(v);
+    state.radioVolume = Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : DEFAULTS.radioVolume;
     flush();
   },
 

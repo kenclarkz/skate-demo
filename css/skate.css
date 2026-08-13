@@ -900,6 +900,12 @@ body {
   min-height: 46px;
 }
 
+/* A plain readout (no slider) sits the value in the same right-hand slot the
+   sliders' live labels use. */
+.setting-row.readout span {
+  grid-column: 3;
+}
+
 .setting-row label {
   font-size: 13px;
   font-weight: 600;

@@ -1133,6 +1133,12 @@ export class Radio {
     this.renderVisibleBtn();
     this.enabled = this.ctx.save?.radioEnabled !== false;
     this.renderEnabledBtn();
+    // Apply the saved Spotify volume. The provider re-asserts `_volume` the
+    // moment the SDK player connects (and to any player already connected),
+    // so this is safe whether or not the session has been restored yet.
+    const rv = Number(this.ctx.save?.radioVolume);
+    this.provider._volume = Number.isFinite(rv) ? Math.min(1, Math.max(0, rv)) : 1;
+    if (this.provider.spotifyPlayer) this.provider.setVolume(this.provider._volume);
     this.provider.onSignOut = () => {
       this.connected = false;
       this.station = null;
@@ -1573,6 +1579,15 @@ export class Radio {
     this.syncPanel();
   }
 
+  /** 0..1, the Spotify player's own volume. Persisted and applied live to the
+   *  SDK player — the pause menu's slider drives this. */
+  setVolume(v) {
+    const n = Number(v);
+    const vol = Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
+    this.ctx.save?.setRadioVolume?.(vol);
+    this.provider.setVolume(vol);
+  }
+
   /** Turn the radio off: pause whatever Spotify is playing and let the theme
    *  come back at its saved volume. The SDK's own togglePlay is the control,
    *  guarded by the state it reported, so an already-paused player is never
@@ -1667,6 +1682,7 @@ export class Radio {
     this.renderVisibleBtn();
     this.enabled = true;
     this.renderEnabledBtn();
+    this.setVolume(1);
     this.station = BUILTIN_STATION;
     this.playing = false;
     this.now = null;

@@ -516,6 +516,11 @@ export class Hud {
     this.camZoomValueEl = document.getElementById('camzoom-value');
     this.musicRange = document.getElementById('music-range');
     this.musicValueEl = document.getElementById('music-value');
+    this.pauseSpeedEl = document.getElementById('pause-speed');
+    this.pauseMusicRange = document.getElementById('pause-music-range');
+    this.pauseMusicValueEl = document.getElementById('pause-music-value');
+    this.pauseSpotifyRange = document.getElementById('pause-spotify-range');
+    this.pauseSpotifyValueEl = document.getElementById('pause-spotify-value');
 
     this.on = {
       play: null,
@@ -533,6 +538,7 @@ export class Hud {
       speed: null,
       camZoom: null,
       musicVolume: null,
+      spotifyVolume: null,
       holdToPush: null,
       cameraMode: null,
       camcycle: null,
@@ -784,6 +790,16 @@ export class Hud {
       this.setMusicVolumeValue(v);
       this.on.musicVolume?.(v);
     });
+    this.pauseMusicRange?.addEventListener('input', () => {
+      const v = Number(this.pauseMusicRange.value) / 100;
+      this.setMusicVolumeValue(v);
+      this.on.musicVolume?.(v);
+    });
+    this.pauseSpotifyRange?.addEventListener('input', () => {
+      const v = Number(this.pauseSpotifyRange.value) / 100;
+      this.setSpotifyVolumeValue(v);
+      this.on.spotifyVolume?.(v);
+    });
     this.boardGrid?.addEventListener('click', (e) => {
       const card = e.target.closest('[data-board]');
       if (card) this.on.board?.(card.dataset.board);
@@ -895,6 +911,8 @@ export class Hud {
     if (kmh === this._speed) return;
     this._speed = kmh;
     this.speedEl.textContent = `${kmh}`;
+    // The pause menu's own readout shows the speed the player stopped at.
+    if (this.pauseSpeedEl) this.pauseSpeedEl.textContent = `${kmh} km/h`;
   }
 
   /** Height off the ground, shown only while it is worth showing. */
@@ -1174,6 +1192,17 @@ export class Hud {
     const pct = Math.round(Number(v) * 100);
     if (this.musicRange) this.musicRange.value = pct;
     if (this.musicValueEl) this.musicValueEl.textContent = pct === 0 ? 'Off' : `${pct}%`;
+    // The pause menu carries the same slider, so both stay in lockstep.
+    if (this.pauseMusicRange) this.pauseMusicRange.value = pct;
+    if (this.pauseMusicValueEl) this.pauseMusicValueEl.textContent = pct === 0 ? 'Off' : `${pct}%`;
+  }
+
+  /** The Spotify-volume slider on the pause menu and its live label. `v` is
+   * 0..1, straight through to the SDK player. */
+  setSpotifyVolumeValue(v) {
+    const pct = Math.round(Number(v) * 100);
+    if (this.pauseSpotifyRange) this.pauseSpotifyRange.value = pct;
+    if (this.pauseSpotifyValueEl) this.pauseSpotifyValueEl.textContent = pct === 0 ? 'Off' : `${pct}%`;
   }
 
   /** The career numbers, on the start screen. */
