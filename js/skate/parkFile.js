@@ -14,6 +14,7 @@
 // custom park is exactly the same 52 × 60 m site as Home Park.
 
 import { buildObjects, clearAt, isHexColor, newObject, objectType, padColor } from './parkObjects.js';
+import { buildParkGraph } from './parkGraph.js';
 import { PARK_X, PARK_Z } from './park.js';
 
 export { PARK_X, PARK_Z };
@@ -182,6 +183,9 @@ export function buildDef(file) {
     // built-in padOnly maps; legacy square parks stay roamable by default.
     padOnly: !!file.padOnly,
     ground: padColor(file),
+    // The park graph — how this park's skateable features connect — computed
+    // from the same object list the editor edits and the game rides.
+    graph: buildParkGraph(file.objects),
     build(p) {
       buildObjects(p, file.objects);
     },
