@@ -6,7 +6,7 @@
 //
 // To ship an update: bump VERSION. That is the entire release process.
 
-const VERSION = 'v25';
+const VERSION = 'v26';
 const CACHE = `skate-${VERSION}`;
 
 // All relative — this worker's scope is the repo's own Pages root.
@@ -53,6 +53,7 @@ const ASSETS = [
   'js/skate/lighting.js',
   'js/skate/radio.js',
   'js/skate/parkObjects.js',
+  'js/skate/parkGraph.js',
   'js/skate/parkLayouts.js',
   'js/skate/parkFile.js',
   'js/skate/parkStorage.js',
