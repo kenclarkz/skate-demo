@@ -134,6 +134,7 @@ export class Ride {
     this.apex = 0;
 
     this.push = -1;           // 0..1 through a push cycle; -1 when idle
+    this.pushFakie = false;   // the last push drove backwards (a fakie push)
     this.pushCool = 0;
     this.sliding = false;
     this.slideYaw = 0;
@@ -297,6 +298,9 @@ export class Ride {
     this.wasCharging = !!input.charge;
 
     // --- pushing ----------------------------------------------------------
+    // A push drives whichever way the board is already rolling: riding forward
+    // it pushes forward, riding fakie it pushes backwards — the same key, the
+    // same hold-to-push, the same speed settings, just the other direction.
     if (this.pushCool > 0) this.pushCool -= dt;
     if (
       input.push &&
@@ -304,10 +308,10 @@ export class Ride {
       this.mode === GROUND &&
       !this.manual &&
       !this.braking &&
-      this.pushCool <= 0 &&
-      this.speed > -0.5
+      this.pushCool <= 0
     ) {
       this.push = 0;
+      this.pushFakie = this.speed < 0;
       this.pushCool = C.PUSH_MIN_INTERVAL;
       this.pushCount++;
       this.emit('push', {});
@@ -404,9 +408,10 @@ export class Ride {
       if (rough) a -= sgn * C.ROUGH_FRICTION;
     }
     // The push drives only while the foot is actually sweeping, and gives out as
-    // the board catches up with how fast a leg can move.
+    // the board catches up with how fast a leg can move. Signed off travel so a
+    // fakie push accelerates the board backwards to the same top speed.
     if (this.pushDriving()) {
-      a += C.PUSH_IMPULSE * speedSetting * Math.max(0, 1 - sp / C.TOP_SPEED);
+      a += sgn * C.PUSH_IMPULSE * speedSetting * Math.max(0, 1 - sp / C.TOP_SPEED);
     }
     // Dragging the back foot scrubs speed against the roll and the slope alike —
     // signed off travel, so it bites rolling forward or back the same way.
@@ -1240,6 +1245,7 @@ export class Ride {
     s.hipShift -= bal * 0.06;
 
     s.push = this.push;
+    s.pushFakie = this.pushFakie;
     s.pushPlanted = this.pushDriving();
     s.frontFootTurn = this.push >= 0 ? 0.75 : 0;
   }
