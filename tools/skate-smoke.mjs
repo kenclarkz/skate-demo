@@ -884,6 +884,102 @@ section('Hopping off a grind');
 }
 
 // --------------------------------------------------------------------------
+section('Hop-off gesture reaches the game');
+{
+  // The physics tests above drive a trick straight at readInput(). The live
+  // game sits behind the gesture recogniser, and the hop's sideways slide is
+  // a real gesture problem: the recogniser only used to classify a flick once
+  // the pull had loaded the legs, so a slide left or right off a rail — no
+  // pull, ever — produced no input at all. Drive the recogniser's own
+  // pointer path to prove a horizontal swipe now queues the shove-it family
+  const swipe = await run(() => {
+    const ev = (x, y, id) => ({ clientX: x, clientY: y, pointerId: id, target: { closest: () => null } });
+    const g = window.__skate;
+    const input = g.input;
+    input.enabled = true;
+    input.clear();
+    // A pure sideways swipe on the flick side, straight across, no pull down.
+    input.down(ev(700, 300, 1));
+    input.move(ev(590, 300, 1));
+    input.up(ev(590, 300, 1));
+    const queued = input.queue.slice();
+    input.clear();
+    return queued;
+  });
+  ok(
+    swipe.length === 1 && swipe[0].trick === 'shuv360' && swipe[0].charge === 0,
+    `a left swipe with no pull queues a shove-it with no charge (${JSON.stringify(swipe)})`
+  );
+
+  const swipeRight = await run(() => {
+    const ev = (x, y, id) => ({ clientX: x, clientY: y, pointerId: id, target: { closest: () => null } });
+    const g = window.__skate;
+    const input = g.input;
+    input.enabled = true;
+    input.clear();
+    input.down(ev(700, 300, 1));
+    input.move(ev(810, 300, 1));
+    input.up(ev(810, 300, 1));
+    const queued = input.queue.slice();
+    input.clear();
+    return queued;
+  });
+  ok(
+    swipeRight.length === 1 && swipeRight[0].trick === 'fsshuv360' && swipeRight[0].charge === 0,
+    `and a right swipe queues its own side (${JSON.stringify(swipeRight)})`
+  );
+
+  // The pull-then-flick gesture keeps its charge — the pop that pays for a
+  // strong hop is still the pull, exactly as before.
+  const pullFlick = await run(() => {
+    const ev = (x, y, id) => ({ clientX: x, clientY: y, pointerId: id, target: { closest: () => null } });
+    const g = window.__skate;
+    const input = g.input;
+    input.enabled = true;
+    input.clear();
+    input.down(ev(700, 250, 1));
+    input.move(ev(700, 340, 1));
+    input.move(ev(590, 340, 1));
+    input.up(ev(590, 340, 1));
+    const queued = input.queue.slice();
+    input.clear();
+    return queued;
+  });
+  ok(
+    pullFlick.length === 1 && pullFlick[0].trick === 'shuv360' && pullFlick[0].charge > 0,
+    `a pull-then-flick keeps the charge that sizes the hop (${JSON.stringify(pullFlick)})`
+  );
+
+  // And the queued trick really hops once it drains into a live grind: place
+  // the board on the rail, queue the gesture, then run a real frame with the
+  // frame's own read() (the exact path the loop uses).
+  const live = await run(() => {
+    const ev = (x, y, id) => ({ clientX: x, clientY: y, pointerId: id, target: { closest: () => null } });
+    const g = window.__skate;
+    g.place(-22, -22, 0, 6.5);
+    g.drive(1 / 120, { trick: 'ollie', trickCharge: 0.55 });
+    for (let i = 0; i < 240 && g.ride.mode !== 2; i++) g.drive(1 / 120, {});
+    if (g.ride.mode !== 2) return { locked: false };
+    const input = g.input;
+    input.enabled = true;
+    input.clear();
+    input.down(ev(700, 300, 2));
+    input.move(ev(590, 300, 2));
+    input.up(ev(590, 300, 2));
+    const before = { mode: g.ride.mode, queued: input.queue.slice() };
+    const frame = input.read();
+    g.drive(1 / 120, frame);
+    const after = { mode: g.ride.mode, frameTrick: frame.trick };
+    return { locked: true, before, after };
+  });
+  ok(live.locked, 'a hop-through-read test locks onto the rail first');
+  ok(
+    live.after.mode === 1 && live.after.frameTrick === 'shuv360',
+    `and a swipe drained by the frame's own read() hops off (${JSON.stringify(live.after)})`
+  );
+}
+
+// --------------------------------------------------------------------------
 section('Slams');
 {
   const wall = await run(() => {

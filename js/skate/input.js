@@ -174,6 +174,8 @@ export class Input {
     this.padCharge = 0;
     this.padPulled = false;
     this.padCurl = 0;
+    this.padSlideArmed = false;
+    this.padSlideAngle = 0;
     this.chargedFor = 0;
 
     this.bind();
@@ -319,19 +321,24 @@ export class Input {
       return;
     }
 
-    if (p.pulled) {
-      const dx = p.x - p.lowX;
-      const dy = p.y - p.lowY;
-      if (Math.hypot(dx, dy) > FLICK_MIN) {
-        const angle = Math.atan2(-dy, dx);
-        // Normalised so 1.0 is exactly the old on/off threshold and further
-        // out is a bigger scoop still — classify() reads magnitude now, not
-        // just which side it came from.
-        const trick = classify(angle, p.curl / CURL_MIN);
-        // The charge at the bottom of the pull is what the pop is worth: flicking
-        // out of it does not un-load your legs.
-        if (trick) this.queue.push({ trick, charge: this.flickCharge });
-      }
+    const dx = p.x - p.lowX;
+    const dy = p.y - p.lowY;
+    // A flick needs the pull to have loaded the legs — except straight across.
+    // Sliding sideways never loads a pull (the rail hop-off is exactly that:
+    // slide left or right to jump off that way), so a swipe that went sideways
+    // without ever pulling still reads as the shove-it flick it is, just with
+    // no charge behind it.
+    const sideways = Math.abs(dx) > Math.abs(dy);
+    if (Math.hypot(dx, dy) > FLICK_MIN && (p.pulled || sideways)) {
+      const angle = Math.atan2(-dy, dx);
+      // Normalised so 1.0 is exactly the old on/off threshold and further
+      // out is a bigger scoop still — classify() reads magnitude now, not
+      // just which side it came from.
+      const trick = classify(angle, p.curl / CURL_MIN);
+      // The charge at the bottom of the pull is what the pop is worth: flicking
+      // out of it does not un-load your legs. A sideways slide with no pull has
+      // no charge, and physics.js falls back to a minimum pop for it.
+      if (trick) this.queue.push({ trick, charge: p.pulled ? this.flickCharge : 0 });
     }
     this.stashTrail(p);
     this.flickActive = false;
@@ -475,6 +482,23 @@ export class Input {
       this.padPulled = false;
       this.padCharge = 0;
       this.padCurl = 0;
+    } else if (!this.padPulled && this.padSlideArmed && Math.abs(rx) < 0.5 && Math.abs(ry) < 0.5) {
+      // Released a straight sideways push that never pulled — the stick's own
+      // slide-to-the-side, the same no-charge shove-it flick the touch path
+      // reads from a horizontal swipe. Only the direction it went is used.
+      const trick = classify(this.padSlideAngle, 0);
+      if (trick) this.queue.push({ trick, charge: 0 });
+      this.padSlideArmed = false;
+      this.padSlideAngle = 0;
+    }
+    // Arming the sideways slide: shoved straight across (left or right), with
+    // no pull behind it, it pops that way when the stick comes back through
+    // the middle — the gamepad spelling of the hop-off slide.
+    if (!this.padPulled && !(ry > 0.55) && Math.abs(rx) > 0.6 && Math.abs(ry) < 0.3) {
+      this.padSlideArmed = true;
+      this.padSlideAngle = Math.atan2(0, rx);
+    } else if (!this.padPulled && !(Math.abs(rx) > 0.6 && Math.abs(ry) < 0.3)) {
+      this.padSlideArmed = false;
     }
     if (this.padPulled) out.charge = true;
     if (pad.buttons[6]?.pressed || pad.buttons[4]?.pressed) out.slide = true;
@@ -595,6 +619,8 @@ export class Input {
     this.wasPushHeld = false;
     this.padPulled = false;
     this.padCharge = 0;
+    this.padSlideArmed = false;
+    this.padSlideAngle = 0;
     this.grabKey = null;
     this.touchGrab = null;
     this.recentTrails.length = 0;
