@@ -158,6 +158,12 @@ export const OBJECTS = [
     label: 'Slab',
     hint: 'A flat pad. Lay them down for ground, platforms and manual pads.',
     defaults: { w: 8, d: 4, h: 0.25, color: 'concrete' },
+    meta: {
+      kind: 'flat',
+      grindable: false,
+      difficulty: 1,
+      tags: ['flat', 'manual', 'ground', 'pad'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 24, step: 0.1, unit: 'm' },
       { key: 'd', label: 'Depth', min: 0.5, max: 24, step: 0.1, unit: 'm' },
@@ -182,6 +188,12 @@ export const OBJECTS = [
     label: 'Bank',
     hint: 'A straight incline from the ground up to its tall end.',
     defaults: { w: 4, len: 5, h: 1.4, color: 'wood' },
+    meta: {
+      kind: 'transition',
+      grindable: false,
+      difficulty: 2,
+      tags: ['transition', 'ramp', 'bank'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
       { key: 'len', label: 'Length', min: 0.5, max: 20, step: 0.1, unit: 'm' },
@@ -232,6 +244,12 @@ export const OBJECTS = [
     label: 'Quarterpipe',
     hint: 'A ramp that starts flat and arcs up — the classic park wall.',
     defaults: { w: 4, R: 2.4, H: 1.8, deck: 0.6, color: 'wood' },
+    meta: {
+      kind: 'transition',
+      grindable: false,
+      difficulty: 2,
+      tags: ['transition', 'ramp', 'quarterpipe'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
       { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
@@ -266,6 +284,12 @@ export const OBJECTS = [
     label: 'Mini Ramp',
     hint: 'A half-pipe: two quarterpipes facing off over a flat, coping on both lips.',
     defaults: { w: 4, R: 1.8, H: 1.25, flat: 4, deck: 1.2, color: 'wood' },
+    meta: {
+      kind: 'transition',
+      grindable: 'coping',
+      difficulty: 3,
+      tags: ['transition', 'ramp', 'halfpipe', 'coping'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
       { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
@@ -289,6 +313,12 @@ export const OBJECTS = [
     label: 'Roll-In Ramp',
     hint: 'A tall transition up to a deep platform — stand on it and drop to the flat.',
     defaults: { w: 4, R: 2.8, H: 1.8, deck: 4, color: 'wood' },
+    meta: {
+      kind: 'transition',
+      grindable: 'coping',
+      difficulty: 2,
+      tags: ['transition', 'ramp', 'deck', 'coping'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
       { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
@@ -334,6 +364,12 @@ export const OBJECTS = [
     label: 'Spine Ramp',
     hint: 'Two transitions back to back — the only way across is a transfer over the top.',
     defaults: { w: 4, R: 2.0, H: 1.4, gap: 1.0, color: 'wood' },
+    meta: {
+      kind: 'transition',
+      grindable: 'coping',
+      difficulty: 4,
+      tags: ['transition', 'ramp', 'spine', 'transfer', 'coping'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
       { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
@@ -383,6 +419,12 @@ export const OBJECTS = [
     label: 'Vert Ramp',
     hint: 'A big half-pipe with near-vertical walls — the classic big-air ramp.',
     defaults: { w: 6, R: 3.5, H: 3.0, flat: 5, deck: 2.5, color: 'wood' },
+    meta: {
+      kind: 'transition',
+      grindable: 'coping',
+      difficulty: 5,
+      tags: ['transition', 'ramp', 'halfpipe', 'vert', 'big-air', 'coping'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
       { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
@@ -406,6 +448,12 @@ export const OBJECTS = [
     label: 'Small Bowl',
     hint: 'A round pool of transition — drop in, pump around the walls, launch airs from any side.',
     defaults: { R: 2.0, H: 1.2, rim: 1.0, color: 'wood' },
+    meta: {
+      kind: 'transition',
+      grindable: false,
+      difficulty: 3,
+      tags: ['transition', 'bowl', 'pool'],
+    },
     props: [
       { key: 'R', label: 'Radius', min: 0.6, max: 6, step: 0.05, unit: 'm' },
       { key: 'H', label: 'Height', min: 0.3, max: 5, step: 0.05, unit: 'm' },
@@ -434,6 +482,12 @@ export const OBJECTS = [
     label: 'Stairs',
     hint: 'Steps up to a deck. The tall end meets whatever you place behind it.',
     defaults: { w: 3, steps: 4, rise: 0.18, run: 0.28, color: 'dark' },
+    meta: {
+      kind: 'stair',
+      grindable: false,
+      difficulty: 3,
+      tags: ['stairs', 'step', 'gap'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.5, max: 20, step: 0.1, unit: 'm' },
       { key: 'steps', label: 'Steps', min: 1, max: 10, step: 1, unit: '' },
@@ -479,6 +533,12 @@ export const OBJECTS = [
     label: 'Rail',
     hint: 'A round grindable bar on posts, at whatever height you set.',
     defaults: { len: 4, h: 0.9, r: 0.045, color: 'steel' },
+    meta: {
+      kind: 'rail',
+      grindable: 'rail',
+      difficulty: 3,
+      tags: ['rail', 'grind', 'flatbar'],
+    },
     props: [
       { key: 'len', label: 'Length', min: 1, max: 16, step: 0.1, unit: 'm' },
       { key: 'h', label: 'Height', min: 0.1, max: 3, step: 0.05, unit: 'm' },
@@ -518,6 +578,12 @@ export const OBJECTS = [
     label: 'Ledge',
     hint: 'A low platform with a grindable top edge down its front.',
     defaults: { len: 4, w: 1.2, h: 0.6, color: 'concrete' },
+    meta: {
+      kind: 'ledge',
+      grindable: 'ledge',
+      difficulty: 3,
+      tags: ['ledge', 'grind'],
+    },
     props: [
       { key: 'len', label: 'Length', min: 1, max: 16, step: 0.1, unit: 'm' },
       { key: 'w', label: 'Depth', min: 0.6, max: 6, step: 0.1, unit: 'm' },
@@ -549,6 +615,12 @@ export const OBJECTS = [
     label: 'Hoop',
     hint: 'A decorative ring to jump through — no collision or grind, just style.',
     defaults: { r: 1.6, tube: 0.12, color: '#e0552f' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'gap', 'air'],
+    },
     props: [
       { key: 'r', label: 'Radius', min: 0.8, max: 5, step: 0.1, unit: 'm' },
       { key: 'tube', label: 'Tube', min: 0.05, max: 0.4, step: 0.01, unit: 'm' },
@@ -569,6 +641,12 @@ export const OBJECTS = [
     label: 'Funbox',
     hint: 'A box of quarterpipes on every side, with a coping on each lip.',
     defaults: { w: 4, d: 4, h: 1.2, R: 1.6, color: 'wood' },
+    meta: {
+      kind: 'transition',
+      grindable: 'coping',
+      difficulty: 4,
+      tags: ['funbox', 'box', 'quarterpipe', 'coping'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 2, max: 14, step: 0.1, unit: 'm' },
       { key: 'd', label: 'Depth', min: 2, max: 14, step: 0.1, unit: 'm' },
@@ -699,6 +777,86 @@ export function objectType(id) {
  * editor's selection outline draws and the spawn/patrol generators keep clear. */
 export function boundsOf(o) {
   return objectType(o.type).footprint(o);
+}
+
+/** The object's on-the-ground size in metres, after its own transform scales.
+ * Each type derives it from the same params its builder reads, so the number
+ * a future AI sees is the shape it will actually have to skate. */
+export function objectDimensions(o) {
+  const sy = o.sy || 1;
+  const sx = o.sx || 1;
+  const sz = o.sz || 1;
+  const hs = (v) => v * sy;
+  switch (o.type) {
+    case 'slab':
+      return { width: o.w * sx, depth: o.d * sz, height: hs(o.h) };
+    case 'bank':
+      return { width: o.w * sx, depth: o.len * sz, height: hs(o.h) };
+    case 'quarter': {
+      const H = Math.min(hs(o.H), o.R - 0.05);
+      return { width: o.w * sx, depth: (quarterU(o.R, H) + o.deck) * sz, height: H };
+    }
+    case 'mini':
+    case 'vert': {
+      const H = Math.min(hs(o.H), o.R - 0.05);
+      const run = o.flat + 2 * (quarterU(o.R, H) + o.deck);
+      return { width: o.w * sx, depth: run * sz, height: H };
+    }
+    case 'rollin': {
+      const H = Math.min(hs(o.H), o.R - 0.05);
+      return { width: o.w * sx, depth: (quarterU(o.R, H) + o.deck) * sz, height: H };
+    }
+    case 'spine': {
+      const H = Math.min(hs(o.H), o.R - 0.05);
+      return { width: o.w * sx, depth: (o.gap + 2 * quarterU(o.R, H)) * sz, height: H };
+    }
+    case 'bowl': {
+      const H = Math.min(hs(o.H), o.R - 0.05);
+      const r = (quarterU(o.R, H) + o.rim) * sx;
+      const rz = (quarterU(o.R, H) + o.rim) * sz;
+      return { width: r * 2, depth: rz * 2, height: H };
+    }
+    case 'stairs':
+      return { width: o.w * sx, depth: o.steps * o.run * sz, height: o.steps * hs(o.rise) };
+    case 'rail':
+      return { width: o.len * sx, depth: o.r * 2, height: hs(o.h) + o.r };
+    case 'ledge':
+      return { width: o.len * sx, depth: o.w * sz, height: hs(o.h) };
+    case 'hoop':
+      return { width: o.r * 2, depth: o.r * 2, height: o.r * 2 };
+    case 'funbox':
+      return { width: o.w * sx, depth: o.d * sz, height: hs(o.h) };
+    default:
+      return { width: 0, depth: 0, height: 0 };
+  }
+}
+
+/**
+ * Everything a consumer (the park graph, a future AI, the editor's inspector)
+ * needs to know about a placed object: its kind, how hard it is, whether and
+ * how it grinds, its tags, its real dimensions, and its full transform. The
+ * type's static `meta` is merged with the object's own placed state, so the
+ * metadata always reflects what is actually in the park — a rail raised to
+ * 2 m still reads as a rail, but a small one in the file still reads as a
+ * small one.
+ */
+export function objectMeta(o) {
+  const t = objectType(o.type);
+  const m = t.meta || {};
+  return {
+    type: t.id,
+    label: t.label,
+    kind: m.kind || 'flat',
+    grindable: m.grindable === undefined ? false : m.grindable,
+    difficulty: Number.isFinite(m.difficulty) ? m.difficulty : 1,
+    tags: Array.isArray(m.tags) ? m.tags : [],
+    dimensions: objectDimensions(o),
+    transform: {
+      position: { x: o.x || 0, y: o.y || 0, z: o.z || 0 },
+      rotation: { ry: o.ry || 0 },
+      scale: { x: o.sx || 1, y: o.sy || 1, z: o.sz || 1 },
+    },
+  };
 }
 
 /** A fresh, fully-defaulted object of a type, ready to place. `y` is the
