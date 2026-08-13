@@ -1315,7 +1315,7 @@ function step(dt, frameInput) {
   // The park's own crowd keeps moving whatever the player is doing — paused at
   // the menu is exactly when a skatepark should still look alive.
   socialGroup.step(dt); // ticked once here, not once per bot that shares it
-  for (const b of bots) b.step(dt);
+  for (const b of bots) b.step(dt, ride.pos);
 
   if (state === PLAYING) {
     handleEvents(ride.update(dt, frameInput || IDLE_INPUT));
