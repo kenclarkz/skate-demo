@@ -1700,6 +1700,30 @@ section('Push gesture (touch and mouse)');
   const after = await run(() => window.__skate.ride.speed);
   ok(before === 0 && after > 0.3, `sliding down the steering side pushes (0 → ${after.toFixed(2)} m/s)`);
 
+  // A fresh load has hold-to-push off: one kick per press until a player opts
+  // in via Settings. This section is where the untouched state still exists,
+  // so it is where the off-by-default contract gets checked.
+  const fresh = await run(() => ({
+    save: window.__skate.save.holdToPush,
+    cfg: window.__skate.config.HOLD_TO_PUSH,
+    label: document.getElementById('opt-holdpush').textContent,
+  }));
+  ok(fresh.save === false && fresh.cfg === false, `a fresh start has hold-to-push off (${fresh.save}, ${fresh.cfg})`);
+  ok(fresh.label === 'Hold to push: Off', `and the settings button reads it so (${fresh.label})`);
+
+  // The hold checks below are the opt-in behaviour, so turn it on the way a
+  // player does — the Settings button — then drop the screen again.
+  await run(() => window.__skate.hud.show('settings'));
+  await page.click('#opt-holdpush', { timeout: 4000 });
+  const optedIn = await run(() => {
+    window.__skate.hud.hide();
+    return {
+      save: window.__skate.save.holdToPush,
+      cfg: window.__skate.config.HOLD_TO_PUSH,
+    };
+  });
+  ok(optedIn.save === true && optedIn.cfg === true, 'opting in via Settings turns hold-to-push on for the hold checks');
+
   // Holding the thumb down, rather than lifting and pulling again each time, is
   // the actual point of the change: it has to keep pushing on its own. Each
   // stage is waited for as real speed rather than slept through — the frame
@@ -1749,13 +1773,14 @@ section('Push gesture (touch and mouse)');
 // --------------------------------------------------------------------------
 section('Push: hold-to-push toggle');
 {
-  // Every test above ran with the default — on, the same always-repeating
-  // behaviour the game already had before this setting existed.
+  // The gesture section above opted in, so the setting is on here — this
+  // section flips it off, checks the fresh-press-per-kick behaviour, then
+  // flips it back on again.
   const initial = await run(() => ({
     save: window.__skate.save.holdToPush,
     cfg: window.__skate.config.HOLD_TO_PUSH,
   }));
-  ok(initial.save === true && initial.cfg === true, 'defaults to on');
+  ok(initial.save === true && initial.cfg === true, 'left on by the gesture section above');
 
   // The Settings-screen button: a real click, the same as a thumb would give
   // it — flips the live config, the save, and its own label together.
