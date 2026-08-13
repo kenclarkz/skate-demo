@@ -31,11 +31,18 @@ import { DECK_T, DECK_Y, TRUCK_H, WHEEL_R } from './config.js';
 // behind the counter's back edge, below the sightline over the top — a board
 // parked there is out of view until the shopkeeper lifts it above the edge.
 const DISPLAY_X = 0;
-const DISPLAY_Y = 0.55;
+// Raised a little above the counter top (0.55): the board's origin is the
+// wheel-contact plane, so at 0.55 the wheels sat exactly on the surface and
+// read as clipping into it from the camera's angle. Sitting proud of the top
+// keeps the deck clearly on the counter instead.
+const DISPLAY_Y = 0.565;
 const DISPLAY_Z = -0.40;
 const STOCK_Y = 0.34;
 const STOCK_Z = -0.66;
 const SHOP_Z = -0.90;      // the shopkeeper's feet
+// The height the shopkeeper carries a deck at, over the counter top. Stays
+// clear of the display height so the lift-and-place reads as a lift.
+const CARRY_Y = 0.62;
 
 // The board is shown with its long axis across the counter (length along X),
 // so the nose-to-tail art reads at a glance.
@@ -110,13 +117,13 @@ function placePos(t) {
     y = STOCK_Y;
     z = STOCK_Z;
   } else if (t < 0.55) {
-    y = lerp(STOCK_Y, 0.60, smooth(seg(t, 0.22, 0.55)));   // rise out of hiding
+    y = lerp(STOCK_Y, CARRY_Y, smooth(seg(t, 0.22, 0.55)));   // rise out of hiding
     z = STOCK_Z;
   } else if (t < 0.80) {
-    y = 0.60;
+    y = CARRY_Y;
     z = lerp(STOCK_Z, DISPLAY_Z, smooth(seg(t, 0.55, 0.80))); // over the counter
   } else {
-    y = lerp(0.60, DISPLAY_Y, smooth(seg(t, 0.80, PLACE_TIME))); // settle down
+    y = lerp(CARRY_Y, DISPLAY_Y, smooth(seg(t, 0.80, PLACE_TIME))); // settle down
     z = DISPLAY_Z;
   }
   return { x: 0, y, z };
@@ -130,13 +137,13 @@ function takePos(t) {
     y = DISPLAY_Y;
     z = DISPLAY_Z;
   } else if (t < 0.45) {
-    y = lerp(DISPLAY_Y, 0.60, smooth(seg(t, 0.20, 0.45)));    // lift off
+    y = lerp(DISPLAY_Y, CARRY_Y, smooth(seg(t, 0.20, 0.45)));    // lift off
     z = DISPLAY_Z;
   } else if (t < 0.68) {
-    y = 0.60;
+    y = CARRY_Y;
     z = lerp(DISPLAY_Z, STOCK_Z, smooth(seg(t, 0.45, 0.68))); // carry back
   } else {
-    y = lerp(0.60, STOCK_Y, smooth(seg(t, 0.68, TAKE_TIME))); // sink out of sight
+    y = lerp(CARRY_Y, STOCK_Y, smooth(seg(t, 0.68, TAKE_TIME))); // sink out of sight
     z = STOCK_Z;
   }
   return { x: 0, y, z };
@@ -239,8 +246,8 @@ export class BoardPreview {
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.05, 30);
     // Pulled in close so the deck's art is big enough to read while it
     // changes, and aimed a little high so the top design catches the light.
-    this.camera.position.set(0.18, 0.92, 0.68);
-    this.camera.lookAt(0, 0.55, -0.4);
+    this.camera.position.set(0.15, 0.72, 0.48);
+    this.camera.lookAt(0, DISPLAY_Y, DISPLAY_Z);
 
     this.scene.add(new THREE.HemisphereLight(0xbcd6f0, 0x33302a, 2.0));
     const key = new THREE.DirectionalLight(0xfff2d8, 1.9);
@@ -654,13 +661,15 @@ function buildShop() {
   }
 
   // Decks on display: a rack leaning against the wall like the shop's own
-  // stock, each a painted top face with a stripe down the middle. They sit at
-  // staggered depths so the overlapping rack reads as a stack, not a seam.
+  // stock, each a painted top face with a stripe down the middle. They hang
+  // one under the other in a single column, the way a pro skate shop racks
+  // its boards, each tilted a touch and pushed a hair out from the wall so
+  // the column reads as a cascade of separate decks rather than a seam.
   const wallDecks = [
-    [0x2f9aa8, 0x0e2b30, 0.18, 0.62, 1.26, 0.52, -0.22, 0.02],
-    [0xc65a3a, 0xf2c14e, 0.17, 0.56, 1.31, 0.70, 0.12, 0.05],
-    [0x8a63c8, 0x35ffe0, 0.16, 0.48, 1.22, 0.88, 0.30, 0.08],
-    [0xd6c064, 0x1b1b1e, 0.16, 0.50, -1.05, 0.60, -0.10, 0.02],
+    [0x2f9aa8, 0x0e2b30, 0.18, 0.50, -1.05, 1.12, -0.10, 0.11],
+    [0xc65a3a, 0xf2c14e, 0.17, 0.50, -1.05, 0.84, 0.06, 0.08],
+    [0x8a63c8, 0x35ffe0, 0.16, 0.48, -1.05, 0.56, 0.12, 0.05],
+    [0xd6c064, 0x1b1b1e, 0.16, 0.48, -1.05, 0.28, -0.05, 0.02],
   ];
   for (const [dc, ac, w, len, cx, cy, rot, dz] of wallDecks) {
     e.push(box(dc, w, len, 0.022, cx, cy, GW + dz, 0, 0, rot));

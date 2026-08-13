@@ -2529,7 +2529,13 @@ button:disabled.primary {
 }
 
 @media (max-width: 760px) {
-  .maker-layout {
+  /* #screen-boardmaker .maker-layout is more specific than .maker-layout, so
+     without its own line here the Board Maker's two-column grid (preview
+     beside the racks) would win on a phone and squeeze every design rack into
+     a zero-width column off the right edge — everything below the preview
+     window would be off screen. Naming it again levels the override. */
+  .maker-layout,
+  #screen-boardmaker .maker-layout {
     grid-template-columns: 1fr;
   }
 
