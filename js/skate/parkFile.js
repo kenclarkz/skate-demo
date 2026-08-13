@@ -19,7 +19,11 @@ import { PARK_X, PARK_Z } from './park.js';
 export { PARK_X, PARK_Z };
 
 export const PARK_FILE_VERSION = 1;
-export const MAX_OBJECTS = 64;
+// A player's park can now hold a pool, a couple of launch features, and the
+// benches and planters that dress them — 64 was a tight squeeze once those
+// decorative objects existed, and every one of them is a cheap height-field
+// shape, so 96 stays comfortably within a frame's worth of sampling.
+export const MAX_OBJECTS = 96;
 
 // The footprint a fresh park starts with — the standard parks' half-extents,
 // in world units. A player park builds at def.scale = 1, so these numbers land

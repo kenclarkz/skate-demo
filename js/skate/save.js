@@ -66,7 +66,7 @@ const DEFAULTS = {
   sound: true,
   seenGuide: false,
   park: 'home',
-  lighting: 'day', // 'day' or 'night' — see js/skate/lighting.js
+  lighting: 'day', // 'day', 'sunset' or 'night' — see js/skate/lighting.js
   speed: 16, // top speed, in m/s — see config.js's TOP_SPEED
   camZoom: 1, // chase camera distance, 0.5 (close) .. 1 (default) — see CAM_ZOOM
   musicVolume: 0.5, // 0..1, independent of the sound on/off toggle
@@ -295,7 +295,7 @@ function read() {
     s.sound = s.sound !== false;
     s.seenGuide = s.seenGuide === true;
     s.park = typeof s.park === 'string' ? s.park : 'home';
-    s.lighting = s.lighting === 'night' ? 'night' : 'day';
+    s.lighting = s.lighting === 'night' || s.lighting === 'sunset' ? s.lighting : 'day';
     s.speed = Math.min(50, Math.max(8, Number(s.speed) || DEFAULTS.speed));
     s.camZoom = Math.min(1, Math.max(0.5, Number(s.camZoom) || DEFAULTS.camZoom));
     // Not the `|| DEFAULTS` shorthand the others use: 0 is a real, meaningful
@@ -915,7 +915,7 @@ export const save = {
   },
 
   setLighting(mode) {
-    state.lighting = mode === 'night' ? 'night' : 'day';
+    state.lighting = mode === 'night' || mode === 'sunset' ? mode : 'day';
     flush();
   },
 

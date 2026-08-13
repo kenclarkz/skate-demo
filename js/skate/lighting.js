@@ -4,9 +4,10 @@
 // the sun (or moon), the hemisphere fill, the floodlights, the street-lamp
 // glow, the illuminated signage and the distant building windows — so that
 // "what does night look like" lives in one place instead of being smeared
-// across main.js and park.js. Today there are two presets, DAY and NIGHT, but
-// everything is written as a named bag of numbers precisely so a future
-// SUNSET or RAIN preset is another entry in `PRESETS`, not a new code path.
+// across main.js and park.js. Today there are three presets — DAY, NIGHT and
+// SUNSET — and everything is written as a named bag of numbers precisely so a
+// future RAIN or DUSK preset is another entry in `PRESETS`, not a new code
+// path.
 //
 // Nothing here changes what the ride model reads: physics.js never looks at
 // any of this. It is lighting, sky and atmosphere, full stop — see main.js's
@@ -16,6 +17,7 @@ import * as THREE from '../game/three.js';
 
 export const DAY = 'day';
 export const NIGHT = 'night';
+export const SUNSET = 'sunset';
 
 // How long a crossfade takes. The brief asks for 2-3 seconds; 2.4s is the
 // middle of that and reads as deliberate rather than either snappy or slow.
@@ -58,7 +60,14 @@ const PRESETS = {
     windowOpacity: 0,
     specular: 0x222428,
     shininess: 9,
-    shadowStrength: 0,       // no shadow map cost at all in daytime
+    // Daytime shadows: on, but soft. The 1024px map is tight (follows the
+    // rider) and the casters are only the skaters, so the cost is a fraction
+    // of a frame — and the extra depth it buys the whole park is worth more
+    // than the old all-flat daylight read.
+    shadowStrength: 0.4,
+    sunColor: 0xfff3dc,      // the sun disc's tint — invisible by day, the disc is off
+    haloColor: 0xcfe0ff,
+    cloudOpacity: 0.7,
   },
   [NIGHT]: {
     skyTop: 0x01030a,
@@ -104,6 +113,46 @@ const PRESETS = {
     specular: 0x8fa2c9,
     shininess: 90,
     shadowStrength: 1,
+    sunColor: 0xf3f1e8,      // the moon's own tint
+    haloColor: 0xcfe0ff,
+    cloudOpacity: 0.06,      // clouds all but gone — a moonlit wisp or two
+  },
+  [SUNSET]: {
+    // The sun dropping low and the sky heating up: deep blue overhead, burnt
+    // orange around the horizon. Sits between DAY and NIGHT — the floodlights
+    // are just coming on and the street-lamp bulbs are starting to glow, but
+    // it is the low sun that does the work.
+    skyTop: 0x2c4468,
+    skyMid: 0xc96f4a,
+    skyHorizon: 0xffc08a,
+    fogColor: 0xe0a67c,
+    fogNear: 60,
+    fogFar: 280,
+    hemiSky: 0xffc9a3,
+    hemiGround: 0x5a4636,
+    hemiIntensity: 1.9,
+    keyColor: 0xffb066,
+    keyIntensity: 2.0,
+    keyPos: [-10, 4, 3],
+    exposure: 0.92,
+    starOpacity: 0,
+    moonOpacity: 0.3,        // the same disc doubles as the low sun, tinted by sunColor
+    floodIntensity: 0.4,
+    lampIntensity: 0.55,
+    ambientIntensity: 0.25,
+    playerLightIntensity: 0.25,
+    bulbColor: 0xffd9a0,
+    bulbEmissive: 0.6,
+    signOpacity: 0.55,
+    buildingOpacity: 0.6,
+    windowOpacity: 0.6,
+    // A warm, low sun throws the longest shadows in the game.
+    specular: 0x8a7050,
+    shininess: 55,
+    shadowStrength: 0.6,
+    sunColor: 0xffa05a,
+    haloColor: 0xffc37a,
+    cloudOpacity: 0.85,      // lit from below, the clouds are at their warmest
   },
 };
 
@@ -116,7 +165,7 @@ const smoothstep = (t) => t * t * (3 - 2 * t);
 // channels it packs, which carries between channels and comes out as noise
 // rather than a colour partway between the two. These get a proper
 // THREE.Color.lerpColors() instead — see update().
-const COLOR_KEYS = new Set(['skyTop', 'skyMid', 'skyHorizon', 'fogColor', 'hemiSky', 'hemiGround', 'keyColor', 'bulbColor', 'specular']);
+const COLOR_KEYS = new Set(['skyTop', 'skyMid', 'skyHorizon', 'fogColor', 'hemiSky', 'hemiGround', 'keyColor', 'bulbColor', 'specular', 'sunColor', 'haloColor']);
 const _lerpA = new THREE.Color();
 const _lerpB = new THREE.Color();
 const _lerpOut = new THREE.Color();
@@ -150,6 +199,29 @@ function glowTexture() {
   g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c);
   return t;
+}
+
+/** A soft irregular cloud: a handful of overlapping glow lobes so a flat
+ * billboard reads as a cumulus puff instead of a disc. White with alpha — the
+ * sprite's own opacity, set per preset, is what fades clouds out at night. */
+function cloudTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  let a = 0x9e3779b9 >>> 0;
+  const rng = () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < 7; i++) {
+    const x = 64 + (rng() - 0.5) * 46;
+    const y = 64 + (rng() - 0.5) * 26;
+    const r = 20 + rng() * 24;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(0.6, 'rgba(255,255,255,0.4)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+  }
+  return new THREE.CanvasTexture(c);
 }
 
 /** A small tiled window-lights texture for the distant building silhouettes —
@@ -248,6 +320,37 @@ export class LightingManager {
     this.halo.scale.set(46, 46, 1);
     this.halo.renderOrder = -1;
     scene.add(this.halo);
+
+    // --- clouds --------------------------------------------------------------
+    // A ring of soft billboards drifting slowly around the sky — sprites on one
+    // shared texture, the cheapest thing that reads as weather instead of a bare
+    // gradient. They sit well inside the sky dome and outside the fog's reach,
+    // fade out almost entirely at night, and cost one sprite per cloud.
+    this.clouds = [];
+    const cloudTex = cloudTexture();
+    let ca = 0x27182818 >>> 0;
+    const crng = () => ((ca = (ca * 1664525 + 1013904223) >>> 0) / 4294967296);
+    for (let i = 0; i < 12; i++) {
+      const spr = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: cloudTex,
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          fog: false,
+          rotation: crng() * Math.PI,
+        })
+      );
+      const rad = 130 + crng() * 130;
+      const w = 50 + crng() * 70;
+      spr.position.set(Math.cos(i * 2.399) * rad, 14 + crng() * 66, Math.sin(i * 2.399) * rad);
+      spr.scale.set(w, w * (0.3 + crng() * 0.18), 1);
+      spr.renderOrder = -1;
+      spr.frustumCulled = false;
+      this.clouds.push({ spr, rad, alpha: 0.55 + crng() * 0.35, phase: i * 2.399, speed: 0.6 + crng() * 1.4 });
+      scene.add(spr);
+    }
 
     // --- hemisphere + key light (the sun by day, the moon by night) ---------
     this.hemi = new THREE.HemisphereLight(PRESETS[DAY].hemiSky, PRESETS[DAY].hemiGround, PRESETS[DAY].hemiIntensity);
@@ -446,11 +549,11 @@ export class LightingManager {
     this._casters = meshes;
   }
 
-  /** Begin a crossfade to `mode` ('day' | 'night'). `instant` skips the fade —
-   * used only for the very first frame, so the game does not visibly brighten
-   * or dim on load depending on the saved preference. */
+  /** Begin a crossfade to `mode` ('day' | 'sunset' | 'night'). `instant` skips
+   * the fade — used only for the very first frame, so the game does not
+   * visibly brighten or dim on load depending on the saved preference. */
   setMode(mode, instant = false) {
-    if (mode !== DAY && mode !== NIGHT) return;
+    if (!PRESETS[mode]) return;
     if (mode === this.mode && this._t >= 1 && !instant) return;
     this.mode = mode;
     this._from = { ...this._cur };
@@ -532,6 +635,14 @@ export class LightingManager {
     this.moon.position.copy(dir);
     this.halo.position.copy(dir);
 
+    // Clouds drift slowly around the sky on their own ring — fast enough to
+    // notice on a long run, slow enough to feel like weather.
+    for (const c of this.clouds) {
+      c.phase -= c.speed * dt * 0.005;
+      c.spr.position.x = Math.cos(c.phase) * c.rad;
+      c.spr.position.z = Math.sin(c.phase) * c.rad;
+    }
+
     if (this._skyDirty) {
       drawSky(this._skyCanvas, colorOf(this._cur.skyTop), colorOf(this._cur.skyMid), colorOf(this._cur.skyHorizon));
       this._skyTex.needsUpdate = true;
@@ -558,8 +669,11 @@ export class LightingManager {
     this.playerLight.intensity = cur.playerLightIntensity * 8;
 
     this._starMat.opacity = cur.starOpacity;
+    this._moonMat.color.copy(colorOf(cur.sunColor));
     this._moonMat.opacity = cur.moonOpacity;
+    this._haloMat.color.copy(colorOf(cur.haloColor));
     this._haloMat.opacity = cur.moonOpacity * 0.8;
+    for (const c of this.clouds) c.spr.material.opacity = cur.cloudOpacity * c.alpha;
 
     this.floodlights.forEach(({ light, head }) => {
       light.intensity = cur.floodIntensity * 55;

@@ -31,7 +31,7 @@ import { makeAiSkaters } from './ai.js';
 import { makeBirds } from './bird.js';
 import { makeLogos, checkPickup } from './collectible.js';
 import { registerServiceWorker, setupInstall } from '../game/pwa.js';
-import { LightingManager, DAY, NIGHT } from './lighting.js';
+import { LightingManager, DAY, NIGHT, SUNSET } from './lighting.js';
 import { boot as bootRadio } from './radio.js';
 
 const START = 'start';
@@ -78,7 +78,7 @@ const camera = new THREE.PerspectiveCamera(C.CAM_FOV, 1, C.CAMERA_NEAR, C.CAMERA
 // skyline all live in one place — see lighting.js for why, and for how a
 // future weather or sunset preset would slot in beside DAY and NIGHT.
 const lighting = new LightingManager(scene, renderer);
-lighting.setMode(save.lighting === NIGHT ? NIGHT : DAY, true);
+lighting.setMode([DAY, NIGHT, SUNSET].includes(save.lighting) ? save.lighting : DAY, true);
 
 // --- world ----------------------------------------------------------------
 // The player's own parks, from localStorage. They ride alongside the built-in
