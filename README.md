@@ -53,8 +53,9 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
   underneath so a rider can be dressed where they are picked; a shop full of
   purchasable boards across seven shapes (shortboard, longboard, penny,
   cruiser, old-school, freestyle, and mini-cruiser decks, each in a couple of
-  skins), shirts, and headwear accessories
-  (hats and shades), paid for with coins earned from tricks and combos.
+  skins), shirts, and accessories
+  (hats, shades and backpacks — up to three worn at once, one of each kind),
+  paid for with coins earned from tricks and combos.
 - **Thirteen ambient AI skaters in the park** — five tour the patrol loop the
   whole time, popping tricks with the exact same ride model the player
   rides; the rest spend most of their time on foot near a hangout spot,

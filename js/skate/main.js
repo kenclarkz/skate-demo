@@ -119,6 +119,18 @@ function applyBoard() {
 }
 
 /**
+ * The accessories currently worn: one item per category slot — hat, shades,
+ * pack — so up to three different kinds ride at once and two of the same never
+ * can. "Original" slots resolve to nothing.
+ */
+function equippedAccessories() {
+  const ids = save.accessoryIds;
+  return ['hat', 'shades', 'pack']
+    .map((c) => accessoryById[ids[c]])
+    .filter((a) => a && a.category !== 'none');
+}
+
+/**
  * The look the rig is built from. A made character is resolved straight from
  * the maker's draft — skin, height, build, clothes and all — instead of from
  * a character with an outfit painted over it, which is the whole point of the
@@ -137,16 +149,16 @@ function currentLook() {
   }
   const character = charById[save.characterId] ?? CHARACTERS[0];
   const outfit = outfitById[save.outfitId];
-  const accessory = accessoryById[save.accessoryId];
+  const accessories = equippedAccessories();
   const pants = pantsById[save.pantsId];
   return {
     character,
-    palette: lookOf(character, outfit, accessory, pants, {
+    palette: lookOf(character, outfit, accessories, pants, {
       accessory: save.accessoryColors,
       outfit: save.outfitColors,
       pants: save.pantsColors,
     }),
-    style: styleOf(character, accessory),
+    style: styleOf(character, accessories),
     scale: { height: 1, width: 1 },
   };
 }
@@ -962,7 +974,12 @@ function selectCharacter(id) {
   return true;
 }
 
-/** Buy the accessory if it is not owned yet, then wear it either way. */
+/**
+ * Buy the accessory if it is not owned yet, then wear it either way. Wearing
+ * fills the item's own category slot (a hat the hat slot, shades the shades
+ * slot, a backpack the pack slot), so up to three different kinds can be worn
+ * at once — "Original" empties them all.
+ */
 function selectAccessory(id) {
   const def = accessoryById[id];
   if (!def) return false;

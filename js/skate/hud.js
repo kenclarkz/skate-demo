@@ -24,7 +24,12 @@ import {
 import { TYPES } from './boards.js';
 import { byId as outfitById, colorKeys as outfitColorKeys, defaultColors as outfitDefaults } from './outfits.js';
 import { byId as pantsById, colorKeys as pantsColorKeys, defaultColors as pantsDefaults } from './pants.js';
-import { byId as accessoryById, colorKeys as accessoryColorKeys, defaultColors as accessoryDefaults } from './accessories.js';
+import {
+  byId as accessoryById,
+  colorKeys as accessoryColorKeys,
+  defaultColors as accessoryDefaults,
+  ACCESSORY_CATEGORIES,
+} from './accessories.js';
 import { drawWheel, hexToHsv, hsvToHex } from './parkDesigner.js';
 import {
   STYLES,
@@ -451,6 +456,9 @@ export class Hud {
     };
     this._repaintKey = {};
     this._repaintHsv = {};
+    // With up to three accessories worn at once, the repaint panel tabs between
+    // the equipped items — this remembers which one each panel is showing.
+    this._repaintSelected = {};
     this.csCharGrid = document.getElementById('cs-char-grid');
     this.csMakerBtn = document.getElementById('btn-charselect-maker');
 
@@ -833,6 +841,12 @@ export class Hud {
       for (const el of this.repaintEls[kind] || []) {
         if (!el) continue;
         el.addEventListener('click', (e) => {
+          const tab = e.target.closest('[data-repaintitem]');
+          if (tab) {
+            this._repaintSelected[kind] = tab.dataset.repaintitem;
+            this.renderRepaint(kind);
+            return;
+          }
           const part = e.target.closest('[data-repaintpart]');
           if (part) {
             this._repaintKey[kind] = part.dataset.repaintpart;
@@ -1376,56 +1390,82 @@ export class Hud {
   }
 
   /**
-   * The haberdashery: one card per hat or pair of shades, carrying a portrait
-   * of the equipped rider wearing it — so a card reads as "this on you" rather
-   * than as a colour, which is what a row of hats and glasses needs.
+   * The haberdashery: one card per hat, pair of shades or backpack, carrying a
+   * portrait of the equipped rider wearing it — so a card reads as "this on
+   * you" rather than as a colour, which is what a row of hats and glasses
+   * needs.
    *
    * `look` is the equipped character's own palette and style; each card draws
-   * that figure with the accessory's hat or shades overlaid, so a bucket hat
-   * advertises what it would look like on the person currently in the shop.
+   * that figure wearing the currently equipped accessories, with the
+   * candidate's own category swapped for the candidate — so a bucket hat
+   * advertises what it would look like on the person currently in the shop,
+   * over whatever else they already have on. "Original" shows the rider
+   * stripped back to just the character.
    */
   renderAccessories(accessories, save, look) {
     if (!this.accessoryGrid && !this.csAccessoryGrid) return;
     const owned = save.accessories;
-    const equipped = save.accessoryId;
+    const ids = save.accessoryIds;
     this.setCoins(save.coins);
-    // An accessory is a character in all but name: the equipped rider, wearing
-    // this one thing. drawPortrait() only reads palette and style, so a
-    // synthesised two-key object is all it needs. An owner's repaint of the
-    // accessory wins over the catalogue's own colours, exactly as it does on
-    // the rider — the rack advertises what would actually be worn.
-    const wearing = (a) => {
+    // The equipped rider without any shop accessories: the character's own head
+    // and colours, with the shirt and pants still on. `look` already wears the
+    // accessories, so stripping restores the colour keys they own to the
+    // character's own values.
+    const base = {
+      palette: { ...look.palette },
+      style: {
+        ...look.style,
+        head: look.character?.style?.head ?? look.style.head,
+        shades: false,
+        pack: false,
+      },
+    };
+    for (const k of ['cap', 'band', 'shades', 'lens', 'pack', 'strap']) {
+      if (look.character?.palette && k in look.character.palette) base.palette[k] = look.character.palette[k];
+    }
+    // The set currently being worn, skipping the empty "Original" slots.
+    const worn = ACCESSORY_CATEGORIES.map((c) => accessoryById[ids[c]]).filter((a) => a && a.category !== 'none');
+    // Paint one accessory onto a look. An owner's repaint of the accessory wins
+    // over the catalogue's own colours, exactly as it does on the rider — the
+    // rack advertises what would actually be worn.
+    const putOn = (target, a) => {
       const repaint = save.accessoryColors[a.id] || {};
-      const palette = { ...look.palette };
       if (a.hat) {
-        palette.cap = a.hat.cap;
-        palette.band = a.hat.band;
+        target.palette.cap = a.hat.cap;
+        target.palette.band = a.hat.band;
+        target.style.head = a.hat.style;
       }
       if (a.shades) {
-        palette.shades = a.shades.frame;
-        palette.lens = a.shades.lens;
+        target.palette.shades = a.shades.frame;
+        target.palette.lens = a.shades.lens;
+        target.style.shades = true;
       }
       if (a.pack) {
-        palette.pack = a.pack.pack;
-        palette.strap = a.pack.strap;
+        target.palette.pack = a.pack.pack;
+        target.palette.strap = a.pack.strap;
+        target.style.pack = true;
       }
-      Object.assign(palette, repaint);
-      return {
-        palette,
-        style: {
-          ...look.style,
-          head: a.hat ? a.hat.style : look.style.head,
-          shades: !!a.shades,
-          pack: !!a.pack,
-        },
-      };
+      Object.assign(target.palette, repaint);
     };
+    // A card advertises the currently worn set with the candidate's category
+    // swapped for the candidate, so a hat card shows the rider with their
+    // current shades and pack and *this* hat.
+    const wearing = (a) => {
+      const target = { palette: { ...base.palette }, style: { ...base.style } };
+      for (const acc of worn) putOn(target, acc);
+      if (a.category !== 'none') putOn(target, a);
+      return target;
+    };
+    const equippedIn = (a) =>
+      a.category === 'none'
+        ? ACCESSORY_CATEGORIES.every((c) => ids[c] === 'none')
+        : ids[a.category] === a.id;
     const cards =
       '<div class="board-type-grid">' +
       accessories
         .map((a) => {
           const has = owned.includes(a.id);
-          const isEquipped = a.id === equipped;
+          const isEquipped = equippedIn(a);
           const status = isEquipped ? 'Equipped' : has ? 'Owned — tap to equip' : `${a.price} coins`;
           const locked = !has && save.coins < a.price;
           return (
@@ -1455,19 +1495,23 @@ export class Hud {
    * only the shade the catalogue shipped. One key at a time: the part buttons
    * pick which key the wheel edits, the wheel and its brightness slider paint
    * it, and Reset throws the repaint away back to the item's own colours.
-   * Every copy of the rack gets its own wheel — the shop's and the Riders'.
+   * A rider can wear three accessories at once, so the accessory panel tabs
+   * between the equipped items before showing a chosen one's keys. Every copy
+   * of the rack gets its own wheel — the shop's and the Riders'.
    */
   renderRepaint(kind, save) {
     for (const el of this.repaintEls[kind] || []) {
       if (!el) continue;
       this._save = save;
-      const item = this._repaintItem(kind, save);
-      if (!item) {
+      const items = this._repaintItems(kind, save);
+      if (!items.length) {
         el.hidden = true;
         el.innerHTML = '';
         continue;
       }
       el.hidden = false;
+      if (!items.some((it) => it.id === this._repaintSelected[kind])) this._repaintSelected[kind] = items[0].id;
+      const item = items.find((it) => it.id === this._repaintSelected[kind]);
       el.dataset.repaintid = item.id;
       if (!this._repaintKey[kind] || !item.keyList.includes(this._repaintKey[kind])) {
         this._repaintKey[kind] = item.keyList[0];
@@ -1476,6 +1520,17 @@ export class Hud {
       const hex = this._colorOf(item, key);
       const { v } = hexToHsv(hexCss(hex));
       el.innerHTML =
+        (items.length > 1
+          ? `<div class="repaint-tabs">` +
+            items
+              .map(
+                (it) =>
+                  `<button type="button" class="repaint-tab${it.id === item.id ? ' on' : ''}" data-repaintitem="${it.id}">` +
+                  `${it.def.name}</button>`
+              )
+              .join('') +
+            `</div>`
+          : '') +
         `<div class="repaint-parts">` +
         item.keyList
           .map(
@@ -1498,10 +1553,11 @@ export class Hud {
     }
   }
 
-  /** The equipped, owned item a repaint panel points at — or null when the
-   * equipped thing has no repaintable keys ("Original" shirt, no accessory).
-   * `save` is read fresh each call, so a purchase or an equip re-renders it. */
-  _repaintItem(kind, save) {
+  /** The equipped, owned items a repaint panel can edit. The accessory rack is
+   * the one with more than one candidate: a hat, shades and a backpack can be
+   * worn at once, so the panel tabs between them; outfit and pants each have
+   * the single equipped item as before. */
+  _repaintItems(kind, save) {
     const meta = {
       outfit: {
         def: outfitById[save.outfitId],
@@ -1520,7 +1576,6 @@ export class Hud {
         labels: { pants: 'Legs', pantsDark: 'Shins' },
       },
       accessory: {
-        def: accessoryById[save.accessoryId],
         owned: save.accessories,
         colors: save.accessoryColors,
         keys: accessoryColorKeys,
@@ -1528,10 +1583,35 @@ export class Hud {
         labels: { cap: 'Cap', band: 'Band', shades: 'Frame', lens: 'Lenses', pack: 'Pack', strap: 'Straps' },
       },
     }[kind];
-    if (!meta?.def || !meta.owned.includes(meta.def.id)) return null;
+    if (!meta) return [];
+    if (kind === 'accessory') {
+      const ids = save.accessoryIds;
+      const out = [];
+      for (const c of ACCESSORY_CATEGORIES) {
+        const id = ids[c];
+        if (!id || id === 'none') continue;
+        const def = accessoryById[id];
+        if (!def || !meta.owned.includes(id)) continue;
+        const keyList = meta.keys(def);
+        if (!keyList.length) continue;
+        out.push({ ...meta, def, id, keyList });
+      }
+      return out;
+    }
+    if (!meta.def || !meta.owned.includes(meta.def.id)) return [];
     const keyList = meta.keys(meta.def);
-    if (!keyList.length) return null;
-    return { ...meta, id: meta.def.id, keyList };
+    if (!keyList.length) return [];
+    return [{ ...meta, id: meta.def.id, keyList }];
+  }
+
+  /** The equipped, owned item a repaint panel currently points at — or null
+   * when nothing equipped is repaintable ("Original" shirt, no accessory).
+   * `save` is read fresh each call, so a purchase or an equip re-renders it. */
+  _repaintItem(kind, save) {
+    const items = this._repaintItems(kind, save);
+    if (!items.length) return null;
+    const sel = this._repaintSelected?.[kind];
+    return items.find((it) => it.id === sel) || items[0];
   }
 
   /** The colour a key currently stands at: the player's repaint wins, else the

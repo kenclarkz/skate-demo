@@ -7,7 +7,13 @@
 
 import { byId, DEFAULT_BOARD_ID } from './boards.js';
 import { byId as outfitById, DEFAULT_OUTFIT_ID, colorKeys as outfitColorKeys } from './outfits.js';
-import { byId as accessoryById, DEFAULT_ACCESSORY_ID, colorKeys as accessoryColorKeys } from './accessories.js';
+import {
+  byId as accessoryById,
+  DEFAULT_ACCESSORY_ID,
+  colorKeys as accessoryColorKeys,
+  categoryOf,
+  ACCESSORY_CATEGORIES,
+} from './accessories.js';
 import { byId as pantsCatalogById, DEFAULT_PANTS_ID, colorKeys as pantsColorKeys } from './pants.js';
 import { byId as charById, DEFAULT_CHARACTER_ID } from './characters.js';
 import { DEFAULT_CUSTOM, skinById, heightById, buildById, pantsById, shoeById, hairById, shirtById, hatById, shadeById, PART_BY_ID } from './custom.js';
@@ -35,7 +41,6 @@ const DEFAULTS = {
   coins: 0,
   boardId: DEFAULT_BOARD_ID,
   outfitId: DEFAULT_OUTFIT_ID,
-  accessoryId: DEFAULT_ACCESSORY_ID,
   pantsId: DEFAULT_PANTS_ID,
   // Per-item repaints for the shop's colour wheels. Each map is keyed by the
   // bought item's id and holds a partial override of that item's own colour
@@ -87,6 +92,9 @@ const freshBoards = () => [DEFAULT_BOARD_ID];
 const freshOutfits = () => [DEFAULT_OUTFIT_ID];
 const freshAccessories = () => [DEFAULT_ACCESSORY_ID];
 const freshPants = () => [DEFAULT_PANTS_ID];
+// The three accessory slots — hat, shades, pack — each start empty ("Original").
+// A rider can wear one item per category at once, never two of the same.
+const freshAccessoryIds = () => Object.fromEntries(ACCESSORY_CATEGORIES.map((c) => [c, DEFAULT_ACCESSORY_ID]));
 const freshCustom = () => ({ ...DEFAULT_CUSTOM });
 const freshCustomCharacters = () => [];
 const freshCustomBoards = () => [];
@@ -127,6 +135,28 @@ function cleanColorMap(raw, ownedIds, keysFor) {
 const outfitKeysFor = (id) => outfitColorKeys(outfitById[id]);
 const pantsKeysFor = (id) => pantsColorKeys(pantsCatalogById[id]);
 const accKeysFor = (id) => accessoryColorKeys(accessoryById[id]);
+
+/**
+ * The three equipped accessory slots: only known category keys, only ids the
+ * player owns (or "Original", which is always legal) — a hand-edited save
+ * cannot wear something it does not own. A legacy single-slot `accessoryId`
+ * migrates into its own category's slot, so a save that wore a hat still
+ * wears it after this change lands.
+ */
+function cleanAccessoryIds(raw, legacy, ownedIds) {
+  const ids = freshAccessoryIds();
+  const pick = (id) =>
+    id === DEFAULT_ACCESSORY_ID || (typeof id === 'string' && ownedIds.includes(id)) ? id : DEFAULT_ACCESSORY_ID;
+  const hasNew = raw && typeof raw === 'object' && ACCESSORY_CATEGORIES.some((c) => raw[c] !== undefined);
+  if (hasNew) {
+    for (const c of ACCESSORY_CATEGORIES) ids[c] = pick(raw[c]);
+  }
+  if (!hasNew && legacy && legacy !== DEFAULT_ACCESSORY_ID) {
+    const def = accessoryById[legacy];
+    if (def && ownedIds.includes(legacy)) ids[categoryOf(def)] = legacy;
+  }
+  return ids;
+}
 
 const clampNum = (v, lo, hi) => {
   const n = Number(v);
@@ -266,6 +296,7 @@ function read() {
         customCharacters: freshCustomCharacters(),
         customBoards: freshCustomBoards(),
         boardDraft: freshBoardDraft(),
+        accessoryIds: freshAccessoryIds(),
         accessoryColors: freshColorMap(),
         outfitColors: freshColorMap(),
         pantsColors: freshColorMap(),
@@ -282,6 +313,7 @@ function read() {
       customCharacters: freshCustomCharacters(),
       customBoards: freshCustomBoards(),
       boardDraft: freshBoardDraft(),
+      accessoryIds: freshAccessoryIds(),
       accessoryColors: freshColorMap(),
       outfitColors: freshColorMap(),
       pantsColors: freshColorMap(),
@@ -351,10 +383,7 @@ function read() {
     s.accessories = Array.isArray(parsed.accessories)
       ? [...new Set([DEFAULT_ACCESSORY_ID, ...parsed.accessories.filter((id) => accessoryById[id])])]
       : freshAccessories();
-    s.accessoryId =
-      typeof s.accessoryId === 'string' && s.accessories.includes(s.accessoryId)
-        ? s.accessoryId
-        : DEFAULT_ACCESSORY_ID;
+    s.accessoryIds = cleanAccessoryIds(parsed.accessoryIds, parsed.accessoryId, s.accessories);
     s.characterId = typeof s.characterId === 'string' && charById[s.characterId] ? s.characterId : DEFAULT_CHARACTER_ID;
     // Pants are their own slot: owned list, equipped id, and the repaints.
     s.pants = Array.isArray(parsed.pants)
@@ -473,8 +502,9 @@ export const save = {
   get outfits() {
     return [...state.outfits];
   },
-  get accessoryId() {
-    return state.accessoryId;
+  /** The three equipped accessory slots — hat/shades/pack — as a copy. */
+  get accessoryIds() {
+    return { ...state.accessoryIds };
   },
   get accessories() {
     return [...state.accessories];
@@ -666,10 +696,19 @@ export const save = {
     return true;
   },
 
-  /** @returns true if the accessory is owned and is now equipped. */
+  /** @returns true if the accessory is owned and is now equipped. Wearing an
+   * item fills its own category's slot — a hat goes in the hat slot, shades in
+   * the shades slot, a backpack in the pack slot — so up to three different
+   * kinds can be worn at once and two of the same never can. "Original"
+   * empties every slot at once. */
   setAccessory(id) {
-    if (!accessoryById[id] || !state.accessories.includes(id)) return false;
-    state.accessoryId = id;
+    const accessory = accessoryById[id];
+    if (!accessory || !state.accessories.includes(id)) return false;
+    if (accessory.category === 'none') {
+      for (const c of ACCESSORY_CATEGORIES) state.accessoryIds[c] = DEFAULT_ACCESSORY_ID;
+    } else {
+      state.accessoryIds[accessory.category] = id;
+    }
     flush();
     return true;
   },
@@ -992,6 +1031,7 @@ export const save = {
       customCharacters: freshCustomCharacters(),
       customBoards: freshCustomBoards(),
       boardDraft: freshBoardDraft(),
+      accessoryIds: freshAccessoryIds(),
       accessoryColors: freshColorMap(),
       outfitColors: freshColorMap(),
       pantsColors: freshColorMap(),

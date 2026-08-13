@@ -1928,6 +1928,32 @@ button:disabled.primary {
   margin-bottom: 12px;
 }
 
+/* With up to three accessories worn at once, the repaint panel tabs between
+   the equipped items — one pill per worn accessory, mirroring the part
+   buttons below it so the two rows read as the same language. */
+.repaint-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.repaint-tab {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.repaint-tab.on {
+  border-color: var(--hot);
+  color: var(--hot);
+}
+
 .repaint-part {
   display: inline-flex;
   align-items: center;

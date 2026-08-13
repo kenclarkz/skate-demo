@@ -1,8 +1,9 @@
 // The haberdashery: hats, shades and backpacks, bought and worn on top of
-// whichever character is equipped. One accessory-slot at a time — equipping a
-// hat swaps the character's headwear, equipping shades puts the face piece on,
-// equipping a backpack slings it over the shoulders — while shirts (outfits.js)
-// and pants (pants.js) are their own slots on the same screen.
+// whichever character is equipped. Three accessory-slots, one per category —
+// a hat swaps the character's headwear, shades put the face piece on, and a
+// backpack slings over the shoulders — so all three can be worn at once,
+// but never two of the same kind. Shirts (outfits.js) and pants (pants.js)
+// are their own slots on the same screen.
 //
 // Three kinds of override, in the same spirit as outfits.js but aimed at the
 // head and the back instead of the torso. A `hat` replaces the character's own
@@ -21,30 +22,35 @@ export const HATS = [
     id: 'red-cap',
     name: 'Red Cap',
     price: 120,
+    category: 'hat',
     hat: { style: 'cap', cap: 0xc65b4a, band: 0x7a2e22 },
   },
   {
     id: 'midnight',
     name: 'Midnight Beanie',
     price: 120,
+    category: 'hat',
     hat: { style: 'beanie', cap: 0x1f2430, band: 0x14171e },
   },
   {
     id: 'bucket',
     name: 'Bucket Hat',
     price: 200,
+    category: 'hat',
     hat: { style: 'bucket', cap: 0x8a9a5c, band: 0x6a7a44 },
   },
   {
     id: 'tophat',
     name: 'Top Hat',
     price: 350,
+    category: 'hat',
     hat: { style: 'tophat', cap: 0x1c1c20, band: 0xc9a04e },
   },
   {
     id: 'straw',
     name: 'Straw Sun Hat',
     price: 250,
+    category: 'hat',
     hat: { style: 'straw', cap: 0xe0c77a, band: 0xb08a34 },
   },
 ];
@@ -54,30 +60,35 @@ export const SUNGLASSES = [
     id: 'shades',
     name: 'Shades',
     price: 150,
+    category: 'shades',
     shades: { frame: 0x141416, lens: 0x0f1420 },
   },
   {
     id: 'aviator',
     name: 'Aviators',
     price: 150,
+    category: 'shades',
     shades: { frame: 0x2a2d33, lens: 0x18222e },
   },
   {
     id: 'gold-shades',
     name: 'Gold Shades',
     price: 300,
+    category: 'shades',
     shades: { frame: 0xc9a04e, lens: 0x2a1f10 },
   },
   {
     id: 'sky-shades',
     name: 'Sky Shades',
     price: 250,
+    category: 'shades',
     shades: { frame: 0x3f7fb0, lens: 0x10263a },
   },
   {
     id: 'rose-shades',
     name: 'Rose Shades',
     price: 250,
+    category: 'shades',
     shades: { frame: 0x8a3a5c, lens: 0x2a1020 },
   },
 ];
@@ -87,30 +98,35 @@ export const BACKPACKS = [
     id: 'daypack',
     name: 'Canvas Pack',
     price: 180,
+    category: 'pack',
     pack: { pack: 0x9a8a5f, strap: 0x6a5a3c },
   },
   {
     id: 'street-pack',
     name: 'Street Pack',
     price: 200,
+    category: 'pack',
     pack: { pack: 0x23262b, strap: 0xc4433a },
   },
   {
     id: 'vintage',
     name: 'Vintage Pack',
     price: 220,
+    category: 'pack',
     pack: { pack: 0x6a7a5c, strap: 0x4a5640 },
   },
   {
     id: 'sunset',
     name: 'Sunset Pack',
     price: 260,
+    category: 'pack',
     pack: { pack: 0xe8722c, strap: 0x7c3fa0 },
   },
   {
     id: 'neon-pack',
     name: 'Neon Pack',
     price: 300,
+    category: 'pack',
     pack: { pack: 0x35ffe0, strap: 0xff2fa0 },
   },
 ];
@@ -132,6 +148,14 @@ export const ACCESSORIES = [
   ...SUNGLASSES,
   ...BACKPACKS,
 ];
+
+/** The three wearable slots, one per category — a rider can hold all three at
+ * once, never two of the same kind. */
+export const ACCESSORY_CATEGORIES = ['hat', 'shades', 'pack'];
+
+/** The slot an accessory fills: 'hat', 'shades', 'pack', or 'none' for the
+ * "Original" nothing entry. */
+export const categoryOf = (a) => (a.hat ? 'hat' : a.shades ? 'shades' : a.pack ? 'pack' : 'none');
 
 export const CATEGORIES = [
   ['hats', 'Hats', HATS],
