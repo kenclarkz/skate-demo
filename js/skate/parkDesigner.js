@@ -474,8 +474,11 @@ export class ParkDesigner {
       case 'stairs':
         return o.steps * sh(o, o.rise);
       case 'rail':
-        return sh(o, o.h) + o.r;
+        return Math.max(sh(o, o.h), o.h2 ? sh(o, o.h2) : 0) + o.r;
       case 'funbox':
+        return sh(o, o.h);
+      case 'pyramid':
+      case 'aframe':
         return sh(o, o.h);
       default:
         return 1;

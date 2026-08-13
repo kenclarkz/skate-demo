@@ -598,6 +598,8 @@ export class Park {
     this.rails = [];   // mesh specs, filled by rail()
     this.copings = [];
     this.hoops = [];   // mesh specs, filled by hoop() — decorative only, no collision
+    this.benches = []; // mesh specs, filled by bench() — decorative only
+    this.planters = []; // mesh specs, filled by planter() — decorative only
     this.group = new THREE.Group();
     this._hit = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
     this._probe = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
@@ -676,6 +678,17 @@ export class Park {
         h.cx *= SCALE;
         h.cz *= SCALE;
       }
+      for (const b of this.benches) {
+        b.cx *= SCALE;
+        b.cz *= SCALE;
+        b.len *= SCALE;
+      }
+      for (const p of this.planters) {
+        p.cx *= SCALE;
+        p.cz *= SCALE;
+        p.w *= SCALE;
+        p.d *= SCALE;
+      }
     }
   }
 
@@ -705,6 +718,20 @@ export class Park {
    */
   hoop(cx, cy, cz, radius, tube, ry = 0) {
     this.hoops.push({ cx, cy, cz, radius, tube, ry });
+  }
+
+  /**
+   * A spectator bench: seat, backrest and legs — decorative only, like a hoop.
+   * `len` runs along the bench, `ry` radians around from facing +z, and it
+   * always stands on whatever ground the map's def builds it over.
+   */
+  bench(cx, cy, cz, len, ry = 0, color = 0x6f7580) {
+    this.benches.push({ cx, cy, cz, len, ry, color });
+  }
+
+  /** A low bed of shrubs — decorative only, like a bench or hoop. */
+  planter(cx, cy, cz, w, d, ry = 0, color = 0x8a7a58) {
+    this.planters.push({ cx, cy, cz, w, d, ry, color });
   }
 
   /** A ledge edge — the grindable line only; the platform is a Slab of its own. */
@@ -1065,6 +1092,13 @@ export class Park {
       buildTree(instances, x, z, rng, rng() < 0.3 ? 'pine' : 'broadleaf', this);
     }
 
+    // Benches and planters: the one decoration that lives *inside* the pad
+    // rather than beyond the fence. Like the trees, none of it is collided
+    // against — it is scenery, deliberately placed by the map's def (or by a
+    // player in the designer) and never part of the height field.
+    for (const b of this.benches) buildBench(entries, b);
+    for (const pt of this.planters) buildPlanter(entries, pt);
+
     this.sceneryMaterial = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 5 });
     const mesh = new THREE.Mesh(merge(entries, 0.4), this.sceneryMaterial);
     disposeSources(entries);
@@ -1180,6 +1214,39 @@ function buildLamp(entries, x, z) {
   entries.push(box(0x8b9099, 0.16, 6.4, 0.16, x, 3.2, z));
   entries.push(box(0x8b9099, 0.5, 0.14, 0.14, x + armSign * 0.25, 6.35, z));
   entries.push(box(0x50545c, 0.62, 0.22, 0.4, x + armSign * 0.46, 6.42, z));
+}
+
+/** A bench: a seat slat, a backrest and two legs — a few boxes that read as
+ * "somewhere to sit" from the pad without adding more than an entry each. */
+function buildBench(entries, b) {
+  const ry = b.ry || 0;
+  const cos = Math.cos(ry);
+  const sin = Math.sin(ry);
+  // Local (lx, lz) -> world, rotated about y the way box() itself rotates.
+  const at = (lx, lz) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos];
+  const seatY = b.cy + 0.46;
+  const [sx, sz] = at(0, 0);
+  entries.push(box(b.color, b.len, 0.06, 0.34, sx, seatY, sz, 0, ry, 0));
+  const [bx, bz] = at(0, -0.18);
+  entries.push(box(b.color, b.len, 0.36, 0.05, bx, seatY + 0.19, bz, 0, ry, 0));
+  const leg = (lz) => {
+    const [lx, lz2] = at(0, lz);
+    entries.push(box(0x4a4438, 0.06, seatY - b.cy, 0.4, lx, (seatY + b.cy) / 2, lz2, 0, ry, 0));
+  };
+  leg(b.len / 2 - 0.3);
+  leg(-(b.len / 2 - 0.3));
+}
+
+/** A planter: a low box with a green mound of shrubs on top. */
+function buildPlanter(entries, pt) {
+  const ry = pt.ry || 0;
+  const cos = Math.cos(ry);
+  const sin = Math.sin(ry);
+  const at = (lx, lz) => [pt.cx + lx * cos + lz * sin, pt.cz - lx * sin + lz * cos];
+  const h = pt.cy + 0.4;
+  const [px, pz] = at(0, 0);
+  entries.push(box(pt.color, pt.w, 0.4, pt.d, px, h - 0.2, pz, 0, ry, 0));
+  entries.push(box(0x3f5a3a, pt.w * 0.82, 0.5, pt.d * 0.82, px, h + 0.1, pz, 0, ry, 0));
 }
 
 const _up = new THREE.Vector3(0, 1, 0);

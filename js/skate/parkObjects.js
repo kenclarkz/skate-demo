@@ -267,6 +267,11 @@ export const OBJECTS = [
       const c0 = axis === 'z' ? cross.x0 : cross.z0;
       const c1 = axis === 'z' ? cross.x1 : cross.z1;
       p.add(new Quarter(c0, c1, baseC, axis, sign, o.R, H, o.deck, objectColor(o.color), o.y));
+      // Steel coping sunk into the lip — every other transition already has it,
+      // and a quarterpipe without it reads as half-finished (see the roll-in,
+      // mini, spine and funbox above).
+      const uTop = quarterU(o.R, H);
+      lineCoping(p, worldPoint(o, -o.w / 2, uTop), worldPoint(o, o.w / 2, uTop), H + o.y);
     },
     footprint(o) {
       const H = Math.min(sh(o, o.H), o.R - 0.05);
@@ -531,6 +536,8 @@ export const OBJECTS = [
   {
     id: 'rail',
     label: 'Rail',
+    hint: 'A round grindable bar on posts, at whatever height you set. Raise the far end to slope it down a bank.',
+    defaults: { len: 4, h: 0.9, h2: 0, r: 0.045, color: 'steel' },
     hint: 'A round grindable bar on posts, at whatever height you set.',
     defaults: { len: 4, h: 0.9, r: 0.045, color: 'steel' },
     meta: {
@@ -542,13 +549,17 @@ export const OBJECTS = [
     props: [
       { key: 'len', label: 'Length', min: 1, max: 16, step: 0.1, unit: 'm' },
       { key: 'h', label: 'Height', min: 0.1, max: 3, step: 0.05, unit: 'm' },
+      { key: 'h2', label: 'High End', min: 0, max: 3, step: 0.05, unit: 'm' },
       { key: 'r', label: 'Radius', min: 0.025, max: 0.12, step: 0.005, unit: 'm' },
     ],
     build(p, o) {
       const a = worldPoint(o, -o.len / 2, 0);
       const b = worldPoint(o, o.len / 2, 0);
       const h = sh(o, o.h);
-      p.rail(a[0], h + o.y, a[1], b[0], h + o.y, b[1], o.r, objectColor(o.color));
+      // High End is a height, so it rides on the object's own vertical scale;
+      // 0 (the default) means "level" rather than "down at the ground".
+      const h2 = o.h2 ? sh(o, o.h2) : h;
+      p.rail(a[0], h + o.y, a[1], b[0], h2 + o.y, b[1], o.r, objectColor(o.color));
     },
     footprint(o) {
       return worldRect(o, -o.len / 2, o.len / 2, -0.4, 0.4);
@@ -557,14 +568,20 @@ export const OBJECTS = [
       const color = objectColor(o.color);
       const g = new THREE.Group();
       const h = sh(o, o.h);
+      const h2 = o.h2 ? sh(o, o.h2) : h;
       const bar = new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r, o.len, 10), mat(color));
-      bar.rotation.z = Math.PI / 2;
-      bar.position.y = h;
+      // The bar runs along +x; a small rotation about z slopes it from h at
+      // the near end up to h2 at the far end, exactly like the collision line.
+      const ang = Math.atan2(h2 - h, o.len);
+      bar.rotation.z = Math.PI / 2 - ang;
+      bar.position.y = (h + h2) / 2;
       g.add(bar);
       const posts = Math.max(2, Math.round(o.len / 2.2));
       for (let i = 0; i < posts; i++) {
         const x = -o.len / 2 + (o.len * i) / (posts - 1);
-        const ph = Math.max(0.05, h - o.r);
+        const t = (x + o.len / 2) / o.len;
+        const y = h + (h2 - h) * t;
+        const ph = Math.max(0.05, y - o.r);
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, ph, 0.05), mat(color));
         post.position.set(x, ph / 2, 0);
         g.add(post);
@@ -633,6 +650,55 @@ export const OBJECTS = [
     },
     preview(o) {
       return new THREE.Mesh(new THREE.TorusGeometry(o.r, o.tube, 10, 28), mat(objectColor(o.color)));
+    },
+  },
+
+  {
+    id: 'bench',
+    label: 'Bench',
+    hint: 'A park bench for spectators — decorative, no collision or grind.',
+    defaults: { len: 2.4, color: 'steel' },
+    props: [
+      { key: 'len', label: 'Length', min: 0.8, max: 6, step: 0.1, unit: 'm' },
+    ],
+    build(p, o) {
+      p.bench(o.x, o.y, o.z, o.len * o.sz, o.ry * DEG, objectColor(o.color));
+    },
+    footprint(o) {
+      return worldRect(o, -0.45, 0.45, -o.len / 2, o.len / 2);
+    },
+    preview(o) {
+      const color = objectColor(o.color);
+      const g = new THREE.Group();
+      g.add(box(o.len, 0.06, 0.34, 0, 0.46, 0, color));
+      g.add(box(o.len, 0.36, 0.05, 0, 0.65, -0.18, color));
+      const leg = (z) => g.add(box(0.06, 0.46, 0.4, 0, 0.23, z, 0x4a4438));
+      leg(o.len / 2 - 0.3);
+      leg(-(o.len / 2 - 0.3));
+      return g;
+    },
+  },
+
+  {
+    id: 'planter',
+    label: 'Planter',
+    hint: 'A low bed of shrubs — decorative, no collision or grind.',
+    defaults: { w: 1.6, d: 1.6, color: 'concrete' },
+    props: [
+      { key: 'w', label: 'Width', min: 0.6, max: 6, step: 0.1, unit: 'm' },
+      { key: 'd', label: 'Depth', min: 0.6, max: 6, step: 0.1, unit: 'm' },
+    ],
+    build(p, o) {
+      p.planter(o.x, o.y, o.z, o.w * o.sx, o.d * o.sz, o.ry * DEG, objectColor(o.color));
+    },
+    footprint(o) {
+      return worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
+    },
+    preview(o) {
+      const g = new THREE.Group();
+      g.add(box(o.w, 0.4, o.d, 0, 0.2, 0, objectColor(o.color)));
+      g.add(box(o.w * 0.82, 0.5, o.d * 0.82, 0, 0.5, 0, 0x3f5a3a));
+      return g;
     },
   },
 
@@ -764,6 +830,52 @@ export const OBJECTS = [
       g.add(new THREE.Mesh(right, mat(color)));
       g.add(new THREE.Mesh(left, mat(color)));
       return g;
+    },
+  },
+
+  {
+    id: 'aframe',
+    label: 'A-Frame Launch',
+    hint: 'A flat deck on a bank up one side and a bank down the other — ride on, pop off the top, ride out.',
+    defaults: { w: 4, d: 2, len: 4, h: 1.1, color: 'wood' },
+    props: [
+      { key: 'w', label: 'Width', min: 2, max: 14, step: 0.1, unit: 'm' },
+      { key: 'd', label: 'Top Depth', min: 1, max: 8, step: 0.1, unit: 'm' },
+      { key: 'len', label: 'Bank', min: 1, max: 10, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.4, max: 4, step: 0.05, unit: 'm' },
+    ],
+    build(p, o) {
+      launchDeck(p, o, false);
+    },
+    footprint(o) {
+      const len = o.len;
+      return worldRect(o, -o.w / 2, o.w / 2, -o.d / 2 - len, o.d / 2 + len);
+    },
+    preview(o) {
+      return launchPreview(o, false);
+    },
+  },
+
+  {
+    id: 'pyramid',
+    label: 'Pyramid',
+    hint: 'A flat deck with banks on every side — the funbox built out of ramps instead of walls.',
+    defaults: { w: 4, d: 4, len: 3, h: 1.2, color: 'wood' },
+    props: [
+      { key: 'w', label: 'Width', min: 2, max: 14, step: 0.1, unit: 'm' },
+      { key: 'd', label: 'Depth', min: 2, max: 14, step: 0.1, unit: 'm' },
+      { key: 'len', label: 'Bank', min: 1, max: 10, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.4, max: 4, step: 0.05, unit: 'm' },
+    ],
+    build(p, o) {
+      launchDeck(p, o, true);
+    },
+    footprint(o) {
+      const len = o.len;
+      return worldRect(o, -o.w / 2 - len, o.w / 2 + len, -o.d / 2 - len, o.d / 2 + len);
+    },
+    preview(o) {
+      return launchPreview(o, true);
     },
   },
 ];
@@ -963,6 +1075,101 @@ function lineCoping(p, a, b, h) {
   } else {
     p.coping(Math.min(a[0], b[0]), Math.max(a[0], b[0]), a[1], h);
   }
+}
+
+// --- launch features -------------------------------------------------------
+// The A-Frame (a deck with a bank up one side and a bank down the other) and
+// the pyramid (banks on all four sides) are the same idea at two strengths —
+// a flat top with straight ramps climbing up to it, so they share a builder
+// and a preview.
+
+/** Paint a launch deck: a flat slab with straight banks climbing up to it —
+ * two along the object's forward axis, and when `all` is set, one on each
+ * side too (an A-Frame's sides are walls, a pyramid's are ramps). Each bank
+ * meets the deck exactly at its edge, so a ride up pops you straight onto
+ * the top, and the deck slab sits at the same height the banks rise to. */
+function launchDeck(p, o, all) {
+  const h = sh(o, o.h);
+  const len = o.len;
+  const color = objectColor(o.color);
+  const axis = forwardAxis(o);
+  const cross = axis === 'z' ? 'x' : 'z';
+  const run = (a) => (a === 'z' ? (pt) => pt[1] : (pt) => pt[0]);
+  // A bank between two world points, rising from y0 at the foot to y1 at the
+  // lip. `a` is the axis the run follows — the forward axis for the up/down
+  // banks, the cross axis for a pyramid's sides — `c0..c1` the span across.
+  const bank = (a, foot, lip, y0, y1, c0, c1) => {
+    const ra = run(a);
+    const f = ra(foot);
+    const l = ra(lip);
+    const lo = Math.min(f, l);
+    const hi = Math.max(f, l);
+    const yLo = f < l ? y0 : y1;
+    const yHi = f < l ? y1 : y0;
+    p.add(
+      new Bank(
+        a === 'z' ? c0 : lo,
+        a === 'z' ? c1 : hi,
+        a === 'z' ? lo : c0,
+        a === 'z' ? hi : c1,
+        a,
+        yLo,
+        yHi,
+        color
+      )
+    );
+  };
+  const deck = worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
+  p.add(new Slab(deck.x0, deck.x1, deck.z0, deck.z1, h + o.y, SMOOTH, color, slabDepth(h)));
+  const fwdCross = worldRect(o, -o.w / 2, o.w / 2, 0, 0);
+  const fC0 = axis === 'z' ? fwdCross.x0 : fwdCross.z0;
+  const fC1 = axis === 'z' ? fwdCross.x1 : fwdCross.z1;
+  bank(axis, worldPoint(o, 0, o.d / 2 + len), worldPoint(o, 0, o.d / 2), o.y, h + o.y, fC0, fC1);
+  bank(axis, worldPoint(o, 0, -(o.d / 2 + len)), worldPoint(o, 0, -o.d / 2), o.y, h + o.y, fC0, fC1);
+  if (all) {
+    const sideCross = worldRect(o, 0, 0, -(o.d / 2 + len), o.d / 2 + len);
+    // The side banks run along the cross axis, so their span across is the
+    // whole base depth — not the deck's, which is why the corners fill in.
+    const sC0 = axis === 'z' ? sideCross.z0 : sideCross.x0;
+    const sC1 = axis === 'z' ? sideCross.z1 : sideCross.x1;
+    bank(cross, worldPoint(o, o.w / 2 + len, 0), worldPoint(o, o.w / 2, 0), o.y, h + o.y, sC0, sC1);
+    bank(cross, worldPoint(o, -(o.w / 2 + len), 0), worldPoint(o, -o.w / 2, 0), o.y, h + o.y, sC0, sC1);
+  }
+}
+
+/** The launch deck's shared preview: a box deck with bank prisms on two or
+ * four sides, each meeting the deck exactly at its edge. */
+function launchPreview(o, all) {
+  const h = sh(o, o.h);
+  const len = o.len;
+  const color = objectColor(o.color);
+  const g = new THREE.Group();
+  const depth = slabDepth(h);
+  g.add(box(o.w, depth, o.d, 0, h - depth / 2, 0, color));
+  const pts = [
+    [0, -0.6],
+    [len, -0.6],
+    [len, h],
+    [0, 0],
+  ];
+  // The banks' feet sit at the object's ends, len beyond the deck's edges.
+  const fwd = prism(pts, len, o.w, -(o.d / 2 + len), color, false);
+  const back = prism(pts, len, o.w, o.d / 2 + len, color, true);
+  g.add(fwd);
+  g.add(back);
+  if (all) {
+    // Side banks run along x instead of z, and span the whole base depth —
+    // the forward banks only cover the deck's width, so the two meet out at
+    // the feet with the corners filled in. Rotating a z-run prism a quarter
+    // turn is exactly the trick the funbox preview uses for its side faces.
+    const right = prism(pts, len, o.d + 2 * len, o.w / 2 + len, color, true);
+    right.rotation.y = Math.PI / 2;
+    const left = prism(pts, len, o.d + 2 * len, -(o.w / 2 + len), color, false);
+    left.rotation.y = Math.PI / 2;
+    g.add(right);
+    g.add(left);
+  }
+  return g;
 }
 
 // --- the ramp family -------------------------------------------------------

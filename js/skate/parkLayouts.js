@@ -12,10 +12,13 @@
 //
 //   - Sloped handrails (a rail whose two ends are at different heights) come
 //     back as a level bar at the same midpoint, because a Park Suite rail is
-//     always level. The audit accepts those as replacements.
+//     always level. The audit accepts those as replacements. (Park Suite rails
+//     have since grown a High End prop, so new sloped rails are real slopes.)
 //   - Grind lines sitting at y = 0 (a ledge whose edge would be on the flat
 //     ground) are dropped, since a ledge object cannot be 0 m tall.
-//   - A decorative hoop has no collision or grind, so it is not rebuilt.
+//   - Decorative pieces (the original hoop, and the benches and planters
+//     sprinkled around Home Park today) have no collision or grind — they are
+//     scenery, and the rider passes straight through them.
 
 import { buildObjects } from './parkObjects.js';
 import { buildParkGraph } from './parkGraph.js';
@@ -99,6 +102,18 @@ export const PARKS = [
       // Rails for the hip approach and landing.
       { type: 'rail', x: 24, z: 22, ry: 90, len: 20, h: 0.71, color: 'steel' },
       { type: 'rail', x: 44, z: -18, ry: 90, len: 44, h: 0.42, color: 'steel' },
+      // Pool: drop in off the east deck, carve the corner.
+      { type: 'bowl', x: 36, z: 42, R: 2.4, H: 1.4, rim: 1.2, color: 'wood' },
+      // Hoops framing the spine transfer — jump the spine through the rings.
+      { type: 'hoop', x: -7, y: 2.2, z: 4, ry: -Math.PI / 2, r: 2.2, tube: 0.12, color: '#e0552f' },
+      { type: 'hoop', x: 7, y: 2.2, z: 4, ry: -Math.PI / 2, r: 2.2, tube: 0.12, color: '#e0552f' },
+      // Spectator benches on the quiet corners of the pad.
+      { type: 'bench', x: 28, z: 48, ry: 0, len: 3, color: 'steel' },
+      { type: 'bench', x: -54, z: -44, ry: 90, len: 3, color: 'steel' },
+      // Planters dressing the outer edge.
+      { type: 'planter', x: 52, z: 50, ry: 0, w: 2.4, d: 1.6, color: 'concrete' },
+      { type: 'planter', x: 52, z: -52, ry: 0, w: 2.4, d: 1.6, color: 'concrete' },
+      { type: 'planter', x: -40, z: 40, ry: 0, w: 2.4, d: 1.6, color: 'concrete' },
     ]
   ),
 ];

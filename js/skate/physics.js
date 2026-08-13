@@ -37,6 +37,11 @@ export const BAIL = 3;
 
 /** The biggest step up the wheels will climb instead of catching on. */
 const STEP_UP = 0.035;
+/** How much more climb each m/s of speed earns. Faster you go, the less a
+ * step should stop you — a real board rides up over small lips at speed. */
+const STEP_UP_SPEED = 0.025;
+/** ...but never climb a curb, no matter how fast. */
+const STEP_UP_MAX = 0.09;
 /** Below this you bump into a curb; above it you go over the bars. */
 const WALL_BAIL_SPEED = 1.6;
 /** How fast the wheels kill sideways motion while they are gripping. */
@@ -476,7 +481,10 @@ export class Ride {
     const yBallistic = this.pos.y + _v.y * dt + 0.5 * C.GRAVITY * dt * dt;
     const ahead = this.park.sample(nx, nz, this.ahead);
 
-    if (ahead.y - yBallistic > STEP_UP) {
+    // The step-up climbs with speed: slow and a curb stops you, fast and you
+    // ride up over the little lips the park's seams make. Capped so no speed
+    // turns a wall into a ramp.
+    if (ahead.y - yBallistic > STEP_UP + Math.min(STEP_UP_SPEED * Math.abs(this.speed), STEP_UP_MAX - STEP_UP)) {
       // Something the wheels will not climb.
       if (Math.abs(this.speed) > WALL_BAIL_SPEED) this.bail('hit');
       else {
@@ -1236,12 +1244,24 @@ export class Ride {
   /**
    * How much the two trucks disagree about the ground, over and above the tilt the
    * frame has already taken from the surface normal.
+   *
+   * Each truck reads the ground a small spread around its axle instead of a single
+   * sample, so riding a seam — the line where a ramp meets the flat, or a coping —
+   * cannot catch on a one-sample-thick spike and flip the board the instant you
+   * cross it. Three samples a few centimetres apart average the kink away, which
+   * is the kind of smoothing that makes a transition feel like a curve, not a
+   * series of straight boards.
    */
   truckPitch() {
     _h.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     const half = C.WHEELBASE / 2;
-    const yF = this.park.heightAt(this.pos.x + _h.x * half, this.pos.z + _h.z * half);
-    const yR = this.park.heightAt(this.pos.x - _h.x * half, this.pos.z - _h.z * half);
+    const spread = 0.06;
+    const fx = this.pos.x + _h.x * half;
+    const fz = this.pos.z + _h.z * half;
+    const rx = this.pos.x - _h.x * half;
+    const rz = this.pos.z - _h.z * half;
+    const yF = (this.park.heightAt(fx + _h.x * spread, fz + _h.z * spread) + this.park.heightAt(fx, fz) + this.park.heightAt(fx - _h.x * spread, fz - _h.z * spread)) / 3;
+    const yR = (this.park.heightAt(rx + _h.x * spread, rz + _h.z * spread) + this.park.heightAt(rx, rz) + this.park.heightAt(rx - _h.x * spread, rz - _h.z * spread)) / 3;
     const truck = Math.atan2(yF - yR, C.WHEELBASE);
     const frame = Math.asin(C.clamp(-(this.up.x * _h.x + this.up.z * _h.z), -1, 1));
     return C.clamp(truck - frame, -0.32, 0.32);
