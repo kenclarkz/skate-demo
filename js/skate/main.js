@@ -551,12 +551,14 @@ function faceOf(d) {
  * optional `preview` board (a saved deck) is shown on the turntable instead of
  * the draft while the racks still describe the deck under construction — so
  * tapping a saved card answers "what does that look like?" without discarding
- * the work in progress. */
-function renderBoardMaker(preview = null) {
+ * the work in progress. `swap` asks the turntable for a take-and-place
+ * instead of a live rebuild — the shopkeeper carries the old deck away and
+ * brings the new one out — which is how a change of deck shape lands. */
+function renderBoardMaker(preview = null, swap = false) {
   const d = boardDraft();
   hud.renderBoardMaker(d, save, boardSelectedLayer, boardFace);
   const show = preview || d;
-  hud.bmPreview?.setBoard(designPalette(show), boardTypeById[show.type]?.shape, show);
+  hud.bmPreview?.setBoard(designPalette(show), boardTypeById[show.type]?.shape, show, swap);
 }
 
 function showBoardMaker() {
@@ -568,12 +570,14 @@ function showBoardMaker() {
   hud.show('boardmaker');
 }
 
-/** Mutate the draft, persist it, then re-render everything that reads it. */
-function updateBoardDraft(mutate) {
+/** Mutate the draft, persist it, then re-render everything that reads it. A
+ * `swap` renders the change as the shopkeeper taking the old deck off the
+ * counter and bringing out the new one, instead of rebuilding it in place. */
+function updateBoardDraft(mutate, swap = false) {
   const d = boardDraft();
   mutate(d);
   save.setBoardDraft(d);
-  renderBoardMaker();
+  renderBoardMaker(null, swap);
 }
 
 function pickBoardStyle(id) {
@@ -583,10 +587,16 @@ function pickBoardStyle(id) {
   });
 }
 
+/** Pick a deck shape. A new shape is a whole new board — the shopkeeper takes
+ * the old one off the counter and brings the new one out — so it goes through
+ * the swap render rather than a live rebuild. Picking the shape that is
+ * already on the deck is a no-op. */
 function pickBoardType(id) {
+  const d = boardDraft();
+  if (d.type === id) return;
   updateBoardDraft((d) => {
     d.type = id;
-  });
+  }, true);
 }
 
 function pickBoardColor(role, hex) {

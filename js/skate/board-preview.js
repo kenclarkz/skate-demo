@@ -365,39 +365,50 @@ export class BoardPreview {
   /**
    * Show a deck: palette, shape and the whole design draft.
    *
-   * Two very different things arrive here. The draft the player is building —
+   * Three different things arrive here. The draft the player is building —
    * the object with no `id` — changes on every rack tap, and the Board Maker
    * clones it through cleanBoardDraft each time, so no two calls ever pass the
    * same object. The answer for the draft is simple: rebuild it where it
-   * stands, every time. A saved deck is different — it carries an `id` from
-   * the rack — and a tap on one of those means "put THAT deck in front of
-   * me": the shopkeeper takes the current one down and brings the new one up.
-   * Either way the design lands on the board immediately, so the answer to
-   * "which board is this?" is right from the moment the deck is picked, even
-   * while the take-and-place is still catching up.
+   * stands, every time — except when `swap` is true. A saved deck is
+   * different — it carries an `id` from the rack — and a tap on one of those
+   * means "put THAT deck in front of me". `swap` asks for the same
+   * take-and-place on a deck that is still being built, which is exactly what
+   * changing the deck's shape deserves: the shopkeeper takes the old shape
+   * off the counter and brings the new one up. Either way the design lands on
+   * the board immediately, so the answer to "which board is this?" is right
+   * from the moment the deck is picked, even while the take-and-place is
+   * still catching up.
    */
-  setBoard(palette, shape, design) {
+  setBoard(palette, shape, design, swap = false) {
     const isSavedDeck = !!(design && design.id != null);
-    if (!isSavedDeck) {
-      if (this._in) {
+    const folding = this._state === 'take' || !!this._pending;
+    if (!isSavedDeck && !swap) {
+      if (this._in && !folding) {
+        // A live edit to the deck on the counter: rebuild it where it stands.
         this._apply(palette, shape, design);
         return;
       }
-      // The first board of the session: queue it for the entrance place that
-      // the first frame will run, instead of popping into existence.
-      this._pending = { palette, shape, design };
+      // The first board of the session, or a live edit while a take is
+      // already carrying the old deck away: fold it into the queued deck so
+      // the next place comes up holding the newest draft, and never rebuild
+      // mid-carry.
+      this._pending = { ...this._pending, palette, shape, design };
       this.board.palette = palette;
       this.board.shape = shape;
       this.board.design = design;
       return;
     }
-    if (this._in && design === this._in.design) {
+    // A swap — a saved deck picked from the rack, or the player changing the
+    // deck's shape mid-build: take the current one off and bring the new one
+    // up, never morphing one shape into the next on the counter.
+    if (this._in && !swap && design === this._in.design) {
+      // Tapping the very deck that is already on the counter: nothing to move.
       this._apply(palette, shape, design);
       return;
     }
     // Mid-place and still hidden behind the counter: swap in the deck the hand
     // is actually holding — the shopkeeper comes up carrying the new pick.
-    if (this._state === 'place' && this._at < PLACE_SWAP_T && !this._pending) {
+    if (!swap && this._state === 'place' && this._at < PLACE_SWAP_T && !this._pending) {
       this._apply(palette, shape, design);
       return;
     }

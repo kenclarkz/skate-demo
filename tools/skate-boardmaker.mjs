@@ -281,6 +281,80 @@ ok(/Keeper/.test(kept), 'saved deck survives a page reload');
   ok(/back: Checker Deck/.test(backCard), 'saved deck card mentions the back design');
 }
 
+// --- Changing the deck's shape -------------------------------------------
+// Picking a new shape is a whole new deck: the shopkeeper takes the old one
+// off the counter and brings the new one out, instead of morphing it in place.
+// The headless rAF loop only ticks a couple of frames a second, so the
+// preview's swap state machine is driven directly rather than waiting on real
+// time; `_in` is the deck actually built on the counter and `_pending` is the
+// deck queued for the next place.
+{
+  const streetLen = await page.evaluate(() =>
+    window.__skate.boardTypes.find((t) => t.id === 'street').shape.deckLen
+  );
+  const longboardLen = await page.evaluate(() =>
+    window.__skate.boardTypes.find((t) => t.id === 'longboard').shape.deckLen
+  );
+
+  // Park the current draft on the counter and stop the real loop.
+  await page.evaluate(() => {
+    const p = window.__skate.hud.bmPreview;
+    p.stop();
+    p._in = null;
+    p._pending = null;
+    p._state = 'idle';
+    const d = window.__skate.save.boardDraft;
+    const t = window.__skate.boardTypes.find((x) => x.id === d.type);
+    p.setBoard(window.__skate.save.boardDraft.colors, t.shape, d, false);
+  });
+  const drive = (secs) =>
+    page.evaluate((s) => {
+      const p = window.__skate.hud.bmPreview;
+      const steps = Math.ceil(s / 0.016);
+      for (let i = 0; i < steps; i++) p._advance(0.016);
+    }, secs);
+  const snap = () =>
+    page.evaluate(() => {
+      const p = window.__skate.hud.bmPreview;
+      return {
+        s: p._state,
+        inLen: p._in?.shape?.deckLen ?? null,
+        pending: p._pending?.shape?.deckLen ?? null,
+      };
+    });
+  await drive(1.3);
+  let st = await snap();
+  ok(st.s === 'idle' && st.inLen === streetLen, 'draft deck settles on the counter');
+
+  // A new shape starts a take; the old deck stays on the counter while the new
+  // shape waits behind it.
+  await page.click('[data-bmtype="longboard"]');
+  await drive(0.05);
+  st = await snap();
+  ok(st.s === 'take', `shape change starts a take (got ${st.s})`);
+  ok(st.inLen === streetLen && st.pending === longboardLen,
+    `old deck stays on the counter while the new shape waits (built ${st.inLen}, queued ${st.pending})`);
+
+  // The new shape is only built once the take has carried the old one away.
+  await drive(1.0);
+  st = await snap();
+  ok(st.s === 'place' && st.inLen === longboardLen,
+    `take finished, the new shape is built and being placed (state ${st.s})`);
+
+  // It settles back down, now a longboard.
+  await drive(1.2);
+  st = await snap();
+  const shapeType = await page.evaluate(() => window.__skate.save.boardDraft.type);
+  ok(st.s === 'idle' && st.inLen === longboardLen && shapeType === 'longboard',
+    `the longboard is the deck on the counter (${shapeType})`);
+
+  // Re-picking the shape already on the deck is a no-op.
+  await page.click('[data-bmtype="longboard"]');
+  await drive(0.05);
+  st = await snap();
+  ok(st.s === 'idle' && st.pending === null, 're-picking the current shape does not animate');
+}
+
 ok(errors.length === 0, `no page errors (${errors.length})`);
 for (const e of errors.slice(0, 5)) console.log('   ', e.slice(0, 250));
 
