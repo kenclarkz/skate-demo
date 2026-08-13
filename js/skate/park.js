@@ -285,7 +285,7 @@ export class Quarter {
 
   build(entries) {
     const p = [[0, -0.6]];
-    const STEPS = 18;
+    const STEPS = 28;
     for (let i = 0; i <= STEPS; i++) {
       const u = (this.uTop * i) / STEPS;
       p.push([u, this.baseY + this.R - Math.sqrt(Math.max(0, this.R * this.R - u * u))]);
@@ -339,16 +339,22 @@ export function bowlU(R, H) {
  * and the editor preview (parkObjects.js) so the two can never disagree. */
 export function bowlProfile(R, H, rim, baseY = 0) {
   const uTop = bowlU(R, H);
+  // A recessed bowl (baseY < 0) has to be a closed solid from its pool floor
+  // up: the pad and dirt carve its footprint out with a straight through-hole,
+  // and the bowl's own mass has to fill that hole to the very bottom or the
+  // pool would float over a void. At or above -0.6 the usual skirt depth
+  // already hides the seam against the ground, so nothing lower needs a base.
+  const floor = Math.min(-0.6, baseY);
   const pts = [
-    [0, -0.6],
+    [0, floor],
     [0, baseY],
   ];
-  const STEPS = 18;
+  const STEPS = 28;
   for (let i = 0; i <= STEPS; i++) {
     const u = (uTop * i) / STEPS;
     pts.push([u, baseY + R - Math.sqrt(Math.max(0, R * R - u * u))]);
   }
-  pts.push([uTop, baseY + H], [uTop + rim, baseY + H], [uTop + rim, -0.6], [0, -0.6]);
+  pts.push([uTop, baseY + H], [uTop + rim, baseY + H], [uTop + rim, floor], [0, floor]);
   // Returned in reverse: LatheGeometry's front face is the side its winding
   // faces, and the natural out-across-the-deck order winds the outside of the
   // solid — pool, deck and skirt all end up back-facing and invisible. Reversed,
@@ -371,6 +377,11 @@ export class Bowl {
   constructor(cx, cz, sx, sz, R, H, rim, color = RAMP, baseY = 0) {
     Object.assign(this, { cx, cz, sx, sz, R, H, rim, color, baseY });
     this.uTop = bowlU(R, H);
+    // Sunk below the pad, the pool reads as a hole in the ground: its pit
+    // beats the pad in the height field (see Park.sample), and its footprint
+    // is cut out of the pad and dirt meshes (see Park.buildMeshes). A bowl at
+    // or above grade is a normal raised feature, exactly as it has always been.
+    this.pit = baseY < 0;
   }
 
   at(x, z, out) {
@@ -406,6 +417,24 @@ export class Bowl {
     const pts = bowlProfile(this.R, this.H, this.rim, this.baseY).map(([u, y]) => new THREE.Vector2(u, y));
     const geo = new THREE.LatheGeometry(pts, 32);
     entries.push(piece(geo, this.color, this.sx, 1, this.sz, this.cx, 0, this.cz));
+    // The polished steel ring let into the lip — the same galvanised edge the
+    // ramps' copings wear, running all the way round instead of along a line.
+    // Purely decorative (the palette marks the bowl non-grindable), and the
+    // torus is laid flat in the ground plane so sx/sz stretch it into the same
+    // ellipse the collision rides.
+    const ring = new THREE.TorusGeometry(this.uTop, 0.045, 10, 32);
+    ring.rotateX(Math.PI / 2);
+    entries.push(piece(ring, COPING, this.sx, 1, this.sz, this.cx, this.baseY + this.H, this.cz));
+  }
+
+  /** The ellipse the pad and dirt must carve out for a recessed bowl — the
+   * collision radius (uTop + rim) stretched by the object's own scales, the
+   * same footprint bounds() reports. Only pit bowls cut: one sitting on the
+   * pad keeps the ground under its rim deck exactly as it does today. */
+  cutout() {
+    const r = (this.uTop + this.rim) * this.sx;
+    const rz = (this.uTop + this.rim) * this.sz;
+    return { cx: this.cx, cz: this.cz, rx: r, rz };
   }
 
   /** The arc (R, H and the uTop it produces) is a real physical curve and
@@ -510,6 +539,56 @@ function disposeSources(entries) {
   for (const e of entries) if (e.geo.type !== 'BoxGeometry') e.geo.dispose();
 }
 
+// --- ground cutouts -------------------------------------------------------
+// A recessed bowl's footprint is carved out of the pad and the dirt as an
+// ellipse hole in an extruded slab (see Park._groundWithHoles). The ellipse
+// is sampled as a polygon, then clipped to the slab's own rectangle, because
+// a bowl near the pad's edge can poke its footprint past it and a shape
+// triangulator handed a hole outside its outer contour has earned its
+// self-intersecting reputation.
+
+/** A circle polygon approximating the cutout ellipse a Bowl reports. */
+export function ellipsePoly(cx, cz, rx, rz, n = 48) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push([cx + Math.cos(a) * rx, cz + Math.sin(a) * rz]);
+  }
+  return pts;
+}
+
+/** Sutherland–Hodgman clip of a convex polygon against an axis-aligned
+ * rectangle, returning the intersection (or [] when it is empty). */
+export function clipToRect(pts, x0, x1, z0, z1) {
+  let out = pts;
+  const clip = (list, keep, mix) => {
+    const res = [];
+    for (let i = 0; i < list.length; i++) {
+      const cur = list[i];
+      const prev = list[(i + list.length - 1) % list.length];
+      const curIn = keep(cur);
+      if (curIn) {
+        if (!keep(prev)) res.push(mix(prev, cur));
+        res.push(cur);
+      } else if (keep(prev)) {
+        res.push(mix(prev, cur));
+      }
+    }
+    return res;
+  };
+  out = clip(out, (p) => p[0] >= x0, (a, b) => [x0, a[1] + ((b[1] - a[1]) * (x0 - a[0])) / (b[0] - a[0])]);
+  out = clip(out, (p) => p[0] <= x1, (a, b) => [x1, a[1] + ((b[1] - a[1]) * (x1 - a[0])) / (b[0] - a[0])]);
+  out = clip(out, (p) => p[1] >= z0, (a, b) => [a[0] + ((b[0] - a[0]) * (z0 - a[1])) / (b[1] - a[1]), z0]);
+  out = clip(out, (p) => p[1] <= z1, (a, b) => [a[0] + ((b[0] - a[0]) * (z1 - a[1])) / (b[1] - a[1]), z1]);
+  return out;
+}
+
+/** The ball bearing welded onto each coping bar's end. Fresh per call: every
+ * entry's geometry is disposed after the merge, so nothing can be shared. */
+function knobGeo() {
+  return new THREE.SphereGeometry(0.05, 10, 8);
+}
+
 // --- grindable lines ------------------------------------------------------
 /**
  * Anything you can lock onto: round rails, ledge edges, and coping. Held as a
@@ -603,6 +682,7 @@ export class Park {
     this.group = new THREE.Group();
     this._hit = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
     this._probe = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
+    this._pit = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH, has: false };
 
     // The park graph (nodes/edges between skateable features) is authored
     // alongside the layout — parkLayouts.js for the built-in maps,
@@ -612,6 +692,14 @@ export class Park {
     this.graph = def.graph || def._graph || null;
 
     this.layout();
+    // Recessed bowls carve their footprint out of the pad (and the dirt under
+    // it): a pool sunk below grade has to read as a hole in the ground, not a
+    // ramp sitting inside the slab. Only pit bowls cut — a bowl at or above
+    // grade keeps the ground under its rim deck exactly as it does today.
+    this.cutouts = [];
+    for (const f of this.features) {
+      if (f.pit && typeof f.cutout === 'function') this.cutouts.push(f.cutout());
+    }
     this.buildZones();
     this.buildMeshes();
   }
@@ -643,8 +731,10 @@ export class Park {
     // not just decoration any more.
     this.rideBoundX = this.padOnly ? this.extentX : this.worldR;
     this.rideBoundZ = this.padOnly ? this.extentZ : this.worldR;
-    this.add(new Slab(-dirtR, dirtR, -dirtR, dirtR, DIRT_Y, ROUGH, DIRT, 1.2));
-    this.add(new Slab(-this.extentX, this.extentX, -this.extentZ, this.extentZ, 0, SMOOTH, this.def.ground || CONCRETE, 0.55));
+    this._dirt = new Slab(-dirtR, dirtR, -dirtR, dirtR, DIRT_Y, ROUGH, DIRT, 1.2);
+    this._pad = new Slab(-this.extentX, this.extentX, -this.extentZ, this.extentZ, 0, SMOOTH, this.def.ground || CONCRETE, 0.55);
+    this.add(this._dirt);
+    this.add(this._pad);
 
     // Every def.build() below is written in 1x coordinates. Stretch just the
     // features/rails/copings it adds — not the pad above, already at full
@@ -755,6 +845,14 @@ export class Park {
     out.ny = 1;
     out.nz = 0;
     out.kind = SMOOTH;
+    // A recessed bowl's pool and the pad it cuts through both sit under this
+    // (x, z): the pit is the lower surface, and without a special case the
+    // pad would win on height and the bowl would be unrideable. Pits are
+    // tracked in their own slot and applied last, so anything raised above
+    // the pool's rim — a ledge deck, another ramp — still beats it, exactly
+    // as it beats the pad today.
+    const pit = this._pit;
+    pit.has = false;
     // The base list (dirt, the pad, and any feature too large to bucket)
     // is always sampled first, so it wins height ties exactly as it did when
     // every feature lived in one array in add-order.
@@ -762,6 +860,10 @@ export class Park {
     for (let i = 0; i < base.length; i++) {
       const f = base[i];
       if (!f.at(x, z, hit)) continue;
+      if (f.pit) {
+        if (!pit.has || hit.y > pit.y) this._notePit(pit, hit);
+        continue;
+      }
       if (hit.y <= out.y) continue;
       out.y = hit.y;
       out.nx = hit.nx;
@@ -781,6 +883,10 @@ export class Park {
         for (let i = 0; i < cell.length; i++) {
           const f = cell[i];
           if (!f.at(x, z, hit)) continue;
+          if (f.pit) {
+            if (!pit.has || hit.y > pit.y) this._notePit(pit, hit);
+            continue;
+          }
           if (hit.y <= out.y) continue;
           out.y = hit.y;
           out.nx = hit.nx;
@@ -790,7 +896,29 @@ export class Park {
         }
       }
     }
+    // A pit wins only where nothing built above the pad claims the ground:
+    // the pad's own flat top (out.y <= 0.001) is exactly the surface a
+    // recessed bowl cuts through, and the dirt's top is the same idea one
+    // step down.
+    if (pit.has && (pit.y > out.y || out.y <= 0.001)) {
+      out.y = pit.y;
+      out.nx = pit.nx;
+      out.ny = pit.ny;
+      out.nz = pit.nz;
+      out.kind = pit.kind;
+    }
     return out;
+  }
+
+  /** Copy the tallied pit surface into `pit`, keeping the highest of several
+   * overlapping pools — the same tallest-wins rule the rest of the field uses. */
+  _notePit(pit, hit) {
+    pit.has = true;
+    pit.y = hit.y;
+    pit.nx = hit.nx;
+    pit.ny = hit.ny;
+    pit.nz = hit.nz;
+    pit.kind = hit.kind;
   }
 
   /**
@@ -958,7 +1086,20 @@ export class Park {
   // --- meshes ------------------------------------------------------------
   buildMeshes() {
     const entries = [];
-    for (const f of this.features) f.build(entries);
+    if (this.cutouts.length) {
+      // A park with a recessed bowl needs the ground to have holes in it. The
+      // dirt takes the same cutouts as the pad, or its top would sit inside
+      // the pool showing through the pad's hole.
+      const holes = this.cutouts.map((c) => ellipsePoly(c.cx, c.cz, c.rx, c.rz));
+      this._groundWithHoles(entries, this._pad, holes);
+      this._groundWithHoles(entries, this._dirt, holes);
+      for (const f of this.features) {
+        if (f === this._pad || f === this._dirt) continue;
+        f.build(entries);
+      }
+    } else {
+      for (const f of this.features) f.build(entries);
+    }
 
     // Painted lines on the flat, purely so that speed reads. Without something
     // regular on the ground, open concrete gives the eye nothing to measure
@@ -1005,8 +1146,12 @@ export class Park {
     }
 
     for (const c of this.copings) {
-      // Sunk a centimetre into the lip, the way coping is actually set.
-      tube(entries, COPING, c.x0, c.y - 0.012, c.z0, c.x1, c.y - 0.012, c.z1, 0.032);
+      // Sunk a centimetre into the lip, the way coping is actually set —
+      // chunkier than the old pencil tube, with a ball bearing welded onto
+      // each end the way a real coping bar's terminal is finished.
+      tube(entries, COPING, c.x0, c.y - 0.014, c.z0, c.x1, c.y - 0.014, c.z1, 0.045);
+      entries.push(piece(knobGeo(), COPING, 1, 1, 1, c.x0, c.y - 0.014, c.z0));
+      entries.push(piece(knobGeo(), COPING, 1, 1, 1, c.x1, c.y - 0.014, c.z1));
     }
 
     for (const h of this.hoops) hoop(entries, HOOP, h.cx, h.cy, h.cz, h.radius, h.tube, h.ry);
@@ -1027,6 +1172,37 @@ export class Park {
     this.mesh = mesh;
 
     this.buildScenery();
+  }
+
+  /**
+   * The pad (or dirt) as an extruded slab with a hole where each recessed
+   * bowl sits, instead of a solid box. ExtrudeGeometry builds the shape in XY
+   * and pushes it along +Z; world (x, z) map straight onto shape (X, Y), so
+   * rotating the extrusion down into the ground plane and lifting its top to
+   * the slab's height leaves a slab whose top face is exactly the old box's,
+   * holes and all. Each hole is clipped to the slab's own rectangle first — a
+   * bowl at the pad's edge can reach past it.
+   */
+  _groundWithHoles(entries, slab, holes) {
+    const shape = new THREE.Shape();
+    shape.moveTo(slab.x0, slab.z0);
+    shape.lineTo(slab.x1, slab.z0);
+    shape.lineTo(slab.x1, slab.z1);
+    shape.lineTo(slab.x0, slab.z1);
+    shape.closePath();
+    for (const h of holes) {
+      const clipped = clipToRect(h, slab.x0, slab.x1, slab.z0, slab.z1);
+      if (clipped.length < 3) continue;
+      const hole = new THREE.Path();
+      hole.moveTo(clipped[0][0], clipped[0][1]);
+      for (let i = 1; i < clipped.length; i++) hole.lineTo(clipped[i][0], clipped[i][1]);
+      hole.closePath();
+      shape.holes.push(hole);
+    }
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: slab.depth, bevelEnabled: false, curveSegments: 1 });
+    geo.rotateX(Math.PI / 2);
+    geo.translate(0, slab.y, 0);
+    entries.push(piece(geo, slab.color, 1, 1, 1, 0, 0, 0));
   }
 
   /**

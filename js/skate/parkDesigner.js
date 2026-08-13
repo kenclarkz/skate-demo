@@ -19,6 +19,7 @@ import { box, merge } from '../game/geo.js';
 import { OBJECTS, SURFACES, GROUNDS, newObject, objectType, boundsOf, objectColor, padColor, cssColor, cssColorOf, sh } from './parkObjects.js';
 import { newFile, serialize, deserialize, validate, buildDef, spawnFor, boundaryOf, extentOf, PARK_X, PARK_Z, MAX_OBJECTS } from './parkFile.js';
 import { putFile } from './parkStorage.js';
+import { bowlU, ellipsePoly, clipToRect } from './park.js';
 
 const DEG = Math.PI / 180;
 
@@ -239,8 +240,7 @@ export class ParkDesigner {
     this._disposeGroup(this.root);
     this.root.clear();
     const { x: ex, z: ez } = extentOf(this.file);
-    this._pad = new THREE.Mesh(new THREE.BoxGeometry(ex * 2, 0.55, ez * 2), this._mat(padColor(this.file)));
-    this._pad.position.y = -0.275;
+    this._pad = this._buildPad(ex, ez);
     this.root.add(this._pad);
 
     if (this.gridOn) {
@@ -270,6 +270,48 @@ export class ParkDesigner {
     for (const o of this.file.objects) this.root.add(this._buildObject(o));
     this._updateOutline();
     this._updateCount();
+  }
+
+  /**
+   * The designer's ground slab, with a hole where each recessed bowl sits so a
+   * pool dragged below grade is visible (and editable) instead of buried under
+   * the pad. Mirrors the real park's own cutouts (Park.buildMeshes), and falls
+   * back to the plain box when there are none.
+   */
+  _buildPad(ex, ez) {
+    const holes = [];
+    for (const o of this.file.objects) {
+      if (o.type === 'bowl' && (o.y || 0) < 0) {
+        const H = Math.min(sh(o, o.H), o.R - 0.05);
+        const r = (bowlU(o.R, H) + o.rim) * (o.sx || 1);
+        const rz = (bowlU(o.R, H) + o.rim) * (o.sz || 1);
+        holes.push(ellipsePoly(o.x || 0, o.z || 0, r, rz));
+      }
+    }
+    const color = this._mat(padColor(this.file));
+    if (!holes.length) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(ex * 2, 0.55, ez * 2), color);
+      mesh.position.y = -0.275;
+      return mesh;
+    }
+    const shape = new THREE.Shape();
+    shape.moveTo(-ex, -ez);
+    shape.lineTo(ex, -ez);
+    shape.lineTo(ex, ez);
+    shape.lineTo(-ex, ez);
+    shape.closePath();
+    for (const h of holes) {
+      const clipped = clipToRect(h, -ex, ex, -ez, ez);
+      if (clipped.length < 3) continue;
+      const hole = new THREE.Path();
+      hole.moveTo(clipped[0][0], clipped[0][1]);
+      for (let i = 1; i < clipped.length; i++) hole.lineTo(clipped[i][0], clipped[i][1]);
+      hole.closePath();
+      shape.holes.push(hole);
+    }
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.55, bevelEnabled: false, curveSegments: 1 });
+    geo.rotateX(Math.PI / 2);
+    return new THREE.Mesh(geo, color);
   }
 
   /** The boundary's own edges: a bright wire rectangle on the ground plus a
