@@ -350,10 +350,10 @@ export const TUTORIAL = [
   },
   {
     title: 'Grinds',
-    body: 'Ollie onto a rail or a ledge and the board locks on. It always wants to fall one way — hold the balance until you roll off the end.',
+    body: 'Ollie onto a rail or a ledge and the board locks on. It always wants to fall one way — hold the balance to stay on, or flick left or right to hop off the rail to that side.',
     keys: 'Steer to correct the balance',
-    touch: 'Drag the steering side to correct',
-    pad: 'Left stick to correct',
+    touch: 'Drag the steering side to correct; flick sideways to hop off',
+    pad: 'Left stick to correct, right stick flick to hop off',
     demo: 'grind',
   },
   {

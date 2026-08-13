@@ -817,6 +817,73 @@ section('Grinds and manuals');
 }
 
 // --------------------------------------------------------------------------
+section('Hopping off a grind');
+{
+  // A sideways flick while grinding hops the board off the rail to that side,
+  // still rolling, instead of riding it to the end. Left flick = off the
+  // rider's left, right flick = off the right — the same directions a shove-it
+  // flicks on flat ground, which is exactly what these keys/flicks do there.
+  const left = await run(() => {
+    const g = window.__skate;
+    g.place(-22, -22, 0, 6.5);
+    g.drive(1 / 120, { trick: 'ollie', trickCharge: 0.55 });
+    for (let i = 0; i < 240 && g.ride.mode !== 2; i++) g.drive(1 / 120, {});
+    if (g.ride.mode !== 2) return { locked: false };
+    // The rail's own yaw, captured before the hop changes it, so the lateral
+    // direction can be computed against it. For yaw = 0 the rider's left is
+    // +x, exactly like the _l frame in physics.js.
+    const yaw = g.ride.yaw;
+    const lx = Math.cos(yaw);
+    const lz = -Math.sin(yaw);
+    const onRail = { x: g.ride.pos.x, z: g.ride.pos.z };
+    g.drive(1 / 120, { trick: 'shuvit', trickCharge: 0.6 });
+    const air = g.ride.mode === 1;
+    const lateral = g.ride.vel.x * lx + g.ride.vel.z * lz;
+    for (let i = 0; i < 400 && g.ride.mode === 1; i++) g.drive(1 / 120, {});
+    const across = (g.ride.pos.x - onRail.x) * lx + (g.ride.pos.z - onRail.z) * lz;
+    return { locked: true, air, lateral, mode: g.ride.mode, across };
+  });
+  ok(left.locked, 'a hop-off test locks onto the rail first');
+  ok(left.air, 'a left flick while grinding hops off into the air');
+  ok(left.lateral > 0.8, `thrown across the rail to the rider's left (${left.lateral.toFixed(2)} m/s)`);
+  ok(left.mode === 0 && Math.abs(left.across) > 0.5, `and lands clean, off the rail (${Math.abs(left.across).toFixed(2)} m across)`);
+
+  const right = await run(() => {
+    const g = window.__skate;
+    g.place(-22, -22, 0, 6.5);
+    g.drive(1 / 120, { trick: 'ollie', trickCharge: 0.55 });
+    for (let i = 0; i < 240 && g.ride.mode !== 2; i++) g.drive(1 / 120, {});
+    if (g.ride.mode !== 2) return { locked: false };
+    const yaw = g.ride.yaw;
+    const lx = Math.cos(yaw);
+    const lz = -Math.sin(yaw);
+    const onRail = { x: g.ride.pos.x, z: g.ride.pos.z };
+    g.drive(1 / 120, { trick: 'fsshuvit', trickCharge: 0.6 });
+    const air = g.ride.mode === 1;
+    const lateral = g.ride.vel.x * lx + g.ride.vel.z * lz;
+    for (let i = 0; i < 400 && g.ride.mode === 1; i++) g.drive(1 / 120, {});
+    const across = (g.ride.pos.x - onRail.x) * lx + (g.ride.pos.z - onRail.z) * lz;
+    return { locked: true, air, lateral, mode: g.ride.mode, across };
+  });
+  ok(right.locked, 'a right-hop test locks onto the rail first');
+  ok(right.air, 'a right flick while grinding hops off into the air');
+  ok(right.lateral < -0.8, `thrown across the rail to the rider's right (${right.lateral.toFixed(2)} m/s)`);
+  ok(right.mode === 0 && Math.abs(right.across) > 0.5, `and lands clean, off the rail (${Math.abs(right.across).toFixed(2)} m across)`);
+
+  // A non-shove-it flick still pops off a grind as a real trick, shove-it
+  // direction and all — the hop only replaces the sideways flicks.
+  const flip = await run(() => {
+    const g = window.__skate;
+    g.place(-22, -22, 0, 6.5);
+    g.drive(1 / 120, { trick: 'ollie', trickCharge: 0.55 });
+    for (let i = 0; i < 240 && g.ride.mode !== 2; i++) g.drive(1 / 120, {});
+    g.drive(1 / 120, { trick: 'kickflip', trickCharge: 0.6 });
+    return { air: g.ride.mode === 1, trick: g.ride.trick && g.ride.trick.def && g.ride.trick.def.id };
+  });
+  ok(flip.air && flip.trick === 'kickflip', 'a flip flick off a grind still pops it as a trick');
+}
+
+// --------------------------------------------------------------------------
 section('Slams');
 {
   const wall = await run(() => {

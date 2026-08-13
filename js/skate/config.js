@@ -176,6 +176,10 @@ export const GRIND_ALIGN = 1.42;
 export const GRIND_FRICTION = 1.35;  // m/s² of speed scrubbed while grinding
 export const SLIDE_GRIND_FRICTION = 2.6; // boardslides scrub harder than 50-50s
 export const GRIND_POINTS_PER_M = 12;
+// How hard a sideways hop off a grind throws the board across the rail, as a
+// fraction of the pop's own vertical speed — the same crouch that buys height
+// buys reach, so a bigger pop also lands further off the rail.
+export const HOP_OFF_LATERAL = 0.9;
 
 // --- balance (grinds and manuals) ----------------------------------------
 // A balance meter is not decoration here: it is an inverted pendulum with a
