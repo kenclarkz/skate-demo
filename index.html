@@ -400,6 +400,22 @@
 
         <section id="screen-paused" class="screen" hidden>
           <h1>Paused</h1>
+          <nav class="menu">
+            <div class="setting-row readout">
+              <label for="pause-speed">Speed</label>
+              <span id="pause-speed">0 km/h</span>
+            </div>
+            <div class="setting-row">
+              <label for="pause-music-range">Music volume</label>
+              <input type="range" id="pause-music-range" min="0" max="100" step="1" value="50">
+              <span id="pause-music-value">50%</span>
+            </div>
+            <div class="setting-row">
+              <label for="pause-spotify-range">Spotify volume</label>
+              <input type="range" id="pause-spotify-range" min="0" max="100" step="1" value="100">
+              <span id="pause-spotify-value">100%</span>
+            </div>
+          </nav>
           <button id="btn-resume" class="primary" type="button">Keep skating</button>
           <button id="btn-pause-menu" type="button">Home Screen</button>
         </section>

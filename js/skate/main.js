@@ -315,6 +315,7 @@ hud.setSound(save.sound);
 hud.setSpeedValue(save.speed);
 hud.setCamZoomValue(save.camZoom);
 hud.setMusicVolumeValue(save.musicVolume);
+hud.setSpotifyVolumeValue(save.radioVolume);
 hud.setHoldToPush(save.holdToPush);
 hud.setCameraMode(save.cameraMode);
 hud.setStats(save);
@@ -994,6 +995,10 @@ hud.on.musicVolume = (v) => {
   save.setMusicVolume(v);
   audio.setMusicVolume(v);
 };
+hud.on.spotifyVolume = (v) => {
+  save.setRadioVolume(v);
+  radio?.setVolume(v);
+};
 hud.on.holdToPush = () => {
   save.setHoldToPush(!save.holdToPush);
   C.setHoldToPush(save.holdToPush);
@@ -1021,6 +1026,7 @@ hud.on.reset = () => {
   hud.setCamZoomValue(save.camZoom);
   hud.setMusicVolumeValue(save.musicVolume);
   audio.setMusicVolume(save.musicVolume);
+  hud.setSpotifyVolumeValue(save.radioVolume);
   hud.setHoldToPush(save.holdToPush);
   C.setHoldToPush(save.holdToPush);
   hud.setCameraMode(save.cameraMode);
