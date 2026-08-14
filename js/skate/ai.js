@@ -683,6 +683,7 @@ function stepPatrol(ride, bot, dt, playerPos) {
   let trickCharge = undefined;
   if (ride.mode === GROUND && !ride.grind && !ride.manual && bot.manualT <= 0 && !nearEdge) {
     bot.trickCool -= dt;
+    bot.randomTrickCool -= dt;
     const speedOk = Math.abs(ride.speed) > 2.4;
     const curbPop = stepAhead > CURB_POP_MIN && stepAhead <= CURB_POP_MAX;
     const lip = dropAhead > LIP_DROP;
