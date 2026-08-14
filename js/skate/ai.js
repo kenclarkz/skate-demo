@@ -843,6 +843,20 @@ const PAUSE_MIN = 1.6, PAUSE_MAX = 3.6;  // seconds spent "talking" at a stop
 const WALK_TURN = 1.4;                   // how sharply a walking bot steers towards its target
 const WALK_ALIGN = 0.6;                  // rad of heading error still close enough to start walking
 
+// --- the rival's crowd ----------------------------------------------------
+// When a park's rival is on show, part of the social crowd huddles around
+// him: on foot, board in hand, pacing a ring that circles the star — hopping
+// off-beat, the way a hyped crowd actually bounces — with a wedge of the
+// ring left open so the player can skate straight in and challenge. The
+// moment the rival rides again or leaves, they go back to being a normal
+// crowd.
+const CROWD_COUNT = 7;     // how many skaters form the ring
+const CROWD_RING_R = 4.4;  // metres out the ring stands from the rival
+const CROWD_GAP = 1.2;     // radians of the ring left open for the player
+const CROWD_PACE = 2.0;    // m/s a crowd skater paces along its slice
+const CROWD_HOP_UP = 0.3;  // metres a full-frisk hop lifts off the ground
+const CROWD_SETTLE_R = 1.5; // close enough to its slot that a crowd skater starts pacing
+
 /** The shared clock a whole social crowd follows, so they mount up and
  * dismount together instead of each bot deciding on its own — a session,
  * not eight strangers who all happen to skate at once. */
@@ -1004,6 +1018,90 @@ export class SocialSkater {
     poseCarriedBoard(w, this.skater, this.board);
   }
 
+  /** Join the ring around a rival who is on show: drop whatever the social
+   * crowd was doing and pace a slice of the ring that circles him. `slot`
+   * fixes this bot's place in the ring — its angular offset from the open
+   * wedge, the width of its slice, which way it paces and how frisky its
+   * hops are — so the seven bots spread around the star instead of piling
+   * up. */
+  startCrowd(boss, slot) {
+    this.crowd = { boss, ...slot, angle: slot.offset, hopT: Math.random() * 6 };
+    if (this.riding) this.dismount();
+    this.wanderTarget = null;
+    this.pauseTimer = 0;
+  }
+
+  /** Back to the normal social routine — wandering, chatting, group rides. */
+  endCrowd() {
+    this.crowd = null;
+    this.wanderTarget = null;
+  }
+
+  /**
+   * The hyped ring around a rival: pace along this bot's own slice of a ring
+   * that circles him, on foot and board in hand, bouncing off the slice's
+   * ends so the wedge open for the player stays clear — while hopping
+   * off-beat, the way an excited crowd actually bounces. A crowd skater
+   * joining from across the park walks straight to its slot first — a still
+   * point, so the ring forms cleanly instead of a bot chasing a point that
+   * is already pacing round the rival. Tracks the rival wherever he stands,
+   * so the ring holds through his skate-in and closes in around him the
+   * moment he steps off.
+   */
+  stepCrowd(dt) {
+    if (this.riding) this.dismount();
+    const c = this.crowd;
+    if (!c || !c.boss) return;
+    const cx = c.boss.pos.x;
+    const cz = c.boss.pos.z;
+    const w = this.walker;
+
+    let move;
+    if (!c.settled) {
+      const sx = cx + Math.cos(c.offset) * CROWD_RING_R;
+      const sz = cz + Math.sin(c.offset) * CROWD_RING_R;
+      const dx = sx - w.pos.x;
+      const dz = sz - w.pos.z;
+      if (dx * dx + dz * dz < CROWD_SETTLE_R * CROWD_SETTLE_R) {
+        c.settled = true;
+      } else {
+        const wantYaw = Math.atan2(dx, dz);
+        const delta = C.angleDelta(w.yaw, wantYaw);
+        move = { x: -C.clamp(delta / WALK_TURN, -1, 1), y: Math.abs(delta) < WALK_ALIGN ? 1 : 0 };
+      }
+    }
+
+    if (!move) {
+      // On the ring: pace the slice, bouncing off its ends. Every bot stays
+      // inside its own arc, so the ring keeps moving while the wedge never
+      // fills.
+      c.angle += c.dir * (CROWD_PACE / CROWD_RING_R) * dt * (0.6 + c.frisk * 0.4);
+      const lo = c.offset - c.sector / 2;
+      const hi = c.offset + c.sector / 2;
+      if (c.angle > hi) { c.angle = hi; c.dir = -1; }
+      if (c.angle < lo) { c.angle = lo; c.dir = 1; }
+      const tx = cx + Math.cos(c.angle) * CROWD_RING_R;
+      const tz = cz + Math.sin(c.angle) * CROWD_RING_R;
+      const dx = tx - w.pos.x;
+      const dz = tz - w.pos.z;
+      const wantYaw = Math.atan2(dx, dz);
+      const delta = C.angleDelta(w.yaw, wantYaw);
+      // Turn to face before moving forward, the same guard stepWalk uses, so
+      // a bot stepping onto the ring does not shuttle back and forth along it.
+      move = { x: -C.clamp(delta / WALK_TURN, -1, 1), y: Math.abs(delta) < WALK_ALIGN ? 1 : 0 };
+    }
+    w.update(dt, move);
+
+    // Excitement: a per-bot bouncy hop. The hop rides w.pos.y for the single
+    // frame poseWalk reads it, so the whole rig — carried board included —
+    // lifts together and the ring jumps rather than strolls.
+    c.hopT += dt;
+    const hop = Math.max(0, Math.sin(c.hopT * (5 + c.frisk * 3))) * CROWD_HOP_UP * c.frisk;
+    w.pos.y = w.park.heightAt(w.pos.x, w.pos.z) + hop;
+    this.skater.poseWalk(w, dt);
+    poseCarriedBoard(w, this.skater, this.board);
+  }
+
   /** Hand the bot a new park — a fresh hangout spot, a fresh graph, and back
    * on foot regardless of whatever it was doing on the old one. Takes the
    * same (park, index) shape AiSkater.setPark does, since both are driven
@@ -1014,6 +1112,7 @@ export class SocialSkater {
     this.walker.park = park;
     this.patrol = park.patrol;
     this.hangout = pickHangout(park) || park.patrol[0];
+    this.crowd = null;
     this.dropAtHangout();
     this.riding = false;
     this.route = null;
@@ -1021,12 +1120,43 @@ export class SocialSkater {
   }
 
   step(dt, playerPos) {
-    if (this.group.riding && !this.riding) this.mount();
-    else if (!this.group.riding && this.riding) this.dismount();
+    // A ring around a rival is just this crowd's "hanging out" state with a
+    // target: it stands down the moment the shared timer calls everyone in
+    // for a group ride, and comes back the moment the ride ends.
+    if (this.group.riding) {
+      if (!this.riding) this.mount();
+    } else if (this.riding) {
+      this.dismount();
+    }
 
     if (this.riding) stepPatrol(this.ride, this, dt, playerPos);
+    else if (this.crowd) this.stepCrowd(dt);
     else this.stepWalk(dt);
   }
+}
+
+/**
+ * Point the walkable bots of the crowd at a rival who is on show: hand each
+ * a slot on a ring that circles him — its slice of the circle, which way it
+ * paces, how frisky its hops are — and start them huddling. A wedge
+ * (CROWD_GAP radians) is left open, and the whole ring sits well back of the
+ * rival, so the player can always skate in and challenge. Returns the bots
+ * chosen: the social crowd, the ones already on foot with boards in hand.
+ */
+export function assignBossCrowd(bots, boss, count = CROWD_COUNT) {
+  const walkers = bots.filter((b) => b.group);
+  const pick = walkers.slice(0, count);
+  const occupied = Math.PI * 2 - CROWD_GAP;
+  const sector = occupied / Math.max(1, pick.length);
+  pick.forEach((b, i) => {
+    b.startCrowd(boss, {
+      offset: CROWD_GAP / 2 + sector * (i + 0.5),
+      sector,
+      dir: i % 2 === 0 ? 1 : -1,
+      frisk: 0.55 + (i / Math.max(1, pick.length - 1)) * 0.45,
+    });
+  });
+  return pick;
 }
 
 // --- the pro crowd ------------------------------------------------------

@@ -27,7 +27,7 @@ import { CHARACTERS, byId as charById, lookOf, styleOf } from './characters.js';
 import { customLook, heightById, buildById } from './custom.js';
 import { designPalette, sanitizeText } from './board-design.js';
 import { GRABS } from './tricks.js';
-import { makeAiSkaters } from './ai.js';
+import { makeAiSkaters, assignBossCrowd } from './ai.js';
 import { bossLadder, BossSkater } from './boss.js';
 import { makeBirds } from './bird.js';
 import { makeLogos, checkPickup } from './collectible.js';
@@ -282,6 +282,32 @@ function setupBoss() {
   }
   boss = new BossSkater(park, scene, def);
   shadowCasters.push(...collectMeshes(boss.ride.frame));
+}
+
+// --- the rival's crowd ----------------------------------------------------
+// Seven of the social crowd huddle around a rival who is on show: on foot,
+// pacing an excited ring around him with a wedge left open so the player can
+// skate up and challenge. Released the moment a duel starts or the rival
+// leaves, so the ring only ever forms around a rival standing his ground.
+let bossCrowd = [];
+
+function releaseBossCrowd() {
+  for (const b of bossCrowd) b.endCrowd();
+  bossCrowd = [];
+}
+
+/** Reconcile the rival's ring with what is actually on show. Called every
+ *  frame so a reveal, a remount, a defeat or a park swap all sort themselves
+ *  out — cheap, because it no-ops while the ring is already right. */
+function refreshBossCrowd() {
+  const want = !!boss && state !== CHALLENGE;
+  if (!want) {
+    releaseBossCrowd();
+    return;
+  }
+  if (bossCrowd.length && bossCrowd[0].crowd?.boss === boss) return;
+  releaseBossCrowd();
+  bossCrowd = assignBossCrowd(bots, boss);
 }
 
 /**
@@ -1584,6 +1610,9 @@ const IDLE_INPUT = Object.freeze({
 });
 
 function step(dt, frameInput) {
+  // The rival's ring reconciles before anything steps, so a reveal or a park
+  // swap never leaves a crowd bot circling a rival that is no longer there.
+  refreshBossCrowd();
   // The park's own crowd keeps moving whatever the player is doing — paused at
   // the menu is exactly when a skatepark should still look alive.
   socialGroup.step(dt); // ticked once here, not once per bot that shares it
