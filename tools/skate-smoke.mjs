@@ -1471,7 +1471,7 @@ section('Parks');
     const g = window.__skate;
     return { count: g.parks.length, ids: g.parks.map((p) => p.id), current: g.park.id };
   });
-  ok(info.count === 1, `there is one built-in park (${info.count})`);
+  ok(info.count === 2, `there are two built-in parks (${info.count})`);
   ok(new Set(info.ids).size === info.count, 'each with a distinct id');
   ok(info.current === 'home', 'and the game boots into Home Park');
 
@@ -1533,7 +1533,7 @@ section('Park boundary: nowhere to fall off the edge of the world');
   // Nothing is sampled past the dirt around each pad, so before rideBoundZ
   // existed, riding far enough off the edge would fall forever, chasing
   // ground that was never there. The bound scales with the park's own
-  // extent, so it is checked on the only built-in map.
+  // extent, so it is checked on every built-in map.
   const results = await run(() => {
     const g = window.__skate;
     return g.parks.map((def) => {
@@ -3188,17 +3188,17 @@ section('Menu scrolling and back buttons, on a short screen');
   ok(scrolled.scrollTop > 0, `scrolling the shop actually moves it (scrollTop ${scrolled.scrollTop})`);
   ok(scrolled.backOnScreen, 'and the back button scrolls into view rather than staying stranded below the fold');
 
-  // The park picker gets the same treatment — with a single built-in park it
-  // no longer needs to scroll, but it still has to render its one card and a
-  // working back button on the short screen.
+  // The park picker gets the same treatment — both built-in parks have to
+  // render their cards and a working back button on the short screen.
   const parks = await run(() => {
     const g = window.__skate;
     g.hud.renderParks(g.parks, g.park.id);
     g.hud.show('parks');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
-    return { cards: cards.length, card: cards[0]?.dataset.park, hasBack: !!document.getElementById('btn-parks-back') };
+    return { cards: cards.length, ids: cards.map((c) => c.dataset.park), hasBack: !!document.getElementById('btn-parks-back') };
   });
-  ok(parks.cards === 1 && parks.card === 'home', `the park picker lists Home Park (${parks.card ?? 'none'})`);
+  ok(parks.cards === 2, `the park picker lists both built-in parks (${parks.cards})`);
+  ok(parks.ids.includes('home') && parks.ids.includes('railway'), `and every park gets a card (${parks.ids.join(', ')})`);
   ok(parks.hasBack, 'and it has a back button too');
 
   await page.setViewportSize({ width: 900, height: 560 });
@@ -4009,7 +4009,7 @@ section('Tutorial and menus');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
     return { count: cards.length, ids: cards.map((c) => c.dataset.park) };
   });
-  ok(picker.count === 1, `the park picker lists the one built-in map (${picker.count})`);
+  ok(picker.count === 2, `the park picker lists every built-in map (${picker.count})`);
   const known = await run(() => window.__skate.parks.map((p) => p.id));
   ok(
     picker.ids.every((id) => known.includes(id)),
