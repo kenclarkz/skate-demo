@@ -1557,7 +1557,9 @@ section('Park progression');
   ok(JSON.stringify(boot.unlocked) === JSON.stringify(['home']), 'and it does not silently unlock anything');
 
   // The picker: Home Park is a button with its best, the other two are inert
-  // locked rows spelling out what they need and how far along it is.
+  // locked rows spelling out the pair of doors that must both open on the
+  // park before them — its whole rival roster beaten, and a 1,000,000-point
+  // single run — plus how far along each door is.
   const cards = await run(() => {
     const g = window.__skate;
     g.hud.renderParks(g.parks, g.park.id, g.save);
@@ -1574,24 +1576,30 @@ section('Park progression');
   ok(!!homeCard && !homeCard.locked && homeCard.button, 'Home Park renders as a selectable button');
   ok(!!plazaCard && plazaCard.locked && !plazaCard.button, 'Metro Plaza renders as a locked, non-clickable card');
   ok(!!vertCard && vertCard.locked, 'and Vert Rampage is locked behind it');
-  ok(/1,000,000/.test(plazaCard.text) && /Home Park/.test(plazaCard.text), 'the locked card names the score and the park to beat it on');
-  ok(/0 \/ 1,000,000/.test(plazaCard.text), 'with the progress counted out as best-on-previous over the bar');
+  ok(/beat every rival on Home Park/.test(plazaCard.text), 'the locked card names the roster door and the park to beat it on');
+  ok(/and score 1,000,000 in one run/.test(plazaCard.text), 'and the single-run score door next to it');
+  ok(/Rivals 0\/2/.test(plazaCard.text), 'with the roster counted out as rivals beaten on the previous park');
+  ok(/0 \/ 1,000,000/.test(plazaCard.text), 'and the score progress counted against the bar');
 
-  // Recording below the bar banks a park best but unlocks nothing.
+  // Recording below the bar banks a park best but unlocks nothing — the park
+  // no longer opens on the score alone.
   const below = await run(() => {
     const g = window.__skate;
     const r = g.save.recordParkScore('home', 750000);
-    return { best: g.save.parkBestOf('home'), unlocked: g.save.parksUnlocked.slice(), unlockedId: r.unlockedId };
+    return { best: g.save.parkBestOf('home'), unlocked: g.save.parksUnlocked.slice(), newBest: r.newBest };
   });
-  ok(below.best === 750000 && below.unlockedId === null, 'a score below the bar records the park best and unlocks nothing');
+  ok(below.best === 750000 && below.newBest === true, 'a score below the bar records the park best and unlocks nothing');
   ok(JSON.stringify(below.unlocked) === JSON.stringify(['home']), 'and Metro Plaza stays locked');
 
-  // The locked card's progress bar tracks that best against the bar.
+  // The locked card's score progress tracks that best against the bar. (The
+  // card carries a few notes — the roster door, the score door and the bar —
+  // so the progress readout is the last one.)
   const progress = await run(() => {
     const g = window.__skate;
     g.hud.renderParks(g.parks, g.park.id, g.save);
     const card = [...g.hud.parkGrid.querySelectorAll('[data-park]')].find((c) => c.dataset.park === 'plaza');
-    return { text: card.textContent, width: card.querySelector('.park-progress i')?.style.width, note: card.querySelector('.park-progress-note')?.textContent };
+    const notes = [...card.querySelectorAll('.park-progress-note')];
+    return { width: card.querySelector('.park-progress i')?.style.width, note: notes[notes.length - 1]?.textContent };
   });
   ok(progress.width === '75%', `the locked card fills its progress bar to match (${progress.width})`);
   ok(progress.note.includes('750,000') && progress.note.includes('1,000,000'), 'and the note reads best-on-previous / required');
@@ -1606,9 +1614,10 @@ section('Park progression');
   });
   ok(guarded.before === 'home' && guarded.after === 'home', 'selecting a locked park never loads it');
 
-  // The real banking path: ride out a seeded combo past the bar on Home Park.
-  // The combo event flows through the same handleEvents the player drives, so
-  // recordParkScore and the unlock callout run exactly as they do in play.
+  // The real banking path: ride out a seeded combo past the score door on Home
+  // Park. The combo event flows through the same handleEvents the player
+  // drives, so recordParkScore, the reveal and the unlock check run exactly as
+  // they do in play.
   const banked = await run(() => {
     const g = window.__skate;
     g.place(-14, 6, 0, 7);
@@ -1618,33 +1627,64 @@ section('Park progression');
     g.hold(2.2);
     const callout = document.getElementById('callout');
     return {
-      unlocked: g.save.parksUnlocked.slice(),
+      score: g.score,
       best: g.save.parkBestOf('home'),
+      unlocked: g.save.parksUnlocked.slice(),
+      boss: g.boss && g.boss.def.id,
       callout: callout.textContent,
-      kind: callout.className,
-      hidden: callout.hidden,
     };
   });
-  ok(
-    banked.unlocked.includes('plaza') && !banked.unlocked.includes('vert'),
-    'banking 2,000,000 on Home unlocks Metro Plaza but not Vert Rampage'
-  );
-  ok(banked.best === 2000000, 'and Home Park records the new best');
-  ok(/NEW PARK UNLOCKED/.test(banked.callout), `and the callout announces it (${banked.callout})`);
-  ok(banked.kind.includes('unlock'), 'wearing the unlock callout style');
-  ok(!banked.hidden, 'which stays visible long enough to read');
+  ok(banked.best === 2000000, 'Home Park records the new best');
+  ok(JSON.stringify(banked.unlocked) === JSON.stringify(['home']), 'but 2,000,000 alone unlocks nothing — the roster is still standing');
+  ok(banked.boss === 'ace', `and crossing the milestone mid-run reveals Home Park's first rival (${banked.boss})`);
+  ok(!/NEW PARK UNLOCKED/.test(banked.callout), 'so no unlock callout fires');
 
-  // Now that Metro Plaza is open, a score on it unlocks the next park.
-  const chain = await run(() => {
+  // The reveal just played the skate-in; step the rival off the board so the
+  // run is ready for a challenge.
+  await run(() => window.__skate.endBossCutscene());
+
+  // Beating a rival banks the win but still opens no park on its own — the
+  // roster door is only one of the two.
+  const rosterOnly = await run(() => {
     const g = window.__skate;
-    g.switchPark('plaza');
-    const r = g.save.recordParkScore('plaza', 1000000);
-    return { unlocked: g.save.parksUnlocked.slice(), unlockedId: r.unlockedId, current: g.park.id };
+    g.setRunTricks(50);
+    g.startChallenge();
+    g.challenge.playerScore = 50000;
+    g.challenge.playerTricks = 6;
+    g.challenge.bossScore = 40000;
+    g.challenge.bossTricks = 4;
+    g.endChallenge();
+    return { defeated: g.save.isBossDefeated('ace'), unlocked: g.save.parksUnlocked.slice(), next: g.boss && g.boss.def.id };
   });
-  ok(chain.current === 'plaza' && chain.unlockedId === 'vert', 'a score of 1,000,000 on Metro Plaza unlocks Vert Rampage');
-  ok(JSON.stringify(chain.unlocked) === JSON.stringify(['home', 'plaza', 'vert']), 'and the whole chain is open');
+  ok(rosterOnly.defeated, 'beating a rival banks the win');
+  ok(JSON.stringify(rosterOnly.unlocked) === JSON.stringify(['home']), 'but Metro Plaza stays shut on the roster alone — the score door is still closed');
+  ok(rosterOnly.next === 'nova', `and the ladder steps to Home Park's second rival (${rosterOnly.next})`);
 
-  // The unlocks and per-park bests survive a reload, straight from storage.
+  // The win rode a run already past the 1,000,000-point door, so clearing the
+  // last rival opens the next park — both doors at once.
+  const openBoth = await run(() => {
+    const g = window.__skate;
+    g.setRunTricks(60);
+    g.startChallenge();
+    g.challenge.playerScore = 60000;
+    g.challenge.playerTricks = 7;
+    g.challenge.bossScore = 40000;
+    g.challenge.bossTricks = 4;
+    g.endChallenge();
+    return {
+      defeated: g.save.isBossDefeated('nova'),
+      unlocked: g.save.parksUnlocked.slice(),
+      newPark: document.getElementById('boss-result-new').textContent,
+      next: g.boss && g.boss.def.id,
+    };
+  });
+  ok(openBoth.defeated, 'beating the last rival banks the win');
+  ok(openBoth.unlocked.includes('plaza') && !openBoth.unlocked.includes('vert'), 'and with the run past 1,000,000 it opens Metro Plaza — but not Vert Rampage');
+  ok(/Metro Plaza/.test(openBoth.newPark), `with the result card announcing it (${openBoth.newPark})`);
+  ok(openBoth.next === null, 'and a cleared roster owes no more rivals on Home Park');
+
+  // The unlocks, the per-park bests and the roster clears survive a reload,
+  // straight from storage.
   await page.reload({ waitUntil: 'load' });
   await page.waitForFunction(() => !!window.__skate, null, { timeout: 20000 });
   await run(() => {
@@ -1654,11 +1694,13 @@ section('Park progression');
   const persisted = await run(() => ({
     unlocked: window.__skate.save.parksUnlocked,
     home: window.__skate.save.parkBestOf('home'),
-    plaza: window.__skate.save.parkBestOf('plaza'),
     boot: window.__skate.park.id,
+    ace: window.__skate.save.isBossDefeated('ace'),
+    nova: window.__skate.save.isBossDefeated('nova'),
   }));
-  ok(JSON.stringify(persisted.unlocked) === JSON.stringify(['home', 'plaza', 'vert']), 'unlocks persist across a reload');
-  ok(persisted.home === 2000000 && persisted.plaza === 1000000, 'and so do the per-park bests');
+  ok(JSON.stringify(persisted.unlocked) === JSON.stringify(['home', 'plaza']), 'the unlock persists across a reload');
+  ok(persisted.home === 2000000, 'and so does the park best');
+  ok(persisted.ace && persisted.nova, 'and so do the roster clears');
   ok(persisted.boot === 'plaza', 'and the game boots into the saved, now-unlocked park');
 
   await run(() => window.__skate.switchPark('home'));
@@ -1936,51 +1978,52 @@ section('Birds');
 // --------------------------------------------------------------------------
 section('The rival duel');
 {
-  // Vert Rampage is open but has no recorded best yet, so it owes no rival —
-  // the reveal rides the park's own banked best, nothing saved separately.
+  // A park that is still locked owes no rival, however the run is doing.
   const gated = await run(() => {
     const g = window.__skate;
     g.switchPark('vert');
+    g.start();
     return { def: g.currentBossDef(), boss: g.boss !== null };
   });
-  ok(gated.def === null && !gated.boss, 'an unlocked park below the milestone owes no rival');
+  ok(gated.def === null && !gated.boss, 'a locked park owes no rival at all');
 
-  // Crossing the milestone on the park best names its first rival. 500k is the
-  // reveal milestone, below the 1M park-unlock score, so this banks a rival
-  // without opening the next park — the roster-clear unlock below stays real.
-  const owed = await run(() => {
+  // The reveal rides the live run's score, never the saved park best: even a
+  // park with a banked best above the milestone owes nothing on a fresh run...
+  const parkBestAlone = await run(() => {
     const g = window.__skate;
-    g.save.recordParkScore('vert', 500000);
-    return g.currentBossDef()?.id;
+    g.switchPark('plaza');
+    g.start();
+    g.save.recordParkScore('plaza', 600000);
+    return { best: g.save.parkBestOf('plaza'), def: g.currentBossDef()?.id ?? null };
   });
-  ok(owed === 'tigre', `and crossing it names the park's first rival (${owed})`);
+  ok(parkBestAlone.best === 600000 && parkBestAlone.def === null, 'a banked park best above the milestone reveals nothing on a fresh run');
+
+  // ...while a run that actually crosses it names the park's first rival.
+  const revealed = await run(() => {
+    const g = window.__skate;
+    const r = g.setRunScore(500000);
+    return { def: g.currentBossDef()?.id ?? null, boss: g.boss?.def.id ?? null, score: r.score };
+  });
+  ok(revealed.def === 'rae' && revealed.boss === 'rae', `crossing the milestone mid-run reveals the park's first rival (${revealed.def})`);
 
   // ...and the park card says who is waiting.
   const card = await run(() => {
     const g = window.__skate;
     g.hud.renderParks(g.parks, g.park.id, g.save);
-    const el = [...g.hud.parkGrid.querySelectorAll('[data-park]')].find((c) => c.dataset.park === 'vert');
+    const el = [...g.hud.parkGrid.querySelectorAll('[data-park]')].find((c) => c.dataset.park === 'plaza');
     return el.querySelector('.park-rival')?.textContent || '';
   });
-  ok(card.includes('Tigre'), `the park card names the standing rival (${card})`);
+  ok(card.includes('Rae'), `the park card names the standing rival (${card})`);
 
-  // Making the rival real: setupBoss stands them idle where the player finds them.
-  const standing = await run(() => {
-    const g = window.__skate;
-    g.setupBoss();
-    return { id: g.boss.def.id, mode: g.boss.mode };
-  });
-  ok(standing.id === 'tigre' && standing.mode === 'idle', 'crossing the milestone reveals the first rival, standing');
-
-  // The skate-in cutscene: the rival mounts up and rides, then steps off and idles.
+  // Crossing the milestone plays the skate-in: the rival mounts up and rides,
+  // then steps off and idles where the player finds them.
   const intro = await run(() => {
     const g = window.__skate;
-    g.beginBossCutscene();
     const riding = { mode: g.boss.mode, cutscene: !document.getElementById('boss-cutscene').hidden };
     g.endBossCutscene();
     return { riding, done: { mode: g.boss.mode, cutscene: document.getElementById('boss-cutscene').hidden } };
   });
-  ok(intro.riding.mode === 'riding' && intro.riding.cutscene, 'the skate-in puts the rival on the board under the banner');
+  ok(intro.riding.mode === 'riding' && intro.riding.cutscene, 'the reveal plays the skate-in, on the board under the banner');
   ok(intro.done.mode === 'idle' && intro.done.cutscene, 'and stepping off leaves them standing, banner gone');
 
   // The challenge: both boards down, a timed duel, and the player's own combos
@@ -1989,6 +2032,7 @@ section('The rival duel');
     const g = window.__skate;
     g.freeze();
     g.startChallenge();
+    const req = document.getElementById('boss-req').textContent;
     // The combo banks on 1.35 s of rolling flat ground — place on the spawn,
     // then hold past the window.
     g.place(g.park.spawn.x, g.park.spawn.z, 0, 0);
@@ -2002,21 +2046,46 @@ section('The rival duel');
       score: g.challenge.playerScore,
       mode: g.boss.mode,
       panel: !document.getElementById('boss-challenge').hidden,
+      req,
     };
   });
   ok(duel.on && duel.mode === 'riding' && duel.panel, 'challenging the rival opens the duel panel and both ride');
   ok(duel.time === 120, `with a two-minute countdown (${duel.time}s)`);
   ok(duel.score === 150000, `and the player's banked combo counts towards the duel score (${duel.score})`);
+  ok(/beat Rae: 40,000 pts \+ 70 tricks banked this run/.test(duel.req), `the duel card states the run's requirement bar (${duel.req})`);
 
-  // The result: out-skating the rival on both score and tricks wins the duel,
-  // banks the win, and steps the ladder to the next rival on the park.
-  const won = await run(() => {
+  // Out-skating the rival is not enough on its own: the run must also have
+  // banked the rival's requirement. A run at 10 tricks misses Rae's 70-trick
+  // bar, so even a blowout reads as a loss.
+  const barBlocks = await run(() => {
     const g = window.__skate;
     g.freeze();
     g.challenge.playerScore = 1000000;
-    g.challenge.playerTricks = 5;
+    g.challenge.playerTricks = 9;
     g.challenge.bossScore = 800000;
     g.challenge.bossTricks = 3;
+    g.setRunTricks(10);
+    g.endChallenge();
+    return {
+      title: document.getElementById('boss-result-title').textContent,
+      defeated: g.save.isBossDefeated('rae'),
+      rematchHidden: document.getElementById('btn-boss-rematch').hidden,
+    };
+  });
+  ok(barBlocks.title === 'THEY WON' && !barBlocks.defeated, 'out-skating the rival is not enough when the run missed its requirement bar');
+  ok(!barBlocks.rematchHidden, 'and the rematch button stays for another go');
+
+  // Meeting the bar AND out-skating the rival wins the duel, banks the win,
+  // and steps the ladder to the next rival on the park.
+  const won = await run(() => {
+    const g = window.__skate;
+    g.freeze();
+    g.startChallenge();
+    g.challenge.playerScore = 900000;
+    g.challenge.playerTricks = 8;
+    g.challenge.bossScore = 800000;
+    g.challenge.bossTricks = 3;
+    g.setRunTricks(70);
     g.endChallenge();
     return {
       title: document.getElementById('boss-result-title').textContent,
@@ -2024,32 +2093,60 @@ section('The rival duel');
       rematchHidden: document.getElementById('btn-boss-rematch').hidden,
       panel: !document.getElementById('boss-result').hidden,
       next: g.boss && g.boss.def.id,
-      defeated: g.save.isBossDefeated('tigre'),
+      defeated: g.save.isBossDefeated('rae'),
     };
   });
-  ok(won.title === 'YOU WON' && won.panel && won.rematchHidden, 'out-skating the rival on both counts wins the duel');
-  ok(won.line.includes('1,000,000') && won.line.includes('800,000'), 'and the result card shows both tallies');
-  ok(won.defeated === true && won.next === 'shove', `the win is banked and the ladder steps (next: ${won.next})`);
+  ok(won.title === 'YOU WON' && won.panel && won.rematchHidden, 'meeting the bar and out-skating the rival wins the duel');
+  ok(won.line.includes('900,000') && won.line.includes('800,000'), 'and the result card shows both tallies');
+  ok(won.defeated === true && won.next === 'bolt', `the win is banked and the ladder steps (next: ${won.next})`);
 
-  // Clearing the park's whole roster unlocks the next park in the grid.
+  // Clearing the park's whole roster unlocks the next park only when the run
+  // is also past the 1,000,000-point score door — the same pair of doors the
+  // picker's locked cards spell out.
   const cleared = await run(() => {
     const g = window.__skate;
-    const p = g.save.recordBossWin('shove');
-    g.setupBoss();
-    return { nextPark: p.newPark, def: g.currentBossDef(), boss: g.boss !== null };
+    g.startChallenge();
+    g.challenge.playerScore = 700000;
+    g.challenge.playerTricks = 9;
+    g.challenge.bossScore = 600000;
+    g.challenge.bossTricks = 4;
+    g.setRunTricks(80);
+    g.setRunScore(1000000);
+    g.endChallenge();
+    return {
+      defeated: g.save.isBossDefeated('bolt'),
+      unlocked: g.save.parksUnlocked.slice(),
+      def: g.currentBossDef()?.id ?? null,
+      boss: g.boss !== null,
+      newPark: document.getElementById('boss-result-new').textContent,
+    };
   });
-  ok(cleared.nextPark === 'railway', `clearing the park's last rival unlocks the next park (${cleared.nextPark})`);
+  ok(cleared.defeated, 'beating the park\'s last rival banks the win');
+  ok(cleared.unlocked.includes('vert'), 'and with the roster cleared AND the run past 1,000,000, Vert Rampage opens');
   ok(cleared.def === null && !cleared.boss, 'and a cleared roster owes no more rivals');
+  ok(/Vert Rampage/.test(cleared.newPark), `with the result card announcing it (${cleared.newPark})`);
 
   // The picker's card flips to cleared once the whole roster has fallen.
   const clearedCard = await run(() => {
     const g = window.__skate;
     g.hud.renderParks(g.parks, g.park.id, g.save);
-    const el = [...g.hud.parkGrid.querySelectorAll('[data-park]')].find((c) => c.dataset.park === 'vert');
+    const el = [...g.hud.parkGrid.querySelectorAll('[data-park]')].find((c) => c.dataset.park === 'plaza');
     const rival = el.querySelector('.park-rival');
     return { cls: rival?.className || '', text: rival?.textContent || '' };
   });
   ok(clearedCard.cls.includes('cleared'), `and the park card marks the roster cleared (${clearedCard.text})`);
+
+  // And the freshly opened park is no exception to the reveal rule: it owes
+  // its own first rival only once its own run crosses the milestone.
+  const vertOwes = await run(() => {
+    const g = window.__skate;
+    g.switchPark('vert');
+    g.start();
+    const before = g.currentBossDef()?.id ?? null;
+    const r = g.setRunScore(500000);
+    return { before, after: g.currentBossDef()?.id ?? null };
+  });
+  ok(vertOwes.before === null && vertOwes.after === 'tigre', `and the opened park reveals its own rival on its own run (${vertOwes.after})`);
 }
 
 // --------------------------------------------------------------------------

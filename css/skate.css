@@ -129,6 +129,51 @@ body {
   color: #f4c95d;
 }
 
+#run-tricks {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* The progression strip: a one-line, at-a-glance readout of the run's two
+   gates — the park's rival (who stands waiting, and what the run must have
+   banked) and the next park's unlock (roster plus score). Shown only while
+   riding, drawn fresh by hud.setProgression() whenever a combo banks. */
+#progression {
+  position: absolute;
+  top: calc(64px + var(--pad-t));
+  left: calc(14px + var(--pad-l));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  max-width: min(560px, calc(100vw - 44px));
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--dim);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+#progression .prog-seg b {
+  color: #fff;
+  font-weight: 600;
+}
+
+#progression .prog-seg em {
+  font-style: normal;
+  color: var(--hot);
+}
+
+#progression .prog-sep {
+  opacity: 0.5;
+}
+
+#progression .prog-clear {
+  color: #7ddf8b;
+}
+
+#progression .prog-next b {
+  color: #f4c95d;
+}
+
 #air {
   position: absolute;
   top: 54px;
@@ -642,6 +687,26 @@ body {
   font-weight: 800;
   letter-spacing: 0.1em;
   color: var(--dim);
+}
+
+/* The duel's requirement line: the run must have banked this many points and
+   tricks to win, whatever the two riders manage head-to-head. */
+.boss-req {
+  margin-top: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(238, 241, 244, 0.05);
+  font-size: 12px;
+  color: var(--dim);
+  text-align: center;
+}
+
+.boss-req::before {
+  content: 'WIN: ';
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hot);
+  font-size: 10px;
 }
 
 #boss-result {
