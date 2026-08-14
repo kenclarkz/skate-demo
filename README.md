@@ -48,9 +48,12 @@ Play it at **[kenclarkz.github.io/skate-demo](https://kenclarkz.github.io/skate-
   carried in hand, and hop back on wherever you are.
 - **Eight skaters**, each with their own headwear and palette, picked from a
   skater rack on the Riders screen — from the everyday four up to the
-  legendaries (a tiger, the not-quite-Birdman, a bunny, and a garden gnome),
-  with the same shirt, pants and accessory racks the shop sells sitting right
-  underneath so a rider can be dressed where they are picked; a shop full of
+  legendaries (a tiger, the not-quite-Birdman, a bunny, and a garden gnome).
+  The prebuilt riders are locked; a MAKE A CHARACTER button opens the
+  character maker, and the characters you make are the ones you can pick. A
+  made rider brings its own shirt, pants and accessory racks along with it —
+  the shop's accessory catalogue, painted onto your rider — so each rider is
+  dressed where it is picked and keeps its own look; a shop full of
   purchasable boards across seven shapes (shortboard, longboard, penny,
   cruiser, old-school, freestyle, and mini-cruiser decks, each in a couple of
   skins), shirts, and accessories

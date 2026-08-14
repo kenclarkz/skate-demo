@@ -391,7 +391,7 @@ export const TUTORIAL = [
   },
   {
     title: 'Coins',
-    body: 'Every trick you land pays out, and a banked combo pays out for the whole chain. Spend it in the shop on the start screen — a different board, a different shirt. Picking a different skater is free. None of it changes how you ride.',
+    body: 'Every trick you land pays out, and a banked combo pays out for the whole chain. Spend it in the shop on the start screen — a different board, a different shirt. Make your own rider under Riders, and dress them from their ACCESSORIES there. None of it changes how you ride.',
     keys: '',
     touch: '',
     pad: '',
@@ -438,21 +438,15 @@ export class Hud {
     this.outfitGrid = document.getElementById('outfit-grid');
     this.pantsGrid = document.getElementById('pants-grid');
     this.accessoryGrid = document.getElementById('accessory-grid');
-    // The Riders screen carries the same shirt, pants and accessory racks as
-    // the shop, so a rider can be dressed where they are picked — same
-    // catalogue, same purchase, just a second copy of each rack in the DOM.
-    this.csOutfitGrid = document.getElementById('cs-outfit-grid');
-    this.csPantsGrid = document.getElementById('cs-pants-grid');
     this.csAccessoryGrid = document.getElementById('cs-accessory-grid');
     this.csCoinsEl = document.getElementById('cs-coins');
-    // The repaint wheels under the shirt, pants and accessory racks — one per
-    // copy of each rack, the shop's and the Riders'. Each is a small colour
-    // wheel for the currently equipped owned item — see renderRepaint(). The
-    // per-kind selected colour key and last wheel hue/sat live on the Hud so a
-    // re-render does not lose what the panel was showing.
+    // The repaint wheels under the shirt, pants and accessory racks. Each is a
+    // small colour wheel for the currently equipped owned item — see
+    // renderRepaint(). The per-kind selected colour key and last wheel hue/sat
+    // live on the Hud so a re-render does not lose what the panel was showing.
     this.repaintEls = {
-      outfit: [document.getElementById('repaint-outfit'), document.getElementById('repaint-cs-outfit')],
-      pants: [document.getElementById('repaint-pants'), document.getElementById('repaint-cs-pants')],
+      outfit: [document.getElementById('repaint-outfit')],
+      pants: [document.getElementById('repaint-pants')],
       accessory: [document.getElementById('repaint-accessory'), document.getElementById('repaint-cs-accessory')],
     };
     this._repaintKey = {};
@@ -462,6 +456,16 @@ export class Hud {
     this._repaintSelected = {};
     this.csCharGrid = document.getElementById('cs-char-grid');
     this.csMakerBtn = document.getElementById('btn-charselect-maker');
+    // The ACCESSORIES option and the panel it opens — a made rider's own rack.
+    this.csAccessoriesEl = document.getElementById('cs-accessories');
+    this.csAccessoriesBtn = document.getElementById('btn-cs-accessories');
+    this.csAccessoriesSaveBtn = document.getElementById('btn-cs-accessories-save');
+    this.csAccessoriesBackBtn = document.getElementById('btn-cs-accessories-back');
+    this.csAccessoryCoinsEl = document.getElementById('cs-accessory-coins');
+    this.csBackBtn = document.getElementById('btn-charselect-back');
+    // When the rider accessory panel is open, the repaint panel reads the made
+    // rider's own accessoryIds rather than the shop's global slots.
+    this._riderAccessoryIds = null;
 
     // The Character Maker's own window. A separate mini-scene like the
     // tutorial's, so the figure can turn while every rack around it re-renders.
@@ -560,6 +564,10 @@ export class Hud {
       pants: null,
       accessory: null,
       character: null,
+      // The Riders screen's ACCESSORIES panel: open it, and Save/Back out of it.
+      csAccessories: null,
+      csAccessoriesSave: null,
+      csAccessoriesBack: null,
       // The shop's repaint wheels: `repaint(kind, id, key, hex)` fires as the
       // wheel or its brightness slider moves (live preview), `repaintCommit(kind, id)`
       // when the gesture lets go, and `repaintReset(kind, id)` on Reset. `kind`
@@ -631,6 +639,9 @@ export class Hud {
     click('btn-riders', () => this.on.riders?.());
     click('btn-charselect-back', () => this.on.back?.());
     click('btn-charselect-maker', () => this.on.maker?.());
+    click('btn-cs-accessories', () => this.on.csAccessories?.());
+    click('btn-cs-accessories-save', () => this.on.csAccessoriesSave?.());
+    click('btn-cs-accessories-back', () => this.on.csAccessoriesBack?.());
     click('btn-maker-save', () => this.on.makeSave?.());
     click('btn-maker-back', () => this.on.back?.());
     click('btn-maker-expand', () => this.setMakerFullscreen(true));
@@ -830,7 +841,7 @@ export class Hud {
     for (const grid of [this.accessoryGrid, this.csAccessoryGrid]) {
       grid?.addEventListener('click', (e) => {
         const card = e.target.closest('[data-accessory]');
-        if (card) this.on.accessory?.(card.dataset.accessory);
+        if (card) this.on.accessory?.(card.dataset.accessory, grid === this.csAccessoryGrid);
       });
     }
     // The repaint panels are rebuilt on every render, so their events hang off
@@ -959,6 +970,7 @@ export class Hud {
     if (this.coinsEl) this.coinsEl.textContent = n.toLocaleString();
     if (this.storeCoinsEl) this.storeCoinsEl.textContent = n.toLocaleString();
     if (this.csCoinsEl) this.csCoinsEl.textContent = n.toLocaleString();
+    if (this.csAccessoryCoinsEl) this.csAccessoryCoinsEl.textContent = n.toLocaleString();
   }
 
   /** Which of the walk/skate action buttons are showing right now. Only ever
@@ -1423,10 +1435,10 @@ export class Hud {
    * over whatever else they already have on. "Original" shows the rider
    * stripped back to just the character.
    */
-  renderAccessories(accessories, save, look) {
+  renderAccessories(accessories, save, look, ids) {
     if (!this.accessoryGrid && !this.csAccessoryGrid) return;
     const owned = save.accessories;
-    const ids = save.accessoryIds;
+    const wornIds = ids || save.accessoryIds;
     this.setCoins(save.coins);
     // The equipped rider without any shop accessories: the character's own head
     // and colours, with the shirt and pants still on. `look` already wears the
@@ -1444,8 +1456,10 @@ export class Hud {
     for (const k of ['cap', 'band', 'shades', 'lens', 'pack', 'strap']) {
       if (look.character?.palette && k in look.character.palette) base.palette[k] = look.character.palette[k];
     }
-    // The set currently being worn, skipping the empty "Original" slots.
-    const worn = ACCESSORY_CATEGORIES.map((c) => accessoryById[ids[c]]).filter((a) => a && a.category !== 'none');
+    // The set currently being worn, skipping the empty "Original" slots. When a
+    // made rider's own rack is open, `wornIds` is that rider's slots instead of
+    // the shop's global ones.
+    const worn = ACCESSORY_CATEGORIES.map((c) => accessoryById[wornIds[c]]).filter((a) => a && a.category !== 'none');
     // Paint one accessory onto a look. An owner's repaint of the accessory wins
     // over the catalogue's own colours, exactly as it does on the rider — the
     // rack advertises what would actually be worn.
@@ -1479,8 +1493,8 @@ export class Hud {
     };
     const equippedIn = (a) =>
       a.category === 'none'
-        ? ACCESSORY_CATEGORIES.every((c) => ids[c] === 'none')
-        : ids[a.category] === a.id;
+        ? ACCESSORY_CATEGORIES.every((c) => wornIds[c] === 'none')
+        : wornIds[a.category] === a.id;
     const cards =
       '<div class="board-type-grid">' +
       accessories
@@ -1606,7 +1620,7 @@ export class Hud {
     }[kind];
     if (!meta) return [];
     if (kind === 'accessory') {
-      const ids = save.accessoryIds;
+      const ids = this._riderAccessoryIds || save.accessoryIds;
       const out = [];
       for (const c of ACCESSORY_CATEGORIES) {
         const id = ids[c];
@@ -1697,10 +1711,11 @@ export class Hud {
   }
 
   /**
-   * The Riders screen: the prebuilt characters, with the made characters
-   * leading the grid when any exist. It is a picker, not a shop, so a made
-   * card is the player's own figure — drawn from that character's saved
-   * draft — rather than a price.
+   * The Riders screen: the made characters leading the grid when any exist,
+   * then the prebuilt rack behind them. The prebuilt riders are locked — the
+   * player's own figure is what the maker is for — so each of those cards is
+   * a disabled button with a padlock over its portrait instead of a pick. A
+   * made card is drawn from that character's saved draft.
    */
   renderCharSelect(characters, equippedId, customCharacters) {
     if (!this.csCharGrid) return;
@@ -1719,10 +1734,11 @@ export class Hud {
         .map((c) => {
           const isEquipped = c.id === equippedId;
           return (
-            `<button type="button" class="char-card${isEquipped ? ' current' : ''}" data-character="${c.id}">` +
+            `<button type="button" class="char-card locked${isEquipped ? ' current' : ''}" data-character="${c.id}" disabled>` +
+            `<span class="char-lock" aria-hidden="true">🔒</span>` +
             `<canvas class="char-portrait" data-portrait="${c.id}"></canvas>` +
             `<b>${c.name}</b><span class="char-blurb">${c.blurb}</span>` +
-            `<span class="board-status">${isEquipped ? 'Skating' : 'Tap to pick'}</span></button>`
+            `<span class="board-status">${isEquipped ? 'Skating' : 'Locked — make your own'}</span></button>`
           );
         })
         .join('')
@@ -1736,6 +1752,38 @@ export class Hud {
       const canvas = this.csCharGrid.querySelector(`[data-portrait="${c.id}"]`);
       if (canvas) drawPortrait(canvas, c);
     }
+  }
+
+  /** Show or hide the ACCESSORIES option under the character grid — it only
+   * makes sense once a made rider is equipped. */
+  setRiderAccessoriesVisible(visible) {
+    if (this.csAccessoriesBtn) this.csAccessoriesBtn.hidden = !visible;
+  }
+
+  /** Point the repaint panel at a made rider's own accessory slots while the
+   * ACCESSORIES panel is open, so it repaints what that rider wears rather
+   * than the shop's global slots. Null restores the shop behaviour. */
+  setRiderAccessoryIds(ids) {
+    this._riderAccessoryIds = ids || null;
+  }
+
+  /** Swap the character grid for the made rider's accessory panel. */
+  openAccessoryPanel() {
+    if (this.csAccessoriesEl) this.csAccessoriesEl.hidden = false;
+    if (this.csCharGrid) this.csCharGrid.hidden = true;
+    if (this.csMakerBtn) this.csMakerBtn.hidden = true;
+    if (this.csBackBtn) this.csBackBtn.hidden = true;
+    this.setRiderAccessoriesVisible(false);
+  }
+
+  /** Back to the character grid; the caller decides the ACCESSORIES option's
+   * visibility afterwards. */
+  closeAccessoryPanel() {
+    if (this.csAccessoriesEl) this.csAccessoriesEl.hidden = true;
+    if (this.csCharGrid) this.csCharGrid.hidden = false;
+    if (this.csMakerBtn) this.csMakerBtn.hidden = false;
+    if (this.csBackBtn) this.csBackBtn.hidden = false;
+    this.setRiderAccessoriesVisible(false);
   }
 
   /**

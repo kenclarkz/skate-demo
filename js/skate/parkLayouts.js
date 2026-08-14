@@ -5,8 +5,8 @@
 // and its layout is exactly what gets ridden — the same promise a saved
 // player-built park makes.
 //
-// Home Park is the only built-in map; everything else on the Parks screen is
-// the player's own, saved from the designer.
+// Home Park and RailWay are the built-in maps; everything else on the Parks
+// screen is the player's own, saved from the designer.
 //
 // Three kinds of original feature are deliberately not reproduced exactly:
 //
@@ -224,6 +224,65 @@ export const PARKS = [
       { type: 'bench', x: 50, z: -44, ry: 90, len: 3, color: '#6c757d' },
       { type: 'planter', x: -50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
       { type: 'planter', x: 50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+  def(
+    'railway',
+    'RailWay',
+    'A dark rail yard of pyramids and rails — pump the main line, work the long and short bars, then take the steep climb to the tall drop.',
+    {
+      seed: 0x7e11,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#565a60',
+      spawn: { x: 0, y: 0, z: -44, yaw: 0 },
+      patrol: [
+        { x: 0, z: -54 }, { x: 44, z: -54 }, { x: 44, z: -2 }, { x: 44, z: 54 },
+        { x: 0, z: 54 }, { x: -44, z: 54 }, { x: -44, z: -2 }, { x: -44, z: -54 },
+      ],
+      logos: [
+        { x: 0, z: -52 }, { x: 26, z: -54 }, { x: 43, z: 0 },
+        { x: -43, z: 0 }, { x: 0, z: 52 }, { x: 26, z: 52 },
+      ],
+    },
+    [
+      // Steep climb and tall drop: pump the main line north, launch up the
+      // tall transition, and drop off the platform behind the lip.
+      { type: 'rollin', x: 0, z: 34, ry: 0, w: 16, R: 3, H: 2.6, deck: 10, color: '#e0552f' },
+      // Pyramids flank the main line in two rows, like a rail yard's mounds.
+      { type: 'pyramid', x: 16, z: -24, w: 5, d: 5, len: 3.5, h: 1.1, color: '#7c8691' },
+      { type: 'pyramid', x: -16, z: -24, w: 5, d: 5, len: 3.5, h: 1.1, color: '#7c8691' },
+      { type: 'pyramid', x: 16, z: -8, w: 4, d: 4, len: 3, h: 0.9, color: '#737b87' },
+      { type: 'pyramid', x: -16, z: -8, w: 4, d: 4, len: 3, h: 0.9, color: '#737b87' },
+      { type: 'pyramid', x: 16, z: 8, w: 4, d: 4, len: 3, h: 0.9, color: '#737b87' },
+      { type: 'pyramid', x: -16, z: 8, w: 4, d: 4, len: 3, h: 0.9, color: '#737b87' },
+      { type: 'pyramid', x: 16, z: 24, w: 5, d: 5, len: 3.5, h: 1.1, color: '#7c8691' },
+      { type: 'pyramid', x: -16, z: 24, w: 5, d: 5, len: 3.5, h: 1.1, color: '#7c8691' },
+      { type: 'pyramid', x: 34, z: -16, w: 6, d: 6, len: 4, h: 1.3, color: '#8992a0' },
+      { type: 'pyramid', x: -34, z: -16, w: 6, d: 6, len: 4, h: 1.3, color: '#8992a0' },
+      { type: 'pyramid', x: 34, z: 0, w: 5, d: 5, len: 3.5, h: 1.2, color: '#8992a0' },
+      { type: 'pyramid', x: -34, z: 0, w: 5, d: 5, len: 3.5, h: 1.2, color: '#8992a0' },
+      { type: 'pyramid', x: 34, z: 16, w: 6, d: 6, len: 4, h: 1.3, color: '#8992a0' },
+      { type: 'pyramid', x: -34, z: 16, w: 6, d: 6, len: 4, h: 1.3, color: '#8992a0' },
+      // Long rails running the corridors between the rows — the park's tracks.
+      { type: 'rail', x: 8, z: 0, ry: 90, len: 38, h: 0.7, color: '#d7dce2' },
+      { type: 'rail', x: -8, z: 0, ry: 90, len: 38, h: 0.7, color: '#d7dce2' },
+      { type: 'rail', x: 23, z: 0, ry: 90, len: 26, h: 0.7, color: '#d7dce2' },
+      { type: 'rail', x: -23, z: 0, ry: 90, len: 26, h: 0.7, color: '#d7dce2' },
+      // Short rails in the gaps between the pyramids.
+      { type: 'rail', x: 23, z: -16, ry: 90, len: 6, h: 0.6, color: '#e5e7eb' },
+      { type: 'rail', x: -23, z: -16, ry: 90, len: 6, h: 0.6, color: '#e5e7eb' },
+      { type: 'rail', x: 23, z: 16, ry: 90, len: 6, h: 0.6, color: '#e5e7eb' },
+      { type: 'rail', x: -23, z: 16, ry: 90, len: 6, h: 0.6, color: '#e5e7eb' },
+      { type: 'rail', x: 16, z: 0, ry: 0, len: 8, h: 0.65, color: '#e5e7eb' },
+      { type: 'rail', x: -16, z: 0, ry: 0, len: 8, h: 0.65, color: '#e5e7eb' },
+      // Signal rails flanking the approach to the roll-in.
+      { type: 'rail', x: 12, z: 32, ry: 0, len: 6, h: 0.6, color: '#f4a261' },
+      { type: 'rail', x: -12, z: 32, ry: 0, len: 6, h: 0.6, color: '#f4a261' },
+      // Short crossings on the open corners of the pad.
+      { type: 'rail', x: 20, z: -38, ry: 90, len: 4, h: 0.5, color: '#e5e7eb' },
+      { type: 'rail', x: -20, z: -38, ry: 90, len: 4, h: 0.5, color: '#e5e7eb' },
+      { type: 'rail', x: 20, z: 38, ry: 90, len: 4, h: 0.5, color: '#e5e7eb' },
+      { type: 'rail', x: -20, z: 38, ry: 90, len: 4, h: 0.5, color: '#e5e7eb' },
     ]
   ),
 ];

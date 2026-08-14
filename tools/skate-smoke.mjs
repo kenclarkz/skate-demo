@@ -1472,6 +1472,7 @@ section('Parks');
     return { count: g.parks.length, ids: g.parks.map((p) => p.id), current: g.park.id };
   });
   ok(info.count === 3, `there are three built-in parks (${info.count})`);
+  ok(info.count === 2, `there are two built-in parks (${info.count})`);
   ok(new Set(info.ids).size === info.count, 'each with a distinct id');
   ok(info.current === 'home', 'and the game boots into Home Park');
 
@@ -3322,14 +3323,18 @@ section('Menu scrolling and back buttons, on a short screen');
   // The park picker gets the same treatment — three built-in parks no longer
   // need to scroll, but they still have to render and keep a working back
   // button on the short screen.
+  // The park picker gets the same treatment — both built-in parks have to
+  // render their cards and a working back button on the short screen.
   const parks = await run(() => {
     const g = window.__skate;
     g.hud.renderParks(g.parks, g.park.id, g.save);
     g.hud.show('parks');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
-    return { cards: cards.length, card: cards[0]?.dataset.park, hasBack: !!document.getElementById('btn-parks-back') };
+    return { cards: cards.length, ids: cards.map((c) => c.dataset.park), hasBack: !!document.getElementById('btn-parks-back') };
   });
   ok(parks.cards === 3 && parks.card === 'home', `the park picker lists Home Park first (${parks.card ?? 'none'})`);
+  ok(parks.cards === 2, `the park picker lists both built-in parks (${parks.cards})`);
+  ok(parks.ids.includes('home') && parks.ids.includes('railway'), `and every park gets a card (${parks.ids.join(', ')})`);
   ok(parks.hasBack, 'and it has a back button too');
 
   await page.setViewportSize({ width: 900, height: 560 });
@@ -3355,13 +3360,15 @@ section('Skater picker');
       ),
     };
   });
-  ok(cat.count === 8, `there are eight skaters to choose between (${cat.ids.join(', ')})`);
+  ok(cat.count === 10, `there are ten skaters to choose between (${cat.ids.join(', ')})`);
   ok(cat.named, 'each with a name and a line describing them');
   ok(cat.keys, 'and a complete palette');
-  ok(new Set(cat.heads).size === 7, `and each with their own headwear (${cat.heads.join(', ')})`);
+  ok(new Set(cat.heads).size === 9, `and each with their own headwear (${cat.heads.join(', ')})`);
 
-  // Picking one rebuilds the live rig, and the pick survives a reload the same
-  // way the board and the shirt do.
+  // The prebuilt rack is locked until a rider is made: picking one is refused
+  // and the save is left exactly where it was. The save layer still knows the
+  // prebuilt riders — it is the picker that locks the door, so the game can
+  // boot with the default while no custom character exists yet.
   const picked = await run(() => {
     const g = window.__skate;
     const before = g.save.characterId;
@@ -3371,25 +3378,24 @@ section('Skater picker');
     g.selectCharacter('rae');
     return { before, ok3, head, capHex, nowHead: g.skater.style.head, nowId: g.save.characterId };
   });
-  ok(picked.ok3 === true, 'selectCharacter() equips one');
-  ok(picked.head === 'helmet', "and rebuilds the rig with that character's own headwear");
-  ok(picked.capHex === 0xc4433a, 'and their own colours');
-  ok(picked.nowHead === 'hair' && picked.nowId === 'rae', 'and swapping again takes effect immediately');
+  ok(picked.ok3 === false, 'the prebuilt rack is locked — selectCharacter() refuses it');
+  ok(picked.head === 'cap' && picked.capHex === 0x2f3b52, "and the live rig keeps its own rider's headwear and colours");
+  ok(picked.nowHead === 'cap' && picked.nowId === picked.before, 'and a second prebuilt pick changes nothing either');
 
   // The shirt rack layers over whichever skater is equipped, rather than
   // replacing them — the whole reason outfits are overrides now.
   const layered = await run(() => {
     const g = window.__skate;
-    g.selectCharacter('nova');
     const own = g.skater.palette;
     const ownSkin = own.skin;
+    const ownShirt = own.shirt;
     g.save.addCoins(500);
     g.selectOutfit('crimson');
     const dressed = g.skater.palette;
     g.selectOutfit('street');
     return {
       ownSkin,
-      ownShirt: 0x3d444e,
+      ownShirt,
       dressedShirt: dressed.shirt,
       dressedSkin: dressed.skin,
       backToOwn: g.skater.palette.shirt,
@@ -3400,7 +3406,9 @@ section('Skater picker');
   ok(layered.backToOwn === layered.ownShirt, '"Original" puts them back in their own clothes');
 
   // The rack itself, which lives on the Riders screen — not the shop. A card
-  // each, with a portrait actually drawn on each.
+  // each, with a portrait actually drawn on each. Every prebuilt card is
+  // locked: a padlock over the figure, and the pick refused until the maker
+  // is used.
   const screen = await run(() => {
     const g = window.__skate;
     g.showRiders();
@@ -3419,6 +3427,8 @@ section('Skater picker');
     return {
       state: g.state,
       cards: cards.length,
+      locked: grid.querySelectorAll('.char-card.locked').length,
+      lockIcons: grid.querySelectorAll('.char-lock').length,
       current: grid.querySelectorAll('.char-card.current').length,
       currentId: grid.querySelector('.char-card.current')?.dataset.character,
       painted,
@@ -3426,48 +3436,57 @@ section('Skater picker');
       visible: !document.getElementById('screen-charselect').hidden,
       // The characters have left the shop entirely — no skater rack there.
       shopHasRack: !!document.getElementById('char-grid'),
-      // And the Riders screen carries the character's racks too: the shirts,
-      // pants and accessories the shop sells, right under the picker.
-      racks: [
-        document.getElementById('cs-outfit-grid')?.querySelectorAll('[data-outfit]').length || 0,
-        document.getElementById('cs-pants-grid')?.querySelectorAll('[data-pants]').length || 0,
-        document.getElementById('cs-accessory-grid')?.querySelectorAll('[data-accessory]').length || 0,
-      ],
+      // And the clothes racks left the Riders screen for the shop: the shirts
+      // and pants have no copy here, and the accessory rack lives inside the
+      // made rider's own panel — hidden until a character is made.
+      csOutfit: !!document.getElementById('cs-outfit-grid'),
+      csPants: !!document.getElementById('cs-pants-grid'),
+      panelClosed: document.getElementById('cs-accessories').hidden,
+      accessoriesHidden: document.getElementById('btn-cs-accessories').hidden,
     };
   });
   ok(screen.state === 'charselect', 'the skater rack lives on the Riders screen');
   ok(screen.visible && screen.hasBack, 'which shows, and has a back button');
   ok(screen.cards === 8, 'and a card per skater');
+  ok(
+    screen.locked === 8 && screen.lockIcons === 8,
+    'and every prebuilt rider card is locked, with a padlock over its portrait'
+  );
+  ok(screen.current === 1 && screen.currentId === 'ace', 'and exactly one marked as the one being skated');
+  ok(screen.cards === 10, 'and a card per skater');
   ok(screen.current === 1 && screen.currentId === 'nova', 'and exactly one marked as the one being skated');
   ok(
-    screen.painted.length === 8 && screen.painted.every((n) => n > 400),
+    screen.painted.length === 10 && screen.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
   );
   ok(!screen.shopHasRack, 'and the shop no longer has a skater rack of its own');
+  ok(!screen.csOutfit && !screen.csPants, 'and the shirts and pants racks have left the Riders screen for the shop');
   ok(
-    screen.racks.every((n) => n > 0),
-    `and the Riders screen carries the shirts, pants and accessories too (${screen.racks.join(' / ')})`
+    screen.panelClosed && screen.accessoriesHidden,
+    'and the accessory rack sits behind the made rider panel, closed until one exists'
   );
 
-  // Tapping a card goes through the same click path the player's finger does.
+  // Tapping a locked card goes through the same click path the player's finger
+  // does — a disabled button, so nothing can be picked.
   const tapped = await run(() => {
     const g = window.__skate;
-    document.querySelector('[data-character="ace"]').click();
+    document.querySelector('[data-character="bolt"]').click();
     return { id: g.save.characterId, head: g.skater.style.head };
   });
-  ok(tapped.id === 'ace' && tapped.head === 'cap', 'and tapping a card picks that skater');
+  ok(tapped.id === 'ace' && tapped.head === 'cap', 'and tapping a locked card picks nobody');
 
   // The tutorial's demo rider is a second, separate rig — it has to follow the
-  // pick too, or How to play shows somebody else doing the tricks.
+  // pick too, or How to play shows somebody else doing the tricks. A refused
+  // locked pick must not yank it around either.
   const demoFollows = await run(() => {
     const g = window.__skate;
-    g.selectCharacter('bolt');
+    g.selectCharacter('bolt'); // locked — changes nothing
     const demo = g.hud.preview?.skater;
     return demo ? { head: demo.style.head, cap: demo.palette.cap } : null;
   });
   ok(
-    demoFollows && demoFollows.head === 'helmet' && demoFollows.cap === 0xc4433a,
-    "and the tutorial's demo rider changes to match"
+    demoFollows && demoFollows.head === 'cap' && demoFollows.cap === 0x2f3b52,
+    "and the tutorial's demo rider still matches the one being skated"
   );
 
   await run(() => window.__skate.hud.show('start'));
@@ -3596,6 +3615,17 @@ section('Character Maker');
   ok(saved.shirt === 0xcf9c3e, 'and the bought shirt');
   ok(saved.coins === paid.coins, 'and saving itself costs nothing');
 
+  // Saving drops the player back on the Riders screen — the made rider is in
+  // front of them, ready to be picked or dressed — and because that rider is
+  // equipped, the ACCESSORIES option is showing.
+  const backToRiders = await run(() => ({
+    state: window.__skate.state,
+    visible: !document.getElementById('screen-charselect').hidden,
+    accessoriesShown: !document.getElementById('btn-cs-accessories').hidden,
+  }));
+  ok(backToRiders.state === 'charselect' && backToRiders.visible, 'saving returns to the Riders screen, not the start');
+  ok(backToRiders.accessoriesShown, 'and the ACCESSORIES option is showing for the made rider');
+
   // The Riders screen shows the made character leading the grid, drawn as a
   // real portrait, and tapping it equips it.
   const riders = await run(() => {
@@ -3618,6 +3648,7 @@ section('Character Maker');
       customId,
       cards: cards.length,
       hasCustom: !!grid.querySelector(`[data-character="${customId}"]`),
+      locked: grid.querySelectorAll('.char-card.locked').length,
       current: grid.querySelectorAll('.char-card.current').length,
       painted,
       picked,
@@ -3626,27 +3657,101 @@ section('Character Maker');
   });
   ok(riders.state === 'charselect', 'the Riders screen opens');
   ok(riders.cards === 9, 'with a card for every rider and the made one');
+  ok(riders.locked === 8, 'the eight prebuilt cards still locked behind it');
+  ok(riders.cards === 11, 'with a card for every rider and the made one');
   ok(riders.hasCustom === true, 'and the made character leads the grid');
   ok(riders.current === 1, 'exactly one marked as skating');
   ok(
-    riders.painted.length === 9 && riders.painted.every((n) => n > 400),
+    riders.painted.length === 11 && riders.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${riders.painted.join(', ')} pixels)`
   );
   ok(riders.picked === true && riders.eqId === riders.customId, 'and tapping the made card equips it');
 
-  // Picking a prebuilt rider puts the standard body back on the live rig, and
-  // the tutorial's demo figure follows the made one too.
+  // A locked prebuilt pick leaves the made rider on the rig — only the maker
+  // is a way back to the standard body — and the tutorial's demo figure
+  // follows the made one.
   const prebuilt = await run(() => {
     const g = window.__skate;
     const customId = `custom:${g.save.customCharacters[0].id}`;
-    g.selectCharacter('nova');
+    g.selectCharacter('nova'); // locked — refused
     const afterNova = { id: g.save.characterId, scale: g.skater.scale.height };
-    g.selectCharacter(customId);
     const demo = g.hud.preview?.skater;
-    return { afterNova, demo: demo ? { scale: demo.scale.height, head: demo.style.head } : null };
+    return { customId, afterNova, demo: demo ? { scale: demo.scale.height, head: demo.style.head } : null };
   });
-  ok(prebuilt.afterNova.id === 'nova' && Math.abs(prebuilt.afterNova.scale - 1) < 1e-6, 'and a prebuilt rider restores the standard body');
+  ok(
+    prebuilt.afterNova.id === prebuilt.customId && Math.abs(prebuilt.afterNova.scale - 1.08) < 1e-6,
+    'a locked prebuilt pick leaves the made rider on the rig'
+  );
   ok(prebuilt.demo && Math.abs(prebuilt.demo.scale - 1.08) < 1e-6, 'and the tutorial demo matches the made rider');
+
+  // The ACCESSORIES option swaps the grid for the made rider's own rack: a
+  // card per accessory drawn on their figure, and the whole thing sits behind
+  // the character select rather than on top of it.
+  const accessoriesOpen = await run(() => {
+    const g = window.__skate;
+    g.hud.on.csAccessories();
+    const grid = document.getElementById('cs-accessory-grid');
+    return {
+      open: !document.getElementById('cs-accessories').hidden,
+      gridHidden: document.getElementById('cs-char-grid').hidden,
+      cards: grid ? grid.querySelectorAll('[data-accessory]').length : 0,
+      current: grid ? grid.querySelectorAll('.accessory-card.current').length : 0,
+      state: g.state,
+    };
+  });
+  ok(accessoriesOpen.open && accessoriesOpen.gridHidden, 'the ACCESSORIES option opens the made rider\'s own rack');
+  ok(accessoriesOpen.state === 'charselect', 'still on the Riders screen — a panel, not a detour');
+  ok(accessoriesOpen.cards === 16, `with a card per accessory (${accessoriesOpen.cards})`);
+  ok(accessoriesOpen.current === 1, 'and the "Original" card marked until anything is worn');
+
+  // Wearing on the rider fills their own slots: the rig wears them, and the
+  // shop's global slots stay untouched, so the next rider starts clean.
+  const dressedRider = await run(() => {
+    const g = window.__skate;
+    const riderId = g.save.customCharacters[0].id;
+    g.save.addCoins(600);
+    g.selectRiderAccessory('tophat');
+    g.selectRiderAccessory('gold-shades');
+    return {
+      hatSlot: g.save.customCharacters[0].accessoryIds.hat,
+      shadesSlot: g.save.customCharacters[0].accessoryIds.shades,
+      packSlot: g.save.customCharacters[0].accessoryIds.pack,
+      head: g.skater.style.head,
+      cap: g.skater.palette.cap,
+      global: g.save.accessoryIds,
+      riderId,
+    };
+  });
+  ok(
+    dressedRider.hatSlot === 'tophat' && dressedRider.shadesSlot === 'gold-shades',
+    'wearing on the rider fills that rider\'s own hat and shades slots'
+  );
+  ok(dressedRider.packSlot === 'none', 'while the slot nothing was worn in stays empty');
+  ok(dressedRider.head === 'tophat' && dressedRider.cap === 0x1c1c20, 'and the live rig actually wears them');
+  ok(
+    dressedRider.global.hat === 'none' && dressedRider.global.shades === 'none',
+    "and the shop's global slots are untouched"
+  );
+
+  // Save puts the character select back, with the ACCESSORIES option still in
+  // place, and the rider keeps their own rack on the next visit.
+  const savedAccessories = await run(() => {
+    const g = window.__skate;
+    g.hud.on.csAccessoriesSave();
+    const grid = document.getElementById('cs-accessory-grid');
+    return {
+      closed: document.getElementById('cs-accessories').hidden,
+      gridBack: !document.getElementById('cs-char-grid').hidden,
+      accessoriesShown: !document.getElementById('btn-cs-accessories').hidden,
+      state: g.state,
+      stillOwned: g.save.customCharacters[0].accessoryIds.hat === 'tophat',
+      cards: grid ? grid.querySelectorAll('[data-accessory]').length : 0,
+    };
+  });
+  ok(savedAccessories.closed && savedAccessories.gridBack, 'Save drops the player back on the character select grid');
+  ok(savedAccessories.state === 'charselect' && savedAccessories.accessoriesShown, 'and the ACCESSORIES option is still there');
+  ok(savedAccessories.stillOwned, 'and the rider keeps their own rack for next time');
+  ok(savedAccessories.cards === 16, 'with the rack still full when it is reopened');
 
   // The saved rider lives on a card in the maker's rack, with its own drawn
   // portrait. Re-opening the maker starts a fresh character, the same as the
@@ -3694,9 +3799,20 @@ section('Character Maker');
     const g = window.__skate;
     g.pickMakerPart('height', 'short');
     g.saveMadeCharacter();
-    return { cards: g.save.customCharacters.length, id: g.save.characterId, height: g.save.customCharacters[1].height };
+    return {
+      cards: g.save.customCharacters.length,
+      id: g.save.characterId,
+      height: g.save.customCharacters[1].height,
+      slots: g.save.customCharacters[1].accessoryIds,
+      firstKept: g.save.customCharacters[0].accessoryIds.hat,
+    };
   });
   ok(second.cards === 2 && second.height === 'short', 'saving the edited draft makes a second rider, not an overwrite');
+  ok(
+    second.slots && second.slots.hat === 'tophat' && second.slots.shades === 'gold-shades' && second.slots.pack === 'none',
+    'and the edited copy carries the rider\'s own rack with it, like its clothes'
+  );
+  ok(second.firstKept === 'tophat', 'while the first rider keeps the accessories it was given');
 
   // Delete takes a rider off the rack; deleting the one being skated falls
   // back to the default rider, and emptying the rack removes the made card.
@@ -3770,7 +3886,7 @@ section('Start menu: every button opens what it says');
     const r = card?.getBoundingClientRect();
     return { cards: grid ? grid.querySelectorAll('[data-character]').length : 0, sized: !!r && r.width > 40 && r.height > 40 };
   });
-  ok(reachable.cards === 8 && reachable.sized, 'and the eight skaters are laid out inside it');
+  ok(reachable.cards === 10 && reachable.sized, 'and the ten skaters are laid out inside it');
   await page.click('#btn-charselect-back', { timeout: 4000 });
 }
 
@@ -4141,6 +4257,7 @@ section('Tutorial and menus');
     return { count: cards.length, ids: cards.map((c) => c.dataset.park) };
   });
   ok(picker.count === 3, `the park picker lists all three built-in maps (${picker.count})`);
+  ok(picker.count === 2, `the park picker lists every built-in map (${picker.count})`);
   const known = await run(() => window.__skate.parks.map((p) => p.id));
   ok(
     picker.ids.every((id) => known.includes(id)),
@@ -5072,6 +5189,183 @@ section('The park editor shows what you ride');
     return out;
   });
   ok(aligned.length === 0, `every palette preview sits on its own collision footprint (${aligned.length || 'all 48'} aligned)`);
+
+  await run(() => window.__skate.showStart());
+}
+
+// --------------------------------------------------------------------------
+section('The park editor decor palette');
+{
+  // The decor palette is the dressing half of the editor — trash cans, trees,
+  // fences, vehicles and spectators that are pure scenery. Every one of them
+  // still previews, places, rotates, scales and recolors like any obstacle,
+  // but none of them may add a surface, a grind, a graph node or any physics
+  // to the park: a prop is scenery, full stop.
+  const open = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1, id: 'user-decor', name: 'Decor smoke', blurb: 'Built by the smoke test.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'd0', type: 'slab', x: 0, y: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 6, d: 3, h: 0.25, color: 'concrete' },
+      ],
+    });
+    const cats = [...document.querySelectorAll('#dg-palette .dg-cat')].map((el) => el.textContent.trim());
+    const types = [...document.querySelectorAll('#dg-palette [data-type]')].map((b) => b.dataset.type);
+    return {
+      cats,
+      types,
+      objects: g.designer.file.objects.length,
+      pickables: g.designer.pickables.length,
+    };
+  });
+  ok(open.cats.length === 2 && open.cats[0] === 'Obstacles' && open.cats[1] === 'Decor', `the palette is grouped into Obstacles and Decor (${open.cats.join(' / ')})`);
+  ok(open.types.includes('tree') && open.types.includes('trashcan') && open.types.includes('foodtruck') && open.types.includes('spectator'), 'with the props and the obstacles both in the rail');
+  ok(open.objects === 1 && open.pickables === 1, `with the file's slab live in the scene (${open.pickables} pickable)`);
+
+  // Adding a decor prop works exactly like adding an obstacle: it lands in the
+  // file and gets a pickable preview in the scene, and its properties panel
+  // carries the same transform + surface color controls.
+  const added = await run(() => {
+    const g = window.__skate;
+    g.designer.addObject('tree');
+    g.designer.addObject('foodtruck');
+    const o = g.designer.file.objects.find((o) => o.type === 'foodtruck');
+    g.designer.select(o.id);
+    return {
+      objects: g.designer.file.objects.length,
+      pickables: g.designer.pickables.length,
+      foodtruck: { x: o.x, z: o.z, sx: o.sx, sz: o.sz, color: o.color },
+      panelWheel: !!document.querySelector('#dg-panel .dg-wheel'),
+      panelSwatches: !!document.querySelector('#dg-panel .dg-swatch'),
+    };
+  });
+  ok(added.objects === 3 && added.pickables === 3, 'a decor prop adds to the file and the scene like any object');
+  ok(added.foodtruck.color, 'carrying its own surface colour');
+  ok(added.panelWheel && added.panelSwatches, 'and the properties panel paints a colour picker for it');
+
+  // The preview has to line up with the footprint the game clears the pad by,
+  // the same way the obstacles' previews do. Every decor type, four rotations,
+  // one with a non-uniform scale.
+  const aligned = await run(async () => {
+    const g = window.__skate;
+    const THREE = await import('./js/game/three.js');
+    const { boundsOf, newObject, OBJECTS } = await import('./js/skate/parkObjects.js');
+    const TYPES = OBJECTS.filter((t) => t.category === 'decor').map((t) => t.id);
+    const out = [];
+    for (const type of TYPES) {
+      for (const ry of [0, 90, 180, 270]) {
+        g.openDesigner({
+          v: 1, id: 'user-align', name: 'Align', blurb: 'Decor preview/footprint alignment.',
+          extent: 40, ground: 'concrete', spawn: { x: 0, z: -25 },
+          objects: [{ ...newObject(type), id: 'm1', x: 4, y: 0, z: -3, ry, sx: 1.25, sz: 0.75 }],
+        });
+        const d = g.designer;
+        const o = d.file.objects[0];
+        const group = d.pickables.find((gr) => gr.userData.parkObjId === 'm1');
+        const preview = new THREE.Box3().setFromObject(group);
+        const b = boundsOf(o);
+        const fp = { x0: Math.min(b.x0, b.x1), x1: Math.max(b.x0, b.x1), z0: Math.min(b.z0, b.z1), z1: Math.max(b.z0, b.z1) };
+        const px = [preview.min.x, preview.max.x];
+        const pz = [preview.min.z, preview.max.z];
+        const eps = 0.11;
+        const ok = px[0] >= fp.x0 - eps && px[1] <= fp.x1 + eps && pz[0] >= fp.z0 - eps && pz[1] <= fp.z1 + eps;
+        if (!ok) {
+          out.push(
+            `${type}@${ry} preview x[${px.map((v) => v.toFixed(2))}] z[${pz.map((v) => v.toFixed(2))}]` +
+            ` vs footprint x[${fp.x0.toFixed(2)},${fp.x1.toFixed(2)}] z[${fp.z0.toFixed(2)},${fp.z1.toFixed(2)}]`
+          );
+        }
+      }
+    }
+    return out;
+  });
+  ok(aligned.length === 0, `every decor preview sits on its own clear footprint (${aligned.length || 'all 128'} aligned)`);
+
+  // And the editor preview has to match the transform the built park uses: the
+  // game stamps each prop with T(x, y, z) · Ry(ry) · S(sx, 1, sz), so a scaled
+  // and spun prop's world box here has to match the game's own recipe.
+  const recipe = await run(async () => {
+    const g = window.__skate;
+    const THREE = await import('./js/game/three.js');
+    const { newObject, boundsOf } = await import('./js/skate/parkObjects.js');
+    const type = 'foodtruck';
+    g.openDesigner({
+      v: 1, id: 'user-align', name: 'Align', blurb: 'Decor game transform.',
+      extent: 40, ground: 'concrete', spawn: { x: 0, z: -25 },
+      objects: [{ ...newObject(type), id: 'm1', x: 6, y: 0.4, z: -5, ry: 30, sx: 2, sy: 1.3, sz: 1.5 }],
+    });
+    const o = g.designer.file.objects[0];
+    const group = g.designer.pickables.find((gr) => gr.userData.parkObjId === 'm1');
+    const preview = new THREE.Box3().setFromObject(group);
+    const b = boundsOf(o);
+    const corners = [
+      new THREE.Vector3(b.x0, 0, b.z0),
+      new THREE.Vector3(b.x0, 0, b.z1),
+      new THREE.Vector3(b.x1, 0, b.z0),
+      new THREE.Vector3(b.x1, 0, b.z1),
+    ];
+    const game = new THREE.Box3().setFromPoints(corners);
+    const eps = 0.15;
+    const inX = preview.min.x >= game.min.x - eps && preview.max.x <= game.max.x + eps;
+    const inZ = preview.min.z >= game.min.z - eps && preview.max.z <= game.max.z + eps;
+    return {
+      ok: inX && inZ,
+      px: [preview.min.x.toFixed(2), preview.max.x.toFixed(2)],
+      pz: [preview.min.z.toFixed(2), preview.max.z.toFixed(2)],
+      gx: [game.min.x.toFixed(2), game.max.x.toFixed(2)],
+      gz: [game.min.z.toFixed(2), game.max.z.toFixed(2)],
+    };
+  });
+  ok(recipe.ok, `a scaled, spun prop matches the park's build recipe (preview x[${recipe.px}] z[${recipe.pz}] vs game x[${recipe.gx}] z[${recipe.gz}])`);
+
+  // Save & Test builds the props into the park as pure scenery: the rideable
+  // surfaces and grinds come only from the obstacles, the pad stays the ground
+  // under a prop, and the park graph ignores the props entirely.
+  const tested = await run(() => {
+    const g = window.__skate;
+    const base = {
+      v: 1, id: 'user-base', name: 'Base smoke', blurb: 'Built by the smoke test.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'd0', type: 'slab', x: 0, y: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 6, d: 3, h: 0.25, color: 'concrete' },
+      ],
+    };
+    const withProps = {
+      ...base,
+      id: 'user-decor',
+      objects: [
+        ...base.objects,
+        { id: 'd1', type: 'tree', x: 3, y: 0, z: -2, ry: 0, sx: 1, sz: 1, r: 1, h: 1.6, color: '#3a5a40' },
+        { id: 'd2', type: 'foodtruck', x: 10, y: 0, z: 8, ry: 90, sx: 2, sz: 1.5, len: 4.5, w: 2.1, color: '#d6c064' },
+      ],
+    };
+    g.openDesigner(base);
+    g.designer.on.test();
+    const baseline = g.park.features.length;
+    g.openDesigner(withProps);
+    g.designer.on.test();
+    const park = g.park;
+    for (let i = 0; i < 120; i++) g.drive(1 / 120, { push: true });
+    return {
+      state: g.state,
+      park: park.id,
+      baseline,
+      features: park.features.length,
+      grinds: park.grinds.length,
+      decors: park.decors.length,
+      padYAtTree: park.sample(3, -2, { y: 0 }).y,
+      graphNodes: park.graph ? park.graph.nodes.length : 'no graph',
+      graphKinds: park.graph ? park.graph.nodes.map((n) => n.kind).sort() : [],
+      rideFinite: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z].every(Number.isFinite),
+    };
+  });
+  ok(tested.state === 'playing' && tested.park === 'user-decor', 'Save & Test builds and rides the decorated park');
+  ok(tested.features === tested.baseline && tested.grinds === 0, `and the props add no surfaces or grinds (${tested.features} surfaces, ${tested.grinds} grinds)`);
+  ok(tested.decors === 2, `but does paint them into the scenery (${tested.decors} props in the park)`);
+  ok(Math.abs(tested.padYAtTree) < 0.02, 'and a prop over the pad adds no collision (the pad is still the ground)');
+  ok(tested.graphNodes === 1 && tested.graphKinds.join(',') === 'flat', `with the park graph ignoring the props (${tested.graphKinds.join(', ')})`);
+  ok(tested.rideFinite, 'and the rider stays a finite, rideable point');
 
   await run(() => window.__skate.showStart());
 }
