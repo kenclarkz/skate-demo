@@ -35,6 +35,22 @@ const PROGRAMS = {
   brake: { loop: 2.6, close: [2.6, 1.2, 1.6, 0.85], speed: 6.0, brakeFrom: 0.15, brakeTo: 1.9 },
   slide: { loop: 2.6, close: [2.2, 1.1, 1.4, 0.7], speed: 6.0, slideFrom: 0.6, slideTo: 1.3 },
   manual: { loop: 2.8, close: [2.2, 1.0, 1.2, 0.8], speed: 4.0, chargeUntil: 1.9 },
+  // Land backwards on purpose: spin the body round in the air (the same steer
+  // that spins a 180 for real), come down pointed the wrong way, and the
+  // wheels' revert pivot does the rest — the whole point of the step. Spawned
+  // off the rail line (the preview pad's one feature) so the spin lands on
+  // flat concrete rather than locking back onto it.
+  revert: {
+    loop: 3.2,
+    close: [2.6, 1.1, 1.8, 0.85],
+    speed: 6.5,
+    spawnX: -1.4,
+    chargeUntil: 0.4,
+    trickAt: 0.4,
+    trickId: 'ollie',
+    spinFrom: 0.4,
+    spinTo: 0.7,
+  },
   ollie: { loop: 2.4, close: [2.2, 1.1, 1.2, 0.85], speed: 4.5, chargeUntil: 0.4, trickAt: 0.4, trickId: 'ollie' },
   kickflip: { loop: 2.4, close: [1.8, 1.0, 1.6, 0.85], speed: 4.5, chargeUntil: 0.4, trickAt: 0.4, trickId: 'kickflip' },
   heelflip: { loop: 2.4, close: [2.0, 1.0, 1.4, 0.85], speed: 4.5, chargeUntil: 0.4, trickAt: 0.4, trickId: 'heelflip' },
@@ -150,7 +166,7 @@ export class TrickPreview {
     if (this.mode === 'walk') {
       this.walker.reset(0, 0, 0);
     } else if (this.program) {
-      this.ride.reset({ x: 0, y: 0, z: this.program.spawnZ || 0, yaw: 0 });
+      this.ride.reset({ x: this.program.spawnX || 0, y: 0, z: this.program.spawnZ || 0, yaw: 0 });
       this.ride.speed = this.program.speed || 0;
       this.ride.vel.set(0, 0, this.ride.speed);
     }
@@ -192,6 +208,10 @@ export class TrickPreview {
       grab: null,
     };
     if (p.steerFn) input.steer = p.steerFn(this.t);
+    // Otherwise a dedicated air-spin window: held steering while airborne is
+    // what turns a pop into a backwards landing, which is the revert demo's
+    // whole script — no steering on the ground before or after it.
+    else if (p.spinFrom != null && this.t >= p.spinFrom && this.t < p.spinTo) input.steer = -1;
     if (p.chargeUntil != null && this.t < p.chargeUntil) input.charge = true;
     if (p.pushHeld) input.push = true;
     if (p.brakeFrom != null && this.t >= p.brakeFrom && this.t < p.brakeTo) input.brake = true;
