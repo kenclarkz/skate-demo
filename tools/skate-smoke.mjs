@@ -1319,8 +1319,9 @@ section('Scoring');
     const push = (list) => {
       for (const e of list) events.push(e);
     };
-    // Two flips in a row, then roll away and let the combo bank.
-    for (const id of ['kickflip', 'heelflip']) {
+    // Five tricks in a row — three to open the chain, two more to push it into
+    // the second multiplier tier — then roll away and let the combo bank.
+    for (const id of ['kickflip', 'heelflip', 'treflip', 'shuvit', 'impossible']) {
       push(g.ride.update(1 / 120, { steer: 0, charge: false, slide: false, push: false, trick: id, trickCharge: 1 }));
       for (let i = 0; i < 400 && g.ride.mode === 1; i++) {
         push(g.ride.update(1 / 120, { steer: 0, charge: false, slide: false, push: false }));
@@ -1333,11 +1334,11 @@ section('Scoring');
     const banked = events.find((e) => e.name === 'combo');
     return { tricks: tricks.map((t) => t.label), banked };
   });
-  ok(combo.tricks.length === 2, `two tricks link into one combo (${combo.tricks.join(' + ')})`);
+  ok(combo.tricks.length === 5, `five tricks link into one combo (${combo.tricks.join(' + ')})`);
   ok(!!combo.banked, 'and the combo banks once the skater rolls away');
-  ok(combo.banked?.multiplier === 2, `with a multiplier for the chain (×${combo.banked?.multiplier})`);
+  ok(combo.banked?.multiplier === 1.1, `and tricks 4-6 run at 1.1x (×${combo.banked?.multiplier})`);
   ok(
-    combo.banked && combo.banked.total === combo.banked.points * combo.banked.multiplier,
+    combo.banked && combo.banked.total === Math.round(combo.banked.points * combo.banked.multiplier),
     'and the total is the chain times the multiplier'
   );
 

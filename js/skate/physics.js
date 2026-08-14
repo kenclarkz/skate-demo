@@ -1135,8 +1135,10 @@ export class Ride {
 
   /**
    * A combo banks once the skater has been rolling with nothing happening for
-   * long enough. The multiplier is the number of tricks in the chain, which is
-   * what makes linking two things worth more than doing one of them twice.
+   * long enough. The multiplier grows with the chain: 1.0x for tricks 1-3,
+   * 1.1x for tricks 4-6, 1.2x for tricks 7-9, 1.3x for tricks 10-12, and
+   * +0.1x for every three tricks after that. Linking things together still
+   * pays more, but the chain size no longer scales the score by itself.
    */
   advanceCombo(dt) {
     const c = this.combo;
@@ -1147,7 +1149,7 @@ export class Ride {
     }
     c.idle += dt;
     if (c.idle < C.COMBO_WINDOW) return;
-    const multiplier = c.names.length;
+    const multiplier = 1 + Math.floor((c.names.length - 1) / 3) * 0.1;
     this.emit('combo', {
       total: Math.round(c.points * multiplier),
       multiplier,

@@ -1512,7 +1512,7 @@ function updateHud(dt) {
   if (state === PLAYING) {
     hud.setSpeed(ride.groundSpeed);
     hud.setAir(ride.airHeight);
-    hud.setCombo(liveCombo.names, liveCombo.points, Math.max(1, liveCombo.names.length));
+    hud.setCombo(liveCombo.names, liveCombo.points, Math.max(1, 1 + Math.floor((liveCombo.names.length - 1) / 3) * 0.1));
     const balancing = !!ride.grind || ride.manual;
     hud.setBalance(balancing, ride.balance, C.BALANCE_LIMIT);
     hud.setCharge(input.flickActive || input.charging() ? ride.charge : 0);
