@@ -1,6 +1,6 @@
 // Ambient AI skaters.
 //
-// Two kinds share the park. Touring bots get exactly the rig the player
+// Three kinds share the park. Touring bots get exactly the rig the player
 // gets — their own Board, their own Skater, their own Ride — driven not by
 // Input but by a pursuit controller a few lines long: steer at the next
 // waypoint, push to keep the speed up, and pop a trick every few seconds
@@ -30,11 +30,20 @@
 // up and ride the graph's own lines (findLines) before dismounting and going
 // back to hanging out.
 //
-// What neither kind gets is a ragdoll. A bail freezes the last posed frame
-// for a moment — a wipeout, held — and then the bot routes itself back onto
-// the graph and appears up near the nearest feature, facing its next line. A
-// skater eating it and getting back up to carry on is exactly the right
-// note, and the graph is what tells it where "carrying on" goes.
+// Pro bots session the park. Where the touring and social bots treat a ride
+// as a way to be there, a pro plans real lines off the graph's flow — rails,
+// ledges, transitions, stairs and bowls — rides them feature to feature with
+// deliberate, style-appropriate tricks that never repeat too soon, and steps
+// off between sessions to take an actual break by a feature before mounting
+// back up. Each pro has its own personality (street, air, freestyle,
+// all-round, bomber), so a park with pros in it looks like five skaters with
+// five different bags of tricks instead of one looped clip.
+//
+// What none of the three kinds gets is a ragdoll. A bail freezes the last
+// posed frame for a moment — a wipeout, held — and then the bot routes itself
+// back onto the graph and appears up near the nearest feature, facing its next
+// line. A skater eating it and getting back up to carry on is exactly the
+// right note, and the graph is what tells it where "carrying on" goes.
 
 import * as THREE from '../game/three.js';
 import * as C from './config.js';
@@ -163,12 +172,27 @@ function nodeById(graph) {
 }
 
 /** The patrol loop, in the same waypoint shape a graph route is. */
+/** Nudge a point that sits within the near-edge keep-clear band in to the
+ * margin line. Patrol loops can hug the curb (railway parks ride the fence),
+ * but the edge-repel keeps a bot clear of it — a waypoint on the fence is a
+ * target a bot can circle forever without reaching. Projected, it becomes a
+ * point the bot can actually arrive at. */
+function projectIn(park, x, z) {
+  const limX = Math.max(0, park.extentX - BOUND_MARGIN);
+  const limZ = Math.max(0, park.extentZ - BOUND_MARGIN);
+  return {
+    x: limX > 0 ? Math.min(limX, Math.max(x, -limX)) : x,
+    z: limZ > 0 ? Math.min(limZ, Math.max(z, -limZ)) : z,
+  };
+}
+
 function patrolRoute(bot) {
   const pts = bot.patrol || [];
   const out = [];
   for (let i = 0; i < pts.length; i++) {
     const p = pts[(bot.target + i) % pts.length];
-    out.push({ x: p.x, z: p.z, node: null });
+    const { x, z } = projectIn(bot.ride.park, p.x, p.z);
+    out.push({ x, z, node: null });
   }
   return out;
 }
@@ -213,6 +237,14 @@ function refreshRoute(bot, fromId) {
   bot.route = r || patrolRoute(bot);
   bot.routeIndex = 0;
   bot.stalled = 0;
+}
+
+/** Hand a bot a fresh route. A bot with its own `planRoute` — a pro skater
+ * sessioning its lines — plans where it goes; everyone else gets the shared
+ * tour/patrol routing. */
+function giveRoute(bot, fromId) {
+  if (bot.planRoute) bot.planRoute(fromId);
+  else refreshRoute(bot, fromId);
 }
 
 /** The same, but for a social group ride: lead with the park's real lines. */
@@ -271,7 +303,9 @@ function rerouteAwayFromPlayer(bot, playerPos) {
 }
 
 /** A hangout spot the social crowd can lean on: a real feature when the park
- * has one, the first patrol point otherwise. */
+ * has one, the first patrol point otherwise. The spot itself is set a stride
+ * or two off the feature, on its flank, so someone leaning on it — and later
+ * mounting from it — starts on open ground rather than on top of the rail. */
 function pickHangout(park) {
   const g = park.graph;
   if (!g || !g.nodes.length) return null;
@@ -280,7 +314,10 @@ function pickHangout(park) {
   );
   const pool = wanted.length ? wanted : g.nodes;
   const n = pool[(Math.random() * pool.length) | 0];
-  return { x: n.x, z: n.z, node: n };
+  const off = n.forward
+    ? { x: n.x - n.forward.z * 1.5, z: n.z + n.forward.x * 1.5 }
+    : { x: n.x + 1.5, z: n.z + 1.5 };
+  return { x: off.x, z: off.z, node: n };
 }
 
 /** The straight line a feature rides along, through its centre. */
@@ -368,7 +405,7 @@ function stepPatrol(ride, bot, dt, playerPos) {
       bot.route = null;
       bot.wantManual = false;
       bot.manualT = 0;
-      refreshRoute(bot, null);
+      giveRoute(bot, null);
       const wp = bot.route[0];
       const next = bot.route[1] || bot.route[0];
       const yaw = Math.atan2(next.x - wp.x, next.z - wp.z);
@@ -383,10 +420,10 @@ function stepPatrol(ride, bot, dt, playerPos) {
   if (bot.curbPopCool > 0) bot.curbPopCool -= dt;
 
   // --- route ---------------------------------------------------------------
-  if (!bot.route) refreshRoute(bot, null);
+  if (!bot.route) giveRoute(bot, null);
   if (bot.routeIndex >= bot.route.length) {
     const last = bot.route[bot.route.length - 1];
-    refreshRoute(bot, last && last.node ? last.node.id : null);
+    giveRoute(bot, last && last.node ? last.node.id : null);
   }
   const wp = bot.route[bot.routeIndex] || bot.route[bot.route.length - 1];
 
@@ -394,8 +431,11 @@ function stepPatrol(ride, bot, dt, playerPos) {
     bot.routeIndex++;
     bot.stalled = 0;
     if (bot.routeIndex >= bot.route.length) {
+      // The line is done. A bot with a session of its own — a pro skater —
+      // hears about it here so it can decide whether to keep going or step off.
+      bot.onLineDone?.();
       const last = bot.route[bot.route.length - 1];
-      refreshRoute(bot, last && last.node ? last.node.id : null);
+      giveRoute(bot, last && last.node ? last.node.id : null);
     }
   } else {
     // A rail a bot cannot line up on, a waypoint behind a wall — give up after
@@ -421,6 +461,15 @@ function stepPatrol(ride, bot, dt, playerPos) {
   const clear = Math.min(cx, cz);
   const nearEdge = clear < BOUND_MARGIN;
   const edgeW = nearEdge ? 1 - Math.max(0, clear) / BOUND_MARGIN : 0;
+  // Whether the board is actually carrying the bot towards the curb on the
+  // axis that is itself near the curb — the thing the near-edge push gate is
+  // really guarding against. A bot standing still, or riding parallel to or
+  // away from the boundary, is free to push: railway parks run their patrol
+  // loops right along the fence, and a bot that may not push while it is near
+  // the edge never gets going at all.
+  const headingIntoBoundary =
+    (Math.sign(ride.pos.x) !== 0 && Math.sign(ride.vel.x) === Math.sign(ride.pos.x) && cx < BOUND_MARGIN) ||
+    (Math.sign(ride.pos.z) !== 0 && Math.sign(ride.vel.z) === Math.sign(ride.pos.z) && cz < BOUND_MARGIN);
 
   // --- terrain ahead -------------------------------------------------------
   // Sample the height field a couple of metres out, the same field the
@@ -478,8 +527,15 @@ function stepPatrol(ride, bot, dt, playerPos) {
   }
 
   if (nearEdge) {
-    const away = cx <= cz ? -Math.sign(ride.pos.x) * Math.PI / 2 : (ride.pos.z >= 0 ? Math.PI : 0);
-    wantYaw += C.angleDelta(wantYaw, away) * edgeW;
+    // Steer away only along the axis the bot is actually closing on — a bot
+    // riding parallel to a fence (a patrol loop that hugs the boundary, say)
+    // has nothing to dodge and should just keep riding it.
+    const outX = Math.sign(ride.pos.x) !== 0 && Math.sign(ride.vel.x) === Math.sign(ride.pos.x) && cx < BOUND_MARGIN;
+    const outZ = Math.sign(ride.pos.z) !== 0 && Math.sign(ride.vel.z) === Math.sign(ride.pos.z) && cz < BOUND_MARGIN;
+    let away = null;
+    if (outX) away = -Math.sign(ride.pos.x) * Math.PI / 2;
+    if (outZ) away = ride.pos.z >= 0 ? Math.PI : 0;
+    if (away !== null) wantYaw += C.angleDelta(wantYaw, away) * edgeW;
   }
   if (avoidYaw !== null && !followRail) {
     const w = C.clamp(0.45 + (stepAhead - AVOID_STEP) * 1.1, 0, 1);
@@ -534,8 +590,8 @@ function stepPatrol(ride, bot, dt, playerPos) {
       bot.manualT <= 0 &&
       Math.abs(ride.speed) < bot.cruise &&
       bot.pushCool <= 0 &&
-      !nearEdge &&
-      !cornering &&
+      !headingIntoBoundary &&
+      (!cornering || Math.abs(ride.speed) < 0.8) &&
       dropAhead < 0.25 &&
       stepAhead < 0.12
     ) {
@@ -606,7 +662,17 @@ function stepPatrol(ride, bot, dt, playerPos) {
     const lip = dropAhead > LIP_DROP;
     const show = playerDist < SHOW_OFF_R;
     const rand = bot.randomTrickCool <= 0;
-    if (curbPop && speedOk && bot.curbPopCool <= 0) {
+    // A pro decides its own trick — feature-targeted, chained onto whatever it
+    // just landed, and never repeating a recent one (see ProSkater). Absent a
+    // pro, the touring behaviour below carries the bot.
+    const pro = bot.chooseTrick
+      ? bot.chooseTrick({ ride, speedOk, curbPop, lip, show, rand, stepAhead, dropAhead, nearEdge })
+      : null;
+    if (pro) {
+      trick = pro.trick;
+      trickCharge = pro.charge;
+      bot.wantManual = !!pro.manual;
+    } else if (curbPop && speedOk && bot.curbPopCool <= 0) {
       trick = 'ollie';
       trickCharge = 0.7 + Math.random() * 0.25;
       bot.curbPopCool = 1.5;
@@ -913,6 +979,347 @@ export class SocialSkater {
   }
 }
 
+// --- the pro crowd ------------------------------------------------------
+// Five pros share the park, but they are not tourists: they session it. Where
+// a touring bot rides a route to a random feature and pops whatever happens to
+// fit, a pro plans a *line* — a flow of real features (rail → ledge →
+// transition and friends, straight off findLines) — routes onto it, and rides
+// it feature to feature throwing deliberate tricks: a bigger air off a lip, a
+// manual chained off the landing, a grind when the line runs a bar. Each pro
+// has its own style — which features it hunts, which tricks it favours, how
+// much it rides rails, airs or manuals — and none of them repeats a recent
+// trick, so a park full of pros looks like five skaters with five different
+// bags of tricks instead of one looped clip. After a few lines it steps off
+// and takes a real break by a feature, then remounts and sessions again. It
+// is the same ride, graph, terrain reading, grinding, manual and trick physics
+// every other bot (and the player) uses — driven through the same stepPatrol,
+// with only the planning and the trick choice owned by the pro.
+const PRO_SESSION_LINES_MIN = 3, PRO_SESSION_LINES_MAX = 6; // lines before a break
+const PRO_BREAK_MIN = 7, PRO_BREAK_MAX = 15;                 // seconds hanging out
+const PRO_AVOID = 4;          // how many recent tricks a pro never immediately repeats
+const PRO_BREAK_ARRIVE_R = 1.5; // close enough to the break spot to count as arrived
+
+/** The five pros' personalities. `pool` is the tricks they favour (all of
+ * skill 4's catalogue, weighted per style), `kinds` the features they hunt,
+ * and air/grind/manual how much of each the style leans on. */
+const PRO_STYLES = [
+  {
+    name: 'street',
+    pool: ['kickflip', 'heelflip', 'varial', 'varialheel', 'hardflip', 'inheel', 'treflip', 'gazelle', 'nightmare', 'fsshuv360'],
+    kinds: ['rail', 'ledge', 'stair'],
+    air: 0.4, grind: 1.0, manual: 0.75,
+  },
+  {
+    name: 'air',
+    pool: ['kickflip', 'heelflip', 'shuv360', 'varial', 'treflip', 'hardflip', 'impossible', 'gazelle', 'heel360', 'nightmare'],
+    kinds: ['transition', 'stair'],
+    air: 1.0, grind: 0.3, manual: 0.35,
+  },
+  {
+    name: 'freestyle',
+    pool: ['ollie', 'shuvit', 'fsshuvit', 'shuv360', 'varial', 'varialheel', 'hardflip', 'inheel', 'impossible', 'treflip', 'fsshuv360'],
+    kinds: ['flat', 'stair'],
+    air: 0.35, grind: 0.2, manual: 1.0,
+  },
+  {
+    name: 'allround',
+    pool: ['kickflip', 'heelflip', 'shuv360', 'varial', 'varialheel', 'hardflip', 'inheel', 'treflip', 'impossible', 'gazelle', 'heel360', 'nightmare'],
+    kinds: ['rail', 'ledge', 'transition', 'stair', 'flat'],
+    air: 0.7, grind: 0.7, manual: 0.55,
+  },
+  {
+    name: 'bomber',
+    pool: ['ollie', 'kickflip', 'heelflip', 'shuv360', 'varial', 'treflip', 'hardflip', 'gazelle'],
+    kinds: ['rail', 'ledge', 'stair'],
+    air: 0.6, grind: 1.0, manual: 0.3,
+  },
+];
+
+/** A trick the pro can actually finish, drawn from its style's pool, that it
+ * has not thrown in the last `PRO_AVOID` tries. Same rotation-time gate the
+ * touring bots use, so a small hop on the flat gets a shuvit, not a tre flip. */
+function proPickTrick(bot, charge, extraAir) {
+  const style = bot.style;
+  const air = airTimeFor(charge) + extraAir;
+  const fits = (id) => {
+    const def = TRICK_BY_ID[id];
+    return def && trickTimeNeeded(def) < air * 0.7 + 0.06;
+  };
+  const fresh = style.pool.filter((id) => fits(id) && !bot.recentTricks.includes(id));
+  const pool = (fresh.length ? fresh : style.pool.filter(fits));
+  const list = pool.length ? pool : ['ollie', 'kickflip', 'heelflip'];
+  const trick = list[(Math.random() * list.length) | 0];
+  bot.recentTricks.push(trick);
+  if (bot.recentTricks.length > PRO_AVOID) bot.recentTricks.shift();
+  return trick;
+}
+
+/**
+ * A bot that sessions the park: plans real lines off the graph's flow (rails,
+ * ledges, transitions, stairs and bowls), rides them feature to feature, and
+ * decides its own tricks — deliberate, style-appropriate, chained and never
+ * repeated too soon. After a few lines it steps off and takes a break near a
+ * feature, then remounts and goes again. Everything the ride itself does runs
+ * through the same stepPatrol as the touring crew; the pro only owns where it
+ * goes, when it tricks, and when it sits one out.
+ */
+export class ProSkater {
+  constructor(park, paletteIndex, styleIndex, scene) {
+    this.board = new Board();
+    this.skater = new Skater(PALETTES[paletteIndex % PALETTES.length], {
+      glow: false,
+      style: STYLES[paletteIndex % STYLES.length],
+    });
+    this.ride = new Ride(park, this.board, this.skater);
+    this.walker = new Walker(park);
+    this.patrol = park.patrol;
+    this.scene = scene;
+    this.style = PRO_STYLES[styleIndex % PRO_STYLES.length];
+    this.skill = 4;
+    this.cruise = SKILL_CRUISE[skillIndex(this.skill)] ?? CRUISE_SPEED;
+    this.bailWait = 0;
+    this.trickCool = 0.8 + Math.random() * 0.6;
+    this.randomTrickCool = 0;
+    this.pushCool = Math.random() * 0.4;
+    this.bailCool = 0;
+    this.yieldCool = 0;
+    this.manualCool = 0;
+    this.curbPopCool = 0;
+    this.stalled = 0;
+    this.wantManual = false;
+    this.manualT = 0;
+    this.route = null;
+    this.routeIndex = 0;
+    this.recentTricks = [];
+    this.isPro = true;
+    this.onBreak = false;
+    this.wantBreak = false;
+    this.breakT = 0;
+    this.lineCount = 0;
+    this.linesToBreak = PRO_SESSION_LINES_MIN + ((Math.random() * (PRO_SESSION_LINES_MAX - PRO_SESSION_LINES_MIN + 1)) | 0);
+    this.hangout = pickHangout(park) || park.patrol[0];
+    this.target = (Math.random() * park.patrol.length) | 0;
+    this.planRoute = this.planRoute.bind(this);
+    this.chooseTrick = this.chooseTrick.bind(this);
+    this.onLineDone = this.onLineDone.bind(this);
+    this.toStart();
+  }
+
+  /** Drop onto the park at a patrol point, on the board and ready to session. */
+  toStart() {
+    this.scene.remove(this.board.group);
+    this.scene.remove(this.skater.group);
+    this.ride.frame.add(this.board.group);
+    this.ride.frame.add(this.skater.group);
+    this.board.group.position.set(0, 0, 0);
+    this.board.group.quaternion.identity();
+    this.skater.settle();
+    this.route = null;
+    this.planRoute(null);
+  }
+
+  /**
+   * Plan the next session: a line off the graph's real flow lines, routed onto
+   * from wherever the bot happens to be standing. Falls back to the shared
+   * tour routing when the park has no lines worth planning.
+   */
+  planRoute(fromId) {
+    const g = this.ride.park.graph;
+    if (!g || g.nodes.length < 2) {
+      refreshRoute(this, fromId);
+      return;
+    }
+    const byId = nodeById(g);
+    const maxDiff = SKILL_MAX_DIFF[skillIndex(this.skill)] ?? 5;
+    const lines = findLines(g, { maxHops: 3, max: 60 });
+    const favored = [];
+    const feasible = [];
+    for (const l of lines) {
+      if (l.nodes.length < 2 || l.difficulty > maxDiff) continue;
+      if (l.kinds.some((k) => this.style.kinds.includes(k))) favored.push(l);
+      else feasible.push(l);
+    }
+    const pool = favored.length ? favored : feasible;
+    if (!pool.length) {
+      refreshRoute(this, fromId);
+      return;
+    }
+    // Score toward the longer lines so a session is a session, with a little
+    // randomness so a pro does not ride the exact same route every time.
+    let best = pool[0];
+    let bestScore = -Infinity;
+    for (const l of pool) {
+      const s = l.hops + Math.random();
+      if (s > bestScore) {
+        bestScore = s;
+        best = l;
+      }
+    }
+    const waypoints = best.nodes.map((id) => {
+      const n = byId.get(id);
+      return { x: n.x, z: n.z, node: n };
+    });
+    // Route onto the line from the nearest feature, so the bot opens with a
+    // real approach instead of teleporting to the line's first bar.
+    const near = nearestSkate(g, this.ride.pos.x, this.ride.pos.z, { max: 1 })[0];
+    const pts = [];
+    if (near && near.node.id !== best.nodes[0]) {
+      const { routes } = routesBetween(g, near.node.id, best.nodes[0], { max: 1 });
+      if (routes.length) {
+        for (const id of routes[0].nodes) {
+          if (id === best.nodes[0]) break;
+          const n = byId.get(id);
+          pts.push({ x: n.x, z: n.z, node: n });
+        }
+      }
+    }
+    this.route = [...pts, ...waypoints];
+    this.routeIndex = 0;
+    this.stalled = 0;
+  }
+
+  /** The line is done — decide whether to keep sessioning or take a break. */
+  onLineDone() {
+    this.lineCount++;
+    if (this.lineCount >= this.linesToBreak) this.wantBreak = true;
+  }
+
+  /**
+   * The pro's own trick decision, consulted by stepPatrol in place of the
+   * touring bots' random pops. A lip ahead earns the biggest trick the style
+   * throws; open ground earns regular sessioning; and the pro's own cool keeps
+   * a trick from stacking on a trick it has barely landed. `manual` chains a
+   * manual off the landing when the style leans that way.
+   */
+  chooseTrick({ ride, speedOk, curbPop, lip, show, stepAhead, dropAhead, nearEdge }) {
+    if (nearEdge || !speedOk) return null;
+    if (curbPop && this.curbPopCool <= 0) {
+      this.curbPopCool = 1.4;
+      return { trick: 'ollie', charge: 0.7 + Math.random() * 0.2, manual: false };
+    }
+    const ready = this.trickCool <= 0 && this.bailCool <= 0;
+    if ((lip || show) && ready) {
+      const ch = 0.7 + Math.random() * 0.3;
+      const extra = lip ? Math.sqrt((2 * Math.min(2.5, dropAhead)) / -C.GRAVITY) : 0;
+      const trick = proPickTrick(this, ch, extra);
+      this.afterTrick();
+      return { trick, charge: ch, manual: this.style.manual > Math.random() };
+    }
+    if (ready) {
+      const ch = 0.5 + Math.random() * 0.45;
+      const trick = proPickTrick(this, ch, 0);
+      this.afterTrick();
+      return { trick, charge: ch, manual: this.style.manual > Math.random() };
+    }
+    return null;
+  }
+
+  /** Pace the next trick — air-heads and street pros keep the feet busy. */
+  afterTrick() {
+    this.trickCool = (1.2 + Math.random() * 1.2) / (0.7 + this.style.air * 0.6);
+    // A fresh landing deserves a fresh manual when the style wants one — clear
+    // the residual cool from the last one so trick → manual → trick reads as
+    // one continuous line rather than three separate moments.
+    this.manualCool = 0;
+  }
+
+  /** Step off the board and take a real break by a feature. */
+  startBreak() {
+    this.onBreak = true;
+    this.wantBreak = false;
+    this.scene.add(this.board.group);
+    this.scene.add(this.skater.group);
+    this.ride.frame.remove(this.board.group);
+    this.ride.frame.remove(this.skater.group);
+    this.skater.settle();
+    this.walker.reset(this.ride.pos.x, this.ride.pos.z, this.ride.yaw);
+    this.skater.poseWalk(this.walker, 1 / 60);
+    poseCarriedBoard(this.walker, this.skater, this.board);
+    this.breakSpot = this.hangout || this.patrol[(Math.random() * this.patrol.length) | 0];
+    this.breakT = PRO_BREAK_MIN + Math.random() * (PRO_BREAK_MAX - PRO_BREAK_MIN);
+  }
+
+  /** Walking it out: head to the break spot, hang there, then ride again. */
+  stepBreak(dt) {
+    const w = this.walker;
+    this.breakT -= dt;
+    const dx = this.breakSpot.x - w.pos.x;
+    const dz = this.breakSpot.z - w.pos.z;
+    if (Math.hypot(dx, dz) > PRO_BREAK_ARRIVE_R) {
+      const wantYaw = Math.atan2(dx, dz);
+      const delta = C.angleDelta(w.yaw, wantYaw);
+      const move = { x: -C.clamp(delta / WALK_TURN, -1, 1), y: Math.abs(delta) < WALK_ALIGN ? 1 : 0 };
+      w.update(dt, move);
+    } else {
+      // Hanging out: turn to face the park.
+      const wantYaw = Math.atan2(this.ride.park.spawn.z - w.pos.z, this.ride.park.spawn.x - w.pos.x);
+      w.update(dt, { x: -C.clamp(C.angleDelta(w.yaw, wantYaw) / WALK_TURN, -1, 1), y: 0 });
+    }
+    this.skater.poseWalk(w, dt);
+    poseCarriedBoard(w, this.skater, this.board);
+    if (this.breakT <= 0) this.endBreak();
+  }
+
+  /** Mount up and start a fresh session. */
+  endBreak() {
+    this.scene.remove(this.board.group);
+    this.scene.remove(this.skater.group);
+    this.ride.frame.add(this.board.group);
+    this.ride.frame.add(this.skater.group);
+    this.board.group.position.set(0, 0, 0);
+    this.board.group.quaternion.identity();
+    this.skater.settle();
+    this.ride.reset({ x: this.walker.pos.x, y: 0, z: this.walker.pos.z, yaw: this.walker.yaw });
+    this.onBreak = false;
+    this.lineCount = 0;
+    this.linesToBreak = PRO_SESSION_LINES_MIN + ((Math.random() * (PRO_SESSION_LINES_MAX - PRO_SESSION_LINES_MIN + 1)) | 0);
+    this.route = null;
+    this.routeIndex = 0;
+    this.stalled = 0;
+    this.trickCool = 0.6 + Math.random() * 0.6;
+    this.planRoute(null);
+  }
+
+  /** Hand the bot a new park — a fresh graph, a fresh session, back on the board. */
+  setPark(park) {
+    this.ride.park = park;
+    this.walker.park = park;
+    this.patrol = park.patrol;
+    this.hangout = pickHangout(park) || park.patrol[0];
+    this.scene.remove(this.board.group);
+    this.scene.remove(this.skater.group);
+    this.ride.frame.add(this.board.group);
+    this.ride.frame.add(this.skater.group);
+    this.board.group.position.set(0, 0, 0);
+    this.board.group.quaternion.identity();
+    this.skater.settle();
+    this.onBreak = false;
+    this.wantBreak = false;
+    this.breakT = 0;
+    this.lineCount = 0;
+    this.linesToBreak = PRO_SESSION_LINES_MIN + ((Math.random() * (PRO_SESSION_LINES_MAX - PRO_SESSION_LINES_MIN + 1)) | 0);
+    this.recentTricks.length = 0;
+    this.bailWait = 0;
+    this.route = null;
+    this.routeIndex = 0;
+    this.target = (Math.random() * park.patrol.length) | 0;
+    const i = (Math.random() * park.patrol.length) | 0;
+    const wp = park.patrol[i];
+    const next = park.patrol[(i + 1) % park.patrol.length];
+    this.ride.reset({ x: wp.x, y: 0, z: wp.z, yaw: Math.atan2(next.x - wp.x, next.z - wp.z) });
+    this.planRoute(null);
+  }
+
+  step(dt, playerPos) {
+    if (this.wantBreak && this.ride.mode === GROUND) this.startBreak();
+    if (this.onBreak) {
+      this.stepBreak(dt);
+      return;
+    }
+    stepPatrol(this.ride, this, dt, playerPos);
+  }
+}
+
 /**
  * A small crowd: some tour the park's graph lines the whole time, spread
  * evenly across the park so they start apart and given a spread of skill so
@@ -922,12 +1329,16 @@ export class SocialSkater {
  * the park's own lines, tricks included, before they dismount and go back to
  * hanging out. The way an actual session looks: some people skating, some
  * people leaning on their boards talking.
+ *
+ * On top of the crowd, a few pros session the park: each plans its own flow
+ * lines off the graph, rides them feature to feature with deliberate,
+ * non-repeating tricks, and steps off for a break between sessions.
  */
-export function makeAiSkaters(park, scene, count = 13, socialCount = 8) {
+export function makeAiSkaters(park, scene, total = 20, socialCount = 8, proCount = 5) {
   const bots = [];
-  const touringCount = Math.max(0, count - socialCount);
+  const touringCount = Math.max(0, total - socialCount - proCount);
   for (let i = 0; i < touringCount; i++) {
-    const startIdx = Math.round((i * park.patrol.length) / touringCount);
+    const startIdx = Math.round((i * park.patrol.length) / Math.max(1, touringCount));
     // Skills 1..4 spread across the touring crew, beginner to pro.
     const skill = 1 + Math.round((i / Math.max(1, touringCount - 1)) * 3);
     bots.push(new AiSkater(park, i, park.patrol, startIdx, skill));
@@ -937,6 +1348,11 @@ export function makeAiSkaters(park, scene, count = 13, socialCount = 8) {
   for (let i = 0; i < socialCount; i++) {
     const skill = 2 + (i % 3);
     bots.push(new SocialSkater(park, touringCount + i, hangout, group, scene, skill));
+  }
+  // The pros: one of each style, so the park has a street pro, an air pro, a
+  // freestyler, an all-rounder and a bomber rather than five of the same guy.
+  for (let i = 0; i < proCount; i++) {
+    bots.push(new ProSkater(park, touringCount + socialCount + i, i, scene));
   }
   return { bots, group };
 }
