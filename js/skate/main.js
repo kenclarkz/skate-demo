@@ -48,7 +48,7 @@ const WALKING = 'walking';
 const DESIGNER = 'designer';
 const BAILED = 'bail';
 
-const AI_COUNT = 13;
+const AI_COUNT = 20;
 const BIRD_COUNT = 3;
 
 const params = new URLSearchParams(location.search);

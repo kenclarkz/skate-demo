@@ -107,9 +107,10 @@ section('Boot');
   }));
   ok(info.tris > 2000, `the park is drawing (${info.tris} triangles)`);
   // The park itself is still two merged draw calls; the rest of the count is
-  // the AI skaters, the birds and the six logos, none of which are merged
-  // because each one needs its own transform every frame.
-  ok(info.calls <= 220, `and in a bounded number of draw calls (${info.calls})`);
+  // the AI skaters (a full crowd of twenty, each with its own board and
+  // articulated skater to transform), the birds and the six logos — none of
+  // which are merged because each needs its own transform every frame.
+  ok(info.calls <= 600, `and in a bounded number of draw calls (${info.calls})`);
   ok(info.features >= 14, `the park has its obstacles (${info.features} surfaces)`);
   ok(info.grinds >= 8, `and its grindable lines (${info.grinds})`);
 }
@@ -1714,32 +1715,70 @@ section('Park progression');
 section('AI skaters');
 {
   const count = await run(() => window.__skate.bots.length);
-  ok(count === 13, `thirteen AI skaters populate the park (${count})`);
+  ok(count === 20, `twenty AI skaters populate the park (${count})`);
 
-  // A SocialSkater is the only kind carrying a Walker — the cheapest way to
-  // tell the two roles apart from outside the module.
-  const roster = await run(() => window.__skate.bots.map((b) => b.walker != null));
-  const touringCount = roster.filter((social) => !social).length;
-  const socialCount = roster.filter((social) => social).length;
-  ok(touringCount === 5, `five of them tour the patrol loop the whole time (${touringCount})`);
-  ok(socialCount === 8, `and eight are the social crowd (${socialCount})`);
+  // Three roles share the park: touring riders, the on-foot social crowd, and
+  // the pros who session it. The three are told apart by what each bot carries —
+  // pros flag themselves, and the social crowd is the only kind with a Walker
+  // that is not a pro.
+  const roster = await run(() => {
+    const social = (b) => b.walker != null && !b.isPro;
+    const touring = (b) => b.walker == null && !b.isPro;
+    return {
+      touring: window.__skate.bots.filter(touring).length,
+      social: window.__skate.bots.filter(social).length,
+      pro: window.__skate.bots.filter((b) => b.isPro).length,
+    };
+  });
+  ok(roster.touring === 7, `seven of them tour the patrol loop the whole time (${roster.touring})`);
+  ok(roster.social === 8, `and eight are the social crowd (${roster.social})`);
+  ok(roster.pro === 5, `and five pros session the park (${roster.pro})`);
+
+  // Each pro has its own style, so a park full of them is five different
+  // skaters, not five of the same guy.
+  const styles = await run(() => window.__skate.bots.filter((b) => b.isPro).map((b) => b.style.name));
+  ok(new Set(styles).size === styles.length, `the pros are one of each style (${styles.join(', ')})`);
 
   // Touring bots never stop — real simulated time, and they have to actually
   // cover ground, not idle on their spawn point or get stuck against the
-  // first thing they roll into.
+  // first thing they roll into. A bot wedged against a feature gives up and
+  // moves on after a few seconds (STALL_TIME), so the window is long enough
+  // to catch that recovery rather than a single frozen frame.
   const toured = await run(() => {
     const g = window.__skate;
-    const touring = g.bots.filter((b) => b.walker == null);
+    const touring = g.bots.filter((b) => b.walker == null && !b.isPro);
     const before = touring.map((b) => ({ x: b.ride.pos.x, z: b.ride.pos.z }));
-    for (let i = 0; i < 600; i++) for (const b of touring) b.step(1 / 120);
+    for (let i = 0; i < 900; i++) for (const b of touring) b.step(1 / 120);
     return touring.map((b, i) => Math.hypot(b.ride.pos.x - before[i].x, b.ride.pos.z - before[i].z));
   });
-  ok(toured.every((d) => d > 1), `every touring bot covers real ground in 5 s (${toured.map((d) => d.toFixed(1)).join(', ')} m)`);
+  ok(toured.every((d) => d > 1), `every touring bot covers real ground in 7.5 s (${toured.map((d) => d.toFixed(1)).join(', ')} m)`);
+
+  // Pros session: they ride the park's own lines (a real multi-feature route,
+  // not a flat patrol loop), cover real ground, and throw real tricks along
+  // the way.
+  const prosession = await run(() => {
+    const g = window.__skate;
+    const pros = g.bots.filter((b) => b.isPro);
+    const before = pros.map((b) => ({ x: b.ride.pos.x, z: b.ride.pos.z }));
+    let tricks = 0;
+    for (let i = 0; i < 1200; i++) {
+      for (const b of pros) b.step(1 / 60);
+      for (const b of pros) if (b.ride.trick) tricks++;
+    }
+    return {
+      moved: pros.map((b, i) => Math.hypot(b.ride.pos.x - before[i].x, b.ride.pos.z - before[i].z)),
+      planned: pros.map((b) => b.route != null && b.route.length >= 2 && b.route[0].node != null),
+      tricks,
+    };
+  });
+  ok(prosession.moved.every((d) => d > 1), `every pro covers real ground sessioning (${prosession.moved.map((d) => d.toFixed(1)).join(', ')} m)`);
+  ok(prosession.planned.some((p) => p), 'and they ride real multi-feature lines off the graph, not a flat loop');
+  ok(prosession.tricks > 0, `with deliberate tricks thrown along the way (${prosession.tricks} trick-frames in 20 s)`);
 
   // Fresh into a park, the social crowd starts out walking, not mid-ride.
   const freshState = await run(() => ({
     groupRiding: window.__skate.socialGroup.riding,
-    riding: window.__skate.bots.filter((b) => b.walker != null).map((b) => b.riding),
+    riding: window.__skate.bots.filter((b) => b.walker != null && !b.isPro).map((b) => b.riding),
   }));
   ok(!freshState.groupRiding, 'the social crowd starts out walking, not riding');
   ok(freshState.riding.every((r) => !r), 'and none of them are mounted up yet');
@@ -1749,7 +1788,7 @@ section('AI skaters');
   // group, not eight strangers drifting off on their own.
   const wandered = await run(() => {
     const g = window.__skate;
-    const socials = g.bots.filter((b) => b.walker != null);
+    const socials = g.bots.filter((b) => b.walker != null && !b.isPro);
     const before = socials.map((b) => ({ x: b.walker.pos.x, z: b.walker.pos.z }));
     for (let i = 0; i < 600; i++) for (const b of socials) b.stepWalk(1 / 60);
     return socials.map((b, i) => ({
@@ -1771,7 +1810,7 @@ section('AI skaters');
   const mounted = await run(() => {
     const g = window.__skate;
     g.socialGroup.riding = true;
-    const socials = g.bots.filter((b) => b.walker != null);
+    const socials = g.bots.filter((b) => b.walker != null && !b.isPro);
     for (const b of socials) b.step(1 / 60);
     return socials.map((b) => b.riding);
   });
@@ -1782,9 +1821,9 @@ section('AI skaters');
   // whatever trick chance that code path already gives them.
   const rode = await run(() => {
     const g = window.__skate;
-    const socials = g.bots.filter((b) => b.walker != null);
+    const socials = g.bots.filter((b) => b.walker != null && !b.isPro);
     const before = socials.map((b) => ({ x: b.ride.pos.x, z: b.ride.pos.z }));
-    for (let i = 0; i < 600; i++) for (const b of socials) b.step(1 / 120);
+    for (let i = 0; i < 900; i++) for (const b of socials) b.step(1 / 120);
     return socials.map((b, i) => Math.hypot(b.ride.pos.x - before[i].x, b.ride.pos.z - before[i].z));
   });
   ok(rode.every((d) => d > 1), `and actually cover ground doing it (${rode.map((d) => d.toFixed(1)).join(', ')} m)`);
@@ -1794,11 +1833,32 @@ section('AI skaters');
   const dismounted = await run(() => {
     const g = window.__skate;
     g.socialGroup.riding = false;
-    const socials = g.bots.filter((b) => b.walker != null);
+    const socials = g.bots.filter((b) => b.walker != null && !b.isPro);
     for (const b of socials) b.step(1 / 60);
     return socials.map((b) => b.riding);
   });
   ok(dismounted.every((r) => !r), 'and the whole crowd dismounts together when the ride is over');
+
+  // A pro's session has an end: after a few lines it steps off and takes a
+  // break — on foot, away from the board — and then gets back on and rides
+  // again, so the five pros never just loop the park for ever.
+  const broke = await run(() => {
+    const g = window.__skate;
+    const pro = g.bots.find((b) => b.isPro);
+    // The pro may be mid-trick when the test takes it — let it get back on
+    // the ground first, then call it in for a break.
+    for (let i = 0; i < 60 * 5 && pro.ride.mode !== 0; i++) pro.step(1 / 60);
+    pro.onBreak = false;
+    pro.wantBreak = true; // force the decision; the next ground step carries it out
+    for (let i = 0; i < 60 * 5 && !pro.onBreak; i++) pro.step(1 / 60);
+    const startedOnFoot = pro.onBreak;
+    // The longest break is 15 s, so half a minute of steps is comfortably
+    // enough for the pro to walk over, hang out, and remount.
+    for (let i = 0; i < 60 * 30 && pro.onBreak; i++) pro.step(1 / 60);
+    return { startedOnFoot, rodeAgain: !pro.onBreak && pro.route != null && pro.route.length >= 2 };
+  });
+  ok(broke.startedOnFoot, 'a pro steps off the board to take its break');
+  ok(broke.rodeAgain, 'and mounts back up to keep sessioning once the break is over');
 }
 
 // --------------------------------------------------------------------------
@@ -1810,7 +1870,7 @@ section('AI skaters navigate, and stay off the park boundary');
   const arrived = await run(() => {
     const g = window.__skate;
     g.switchPark('home');
-    const bot = g.bots.find((b) => b.walker == null);
+    const bot = g.bots.find((b) => b.walker == null && !b.isPro);
     bot.toStart();
     const from = bot.target;
     const wp = bot.patrol[from];
@@ -1833,7 +1893,7 @@ section('AI skaters navigate, and stay off the park boundary');
   const keptIn = await run(() => {
     const g = window.__skate;
     g.switchPark('home');
-    const bot = g.bots.find((b) => b.walker == null);
+    const bot = g.bots.find((b) => b.walker == null && !b.isPro);
     const ride = bot.ride;
     const ex = ride.park.extentX;
     const ez = ride.park.extentZ;
