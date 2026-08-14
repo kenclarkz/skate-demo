@@ -28,7 +28,6 @@ import {
   freshFaceDesign,
 } from './board-design.js';
 import { TYPES, typeById } from './boards.js';
-import { PARK_UNLOCK_SCORE } from './config.js';
 import { PARKS } from './parkLayouts.js';
 import { BOSSES } from './boss.js';
 
@@ -76,12 +75,13 @@ const DEFAULTS = {
   park: 'home',
   // Park progression: `parkBest` is the best banked combo on each built-in park
   // (id → points); `parksUnlocked` is the chain of parks opened so far, always
-  // starting with the first built-in park. A park unlocks when the one before
-  // it in PARKS banks PARK_UNLOCK_SCORE — see recordParkScore().
+  // starting with the first built-in park. A park unlocks only when the park
+  // before it has both its rivals beaten and a 1,000,000-point run — main.js
+  // checks the pair together and calls unlockPark().
   parkBest: {},
   parksUnlocked: ['home'],
-  // The rivals beaten, one id per boss. A rival's reveal is *derived* from
-  // the park's best (see BOSS_REVEAL_SCORE), so nothing about who is standing
+  // The rivals beaten, one id per boss. A rival's reveal is *derived* from the
+  // live run's score (see BOSS_REVEAL_SCORE), so nothing about who is standing
   // around is saved — only who has been put away.
   bossesDefeated: [],
   lighting: 'day', // 'day', 'sunset' or 'night' — see js/skate/lighting.js
@@ -692,29 +692,25 @@ export const save = {
   },
 
   /** Whether a park has been unlocked. The first built-in park always is; any
-   * later park needs the park before it to have banked PARK_UNLOCK_SCORE. */
+   * later park needs its predecessor's roster beaten and a 1,000,000-point run. */
   isParkUnlocked(id) {
     return state.parksUnlocked.includes(id);
   },
 
   /**
-   * Bank a combo on a park: record the park's own best and, if the park is
-   * unlocked and the total clears PARK_UNLOCK_SCORE, unlock the next built-in
-   * park in the chain. @returns {{ newBest: boolean, unlockedId: string | null }}
+   * Bank a combo on a park: record the park's own best. The park no longer
+   * opens on the score alone — the next park needs this park's whole rival
+   * roster beaten *and* a 1,000,000-point current run, a pair of conditions
+   * only main.js can see together (the run is its state, not the save's), so
+   * it owns the unlock and calls unlockPark().
+   * @returns {{ newBest: boolean }}
    */
   recordParkScore(id, points) {
     const n = Math.floor(points);
     const newBest = n > this.parkBestOf(id);
     if (newBest) state.parkBest[id] = n;
-    let unlockedId = null;
-    const idx = PARKS.findIndex((p) => p.id === id);
-    const next = PARKS[idx + 1];
-    if (next && state.parksUnlocked.includes(id) && n >= PARK_UNLOCK_SCORE && !state.parksUnlocked.includes(next.id)) {
-      state.parksUnlocked.push(next.id);
-      unlockedId = next.id;
-    }
     flush();
-    return { newBest, unlockedId };
+    return { newBest };
   },
 
   recordTrick(points) {
@@ -746,29 +742,25 @@ export const save = {
   },
 
   /**
-   * Mark a rival as beaten. If it was the last undefeated rival on its park,
-   * unlock the next built-in park — beating a park's whole roster earns the
-   * same door the score milestone does.
-   * @returns {{ newPark: string | null }} the park this unlocked, if any.
+   * Mark a rival as beaten. Beating a park's whole roster used to open the
+   * next park on its own; now it only earns the roster half of the unlock —
+   * the next park also needs the current run to clear PARK_UNLOCK_SCORE, a
+   * live-run condition only main.js sees, so main.js checks both together and
+   * calls unlockPark() when they line up.
    */
   recordBossWin(id) {
     const def = BOSSES.find((b) => b.id === id);
-    if (!def || state.bossesDefeated.includes(id)) return { newPark: null };
+    if (!def || state.bossesDefeated.includes(id)) return;
     state.bossesDefeated.push(id);
-    let newPark = null;
-    const allBeaten = BOSSES.filter((b) => b.parkId === def.parkId).every((b) =>
-      state.bossesDefeated.includes(b.id),
-    );
-    if (allBeaten) {
-      const idx = PARKS.findIndex((p) => p.id === def.parkId);
-      const next = PARKS[idx + 1];
-      if (next && state.parksUnlocked.includes(def.parkId) && !state.parksUnlocked.includes(next.id)) {
-        state.parksUnlocked.push(next.id);
-        newPark = next.id;
-      }
-    }
     flush();
-    return { newPark };
+  },
+
+  /** Open a park by id. @returns true if it was newly opened. */
+  unlockPark(id) {
+    if (state.parksUnlocked.includes(id)) return false;
+    state.parksUnlocked.push(id);
+    flush();
+    return true;
   },
 
   addCoins(n) {

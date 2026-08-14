@@ -176,6 +176,22 @@ export function bossLadder(parkId) {
 }
 
 /**
+ * What the current run must have banked to beat a rival: the points and
+ * (cumulative, non-consecutive) trick totals. Position in the ladder is
+ * global — Ace is the first rival, Raven the tenth — so the bar climbs all
+ * the way through the four parks rather than resetting on each one.
+ * @returns {{ points: number, tricks: number }}
+ */
+export function bossRequirement(def) {
+  const idx = BOSSES.findIndex((b) => b.id === def.id);
+  const n = Math.max(1, idx + 1);
+  return {
+    points: C.BOSS_BASE_SCORE + (n - 1) * C.BOSS_SCORE_STEP,
+    tricks: C.BOSS_BASE_TRICKS + (n - 1) * C.BOSS_TRICKS_STEP,
+  };
+}
+
+/**
  * A rival on the ground. `mode` is 'idle' (on foot, carrying its board at a
  * hangout spot) or 'riding' (mounted, driving its own lines through the same
  * pursuit controller the crowd uses). Stepping it only needs the mode — the

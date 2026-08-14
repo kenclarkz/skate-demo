@@ -293,21 +293,30 @@ export function setHoldToPush(v) {
 }
 
 // --- park progression ------------------------------------------------------
-// The best score a park needs to unlock the next one in the Parks grid. One
-// value for every park on purpose — a single knob to tune the whole ladder.
-// A park is unlocked when the park before it has a banked best combo of at
-// least this many points; see parkLayouts.js and save.recordParkScore().
+// The current-run score at which a park opens the next one in the grid. It is
+// deliberately not the only condition: the park before it must also have its
+// whole rival roster beaten in the same run's bank — reaching the score alone
+// (or clearing the roster alone) opens nothing. Both are tracked live by
+// main.js's maybeUnlockNextPark(); see boss.js and save.recordBossWin().
 export const PARK_UNLOCK_SCORE = 1000000;
 
 // --- rivals -----------------------------------------------------------------
-// The park's own banked best at which its resident rival steps out. Kept
-// deliberately below the park-unlock milestone, so the two progression paths
-// are real ones: a park can be earning rivals (at 500k) well before it opens
-// the next one (at 1M), and clearing a park's whole roster unlocks the next
-// park on its own — if the score milestone had not already. A rival appears
-// only once the park is unlocked, its parkBest has cleared this and it has
-// not been beaten yet; see boss.js and save.recordBossWin().
+// The current-run score at which the park's own rival steps out mid-run —
+// 500k deliberately below the park-unlock milestone, so a park earns its
+// rival well before it can open the next one. The reveal rides the live run's
+// banked score, never the saved park best: start a fresh run and the rival
+// is nowhere to be found until the run itself crosses this.
 export const BOSS_REVEAL_SCORE = 500000;
+
+// What beating a rival asks of the run: the first rival needs BOSS_BASE_*
+// points and tricks banked during the current run, and every rival after him
+// in the ladder asks for one more step of each. Tricks count cumulatively
+// across the run — they never need to land in one combo. See
+// boss.js's bossRequirement().
+export const BOSS_BASE_SCORE = 20000;    // points the first rival requires
+export const BOSS_SCORE_STEP = 10000;    // extra points each later rival adds
+export const BOSS_BASE_TRICKS = 50;      // tricks the first rival requires
+export const BOSS_TRICKS_STEP = 10;      // extra tricks each later rival adds
 
 // A rival skate-in: the boss rides its own lines for this long, with the
 // camera following it, before it steps off and idles where the player can
