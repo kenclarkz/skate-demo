@@ -1499,7 +1499,7 @@ export class Hud {
           );
         }
         // The park's rival line: who stands there waiting, or cleared. Nothing
-        // for parks without a roster — the built-in four are the ones that own
+        // for parks without a roster — the built-in parks are the ones that own
         // rivals, so the card quietly skips the line elsewhere. The reveal is
         // run-derived, so the card shows the roster, not a score bar.
         const roster = bossLadder(p.id);

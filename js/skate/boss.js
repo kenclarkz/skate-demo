@@ -1,5 +1,5 @@
-// The park rivals: a ladder of ten bosses, one per character, spread across
-// the four built-in parks.
+// The park rivals: a ladder of ten bosses, one per character, each with its
+// own dedicated park.
 //
 // A rival is the player's own rig in disguise. It carries a Board, a Skater
 // and a Ride exactly like the touring bots in ai.js, and it is driven by the
@@ -44,7 +44,7 @@ export const BOSSES = [
   },
   {
     id: 'nova',
-    parkId: 'home',
+    parkId: 'nova',
     characterId: 'nova',
     name: 'Nova',
     title: 'The Manual Master',
@@ -70,7 +70,7 @@ export const BOSSES = [
   },
   {
     id: 'bolt',
-    parkId: 'plaza',
+    parkId: 'bolt',
     characterId: 'bolt',
     name: 'Bolt',
     title: 'The Bowl Storm',
@@ -98,7 +98,7 @@ export const BOSSES = [
   },
   {
     id: 'shove',
-    parkId: 'vert',
+    parkId: 'shove',
     characterId: 'shove',
     name: 'Tony Shove',
     title: 'The Birdman',
@@ -125,7 +125,7 @@ export const BOSSES = [
   },
   {
     id: 'gnorbert',
-    parkId: 'railway',
+    parkId: 'gnorbert',
     characterId: 'gnorbert',
     name: 'Gnorbert',
     title: 'The Garden Legend',
@@ -138,7 +138,7 @@ export const BOSSES = [
   },
   {
     id: 'bananas',
-    parkId: 'railway',
+    parkId: 'bananas',
     characterId: 'bananas',
     name: 'Bananas',
     title: 'The Ape of Air',
@@ -152,7 +152,7 @@ export const BOSSES = [
   },
   {
     id: 'raven',
-    parkId: 'railway',
+    parkId: 'raven',
     characterId: 'raven',
     name: 'Raven',
     title: 'The Bird-Man Finale',
@@ -179,7 +179,7 @@ export function bossLadder(parkId) {
  * What the current run must have banked to beat a rival: the points and
  * (cumulative, non-consecutive) trick totals. Position in the ladder is
  * global — Ace is the first rival, Raven the tenth — so the bar climbs all
- * the way through the four parks rather than resetting on each one.
+ * the way through the ten parks rather than resetting on each one.
  * @returns {{ points: number, tricks: number }}
  */
 export function bossRequirement(def) {
