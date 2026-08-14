@@ -32,7 +32,7 @@ import {
 } from './accessories.js';
 import { drawWheel, hexToHsv, hsvToHex } from './parkDesigner.js';
 import { PARK_UNLOCK_SCORE, BOSS_REVEAL_SCORE } from './config.js';
-import { bossLadder } from './boss.js';
+import { bossLadder, bossRequirement } from './boss.js';
 import {
   STYLES,
   ICON_LIST,
@@ -383,6 +383,14 @@ export const TUTORIAL = [
     demo: 'ollie',
   },
   {
+    title: 'Revert',
+    body: 'Land backwards — the board pointed back the way it came — and instead of dumping you the wheels pivot it back under you: a beat held, then a quick spin-round, a little speed scrubbed off. It needs a little speed to catch. Sideways landings are not saved; those wobble sketchy or slide out.',
+    keys: '',
+    touch: '',
+    pad: '',
+    demo: 'revert',
+  },
+  {
     title: 'On foot',
     body: 'Step off and explore — the board comes with you, tucked under your arm. Sit down and you will set it on the floor beside you. Get back on wherever you are standing.',
     keys: 'X to get off, E to get back on',
@@ -391,8 +399,48 @@ export const TUTORIAL = [
     demo: 'walk',
   },
   {
+    title: 'Camera',
+    body: 'The Cam button while you ride cycles the lens — chase, first person, then a board-side view and back. Whichever you land on is the one Settings keeps, and its camera-distance slider lives there too.',
+    keys: '',
+    touch: 'Cam button — top of the screen',
+    pad: '',
+    demo: null,
+  },
+  {
+    title: 'Rivals',
+    body: 'Every park owes you a rival. Bank a big enough combo and they step out mid-run to introduce themselves — ride up and tap Challenge for a two-minute duel. Beat their tally and the next park in the ladder unlocks.',
+    keys: '',
+    touch: 'Ride up to a rival, tap Challenge',
+    pad: '',
+    demo: null,
+  },
+  {
+    title: 'Logos',
+    body: 'Six logos hide in every park. Ride through one and it is yours — the counter in the corner keeps the tally. No points, no coins: the park’s signature, collected for its own sake.',
+    keys: '',
+    touch: '',
+    pad: '',
+    demo: null,
+  },
+  {
+    title: 'My Parks',
+    body: 'The Parks screen is where you pick where to ride — and My Parks is the builder: place the same slabs, banks, quarters, stairs, rails, ledges and funboxes the built-in parks are made of, paint them any colour, and ride what you built. Saved parks ride alongside the built-in ones.',
+    keys: '',
+    touch: '',
+    pad: '',
+    demo: null,
+  },
+  {
+    title: 'Day & night',
+    body: 'The Parks screen’s lighting toggle flips the same park between a full daylight sky and a floodlit night — the sun hands over to the moon, floodlights, street-lamp glow and lit signs. Purely a look; the physics does not change.',
+    keys: '',
+    touch: '',
+    pad: '',
+    demo: null,
+  },
+  {
     title: 'Coins',
-    body: 'Every trick you land pays out, and a banked combo pays out for the whole chain. Spend it in the shop on the start screen — a different board, a different shirt. Make your own rider under Riders, and dress them from their ACCESSORIES there. None of it changes how you ride.',
+    body: 'Every trick you land pays out, and a banked combo pays out for the whole chain. Spend it in the shop — a different board, a different shirt — or make your own: the Board maker builds a deck from scratch, and the Character maker under Riders makes a whole rider, dressed from their ACCESSORIES there. None of it changes how you ride.',
     keys: '',
     touch: '',
     pad: '',
@@ -416,6 +464,8 @@ export class Hud {
     this.chargeBar = document.getElementById('charge-bar');
     this.debugEl = document.getElementById('debug');
     this.stats = document.getElementById('stats');
+    this.runTricksEl = document.getElementById('run-tricks');
+    this.progressionEl = document.getElementById('progression');
     this.logosEl = document.getElementById('logos-readout');
     this.logosCount = document.getElementById('logos-count');
     this.coinsEl = document.getElementById('coins');
@@ -440,6 +490,7 @@ export class Hud {
     this.bossChallengeNameEl = document.getElementById('boss-challenge-name');
     this.bossYouScoreEl = document.getElementById('boss-you-score');
     this.bossYouTricksEl = document.getElementById('boss-you-tricks');
+    this.bossReqEl = document.getElementById('boss-req');
     this.bossThemNameEl = document.getElementById('boss-them-name');
     this.bossThemScoreEl = document.getElementById('boss-them-score');
     this.bossThemTricksEl = document.getElementById('boss-them-tricks');
@@ -961,6 +1012,49 @@ export class Hud {
     this.bestEl.textContent = n.toLocaleString();
   }
 
+  /** Tricks landed this run — cumulative, the count a rival's bar reads. */
+  setRunTricks(v) {
+    const n = Math.floor(v);
+    if (n === this._runTricks) return;
+    this._runTricks = n;
+    if (this.runTricksEl) this.runTricksEl.textContent = `${n} trick${n === 1 ? '' : 's'}`;
+  }
+
+  /**
+   * The progression strip. `gate` is main.js's progressionGate() — the shape
+   * it passes, or null off-run. The strip is drawn from scratch each time, and
+   * the gate only changes when a combo banks, so rebuilding on the call is cheap.
+   */
+  setProgression(gate) {
+    if (!this.progressionEl) return;
+    if (!gate) {
+      if (!this.progressionEl.hidden) this.progressionEl.hidden = true;
+      this.progressionEl.textContent = '';
+      return;
+    }
+    this.progressionEl.hidden = false;
+    const parts = [];
+    if (gate.reveal) {
+      parts.push(
+        `<span class="prog-seg"><b>${gate.reveal.name}</b> at ${gate.reveal.score.toLocaleString()} / ${gate.reveal.target.toLocaleString()} ` +
+          `<em>${gate.reveal.pct}%</em></span>`,
+      );
+    } else if (gate.boss) {
+      const status = `bank ${gate.boss.reqPoints.toLocaleString()} pts + ${gate.boss.reqTricks} tricks`;
+      parts.push(`<span class="prog-seg"><b>${gate.boss.name}</b> \u00B7 ${status}</span>`);
+    } else if (gate.cleared) {
+      parts.push('<span class="prog-seg prog-clear">RIVALS CLEARED</span>');
+    }
+    if (gate.next) {
+      const n = gate.next;
+      parts.push(
+        `<span class="prog-seg prog-next"><b>${n.name}</b> ${n.rivals}/${n.rivalsTotal} rivals \u00B7 ` +
+          `${n.score.toLocaleString()} / ${n.target.toLocaleString()} <em>${n.scorePct}%</em></span>`,
+      );
+    }
+    this.progressionEl.innerHTML = parts.join(' <span class="prog-sep">\u00B7</span> ');
+  }
+
   /** Speed in km/h: metres per second means nothing to most people. */
   setSpeed(ms) {
     const kmh = Math.round(ms * 3.6);
@@ -1045,6 +1139,12 @@ export class Hud {
   showBossChallenge(def, challenge) {
     if (this.bossChallengeNameEl) this.bossChallengeNameEl.textContent = def.name;
     if (this.bossThemNameEl) this.bossThemNameEl.textContent = def.name;
+    // The requirement line — points and tricks the current run must have
+    // banked to win — is set when the card opens and never changes mid-duel.
+    const req = bossRequirement(def);
+    if (this.bossReqEl) {
+      this.bossReqEl.textContent = `beat ${def.name}: ${req.points.toLocaleString()} pts + ${req.tricks} tricks banked this run`;
+    }
     this.setBossChallenge(def, challenge);
     if (this.bossChallengeEl) this.bossChallengeEl.hidden = false;
   }
@@ -1074,20 +1174,24 @@ export class Hud {
   }
 
   /**
-   * The result card. `newPark` is the name of a freshly unlocked park, or null.
-   * Beating the rival also hides the rematch button — a win is a win, there is
-   * nothing left to go again for until the next rival is standing in the park.
+   * The result card. `newPark` is the name of a freshly unlocked park, or
+   * null. Beating the rival also hides the rematch button — a win is a win,
+   * there is nothing left to go again for until the next rival is standing in
+   * the park.
    */
-  showBossResult({ win, def, playerScore, playerTricks, bossScore, bossTricks, newPark }) {
+  showBossResult({ win, def, playerScore, playerTricks, bossScore, bossTricks, reqMet, req, newPark }) {
     if (this.bossResultTitleEl) {
       this.bossResultTitleEl.textContent = win ? 'YOU WON' : 'THEY WON';
       this.bossResultTitleEl.classList.toggle('won', !!win);
     }
     if (this.bossResultLineEl) {
+      const reqText = req
+        ? `you needed ${req.points.toLocaleString()} pts + ${req.tricks} tricks banked ${reqMet ? '— met' : '— not met'}`
+        : '';
       this.bossResultLineEl.innerHTML =
         `<span>You <b>${playerScore.toLocaleString()}</b> \u00B7 ${playerTricks} trick${playerTricks === 1 ? '' : 's'}</span>` +
         `<span>${def.name} <b>${bossScore.toLocaleString()}</b> \u00B7 ${bossTricks} trick${bossTricks === 1 ? '' : 's'}</span>` +
-        `<span class="tag">Win: out-skate them on both score and tricks.</span>`;
+        `<span class="tag">Win: out-skate them AND ${reqText || 'bank the required points and tricks'}.</span>`;
     }
     if (this.bossResultNewEl) {
       this.bossResultNewEl.hidden = !newPark;
@@ -1368,7 +1472,8 @@ export class Hud {
   /** Build the choice of maps, once — `parks` is the PARKS array from
    * parkLayouts.js, and `save` drives progression: unlocked cards are buttons
    * that switch straight in and show their best, locked cards are inert rows
-   * showing how much more is needed on the park before them. */
+   * showing the pair of doors that must both open on the park before them —
+   * its whole rival roster beaten, and a 1,000,000-point single run. */
   renderParks(parks, currentId, save) {
     if (!this.parkGrid) return;
     this.parkGrid.innerHTML = parks
@@ -1376,12 +1481,18 @@ export class Hud {
         const current = p.id === currentId ? ' current' : '';
         if (save && !save.isParkUnlocked(p.id)) {
           const prev = parks[parks.indexOf(p) - 1];
+          const prevRoster = prev ? bossLadder(prev.id) : [];
+          const beaten = prevRoster.filter((b) => save.isBossDefeated(b.id)).length;
+          const rivalsDone = prevRoster.length > 0 && beaten >= prevRoster.length;
           const prevBest = prev ? save.parkBestOf(prev.id) : 0;
           const pct = Math.min(100, Math.max(0, Math.round((prevBest / PARK_UNLOCK_SCORE) * 100)));
           return (
             `<div class="park-card locked" data-park="${p.id}" aria-disabled="true">` +
             `<b>${p.name} <span class="park-lock" aria-label="locked">\u{1F512}</span></b>` +
-            `<span>Score ${PARK_UNLOCK_SCORE.toLocaleString()} on ${prev ? prev.name : 'the previous park'} to unlock.</span>` +
+            `<span class="park-progress-note">Unlock: beat every rival on ${prev ? prev.name : 'the previous park'}</span>` +
+            `<span class="park-rival${rivalsDone ? ' cleared' : ''}">` +
+            `Rivals ${beaten}/${prevRoster.length}${rivalsDone ? ' — cleared' : ''}</span>` +
+            `<span class="park-progress-note">and score ${PARK_UNLOCK_SCORE.toLocaleString()} in one run</span>` +
             `<span class="park-progress"><i style="width:${pct}%"></i></span>` +
             `<span class="park-progress-note">${prevBest.toLocaleString()} / ${PARK_UNLOCK_SCORE.toLocaleString()}</span>` +
             `</div>`
@@ -1389,14 +1500,15 @@ export class Hud {
         }
         // The park's rival line: who stands there waiting, or cleared. Nothing
         // for parks without a roster — the built-in four are the ones that own
-        // rivals, so the card quietly skips the line elsewhere.
+        // rivals, so the card quietly skips the line elsewhere. The reveal is
+        // run-derived, so the card shows the roster, not a score bar.
         const roster = bossLadder(p.id);
         let rivalNote = '';
         if (roster.length && save) {
           const active = roster.find((b) => !save.isBossDefeated(b.id));
           if (!active) rivalNote = `<span class="park-rival cleared">Rivals cleared</span>`;
           else if (save.parkBestOf(p.id) < BOSS_REVEAL_SCORE) {
-            rivalNote = `<span class="park-rival">Reach ${BOSS_REVEAL_SCORE.toLocaleString()} here to face ${active.name}.</span>`;
+            rivalNote = `<span class="park-rival">${active.name} awaits a ${BOSS_REVEAL_SCORE.toLocaleString()}-point run.</span>`;
           } else {
             rivalNote = `<span class="park-rival">Rival: <b>${active.name}</b></span>`;
           }

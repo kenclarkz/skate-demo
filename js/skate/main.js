@@ -29,6 +29,8 @@ import { designPalette, sanitizeText } from './board-design.js';
 import { GRABS } from './tricks.js';
 import { makeAiSkaters, assignBossCrowd } from './ai.js';
 import { bossLadder, BossSkater } from './boss.js';
+import { makeAiSkaters } from './ai.js';
+import { bossLadder, BossSkater, bossRequirement } from './boss.js';
 import { makeBirds } from './bird.js';
 import { makeLogos, checkPickup } from './collectible.js';
 import { registerServiceWorker, setupInstall } from '../game/pwa.js';
@@ -254,14 +256,14 @@ function disposeGroup(group) {
 /**
  * The rival currently owed by this park, or null. Reveal is derived, never
  * saved: the first boss of the park's roster that has not been beaten, and
- * only once the park is unlocked and its own banked best has cleared the
- * reveal milestone.
+ * only once the park is unlocked and the *current run* has banked the reveal
+ * milestone — the saved park best plays no part in who steps out.
  */
 function currentBossDef() {
   const active = bossLadder(park.id).find((b) => !save.isBossDefeated(b.id));
   if (!active) return null;
   if (!save.isParkUnlocked(park.id)) return null;
-  if (save.parkBestOf(park.id) < C.BOSS_REVEAL_SCORE) return null;
+  if (score < C.BOSS_REVEAL_SCORE) return null;
   return active;
 }
 
@@ -313,9 +315,9 @@ function refreshBossCrowd() {
 /**
  * A rival whose reveal milestone just got crossed steps out mid-run, and the
  * crossing is the introduction: the same skate-in a loaded park uses at boot,
- * playing right now while the player is riding. (If the milestone lands outside
- * a live run — say a combo banks while paused — the rival just appears and
- * waits; there is no camera to cut to from a menu.)
+ * playing right now while the player is riding. Because the milestone is the
+ * live run's score, it can only be crossed by a combo banking inside a run,
+ * so the cutscene always has a camera to cut to.
  */
 function maybeRevealBoss() {
   if (currentBossDef() && !boss) {
@@ -373,29 +375,55 @@ function tallyBossEvents() {
   }
 }
 
-/** The duel is over: compare tallies, bank a win, put the rival back on foot. */
+/**
+ * The duel is over: compare tallies, and a win needs the run to have cleared
+ * the rival's own bar as well — out-skating them on both counts is not enough
+ * on its own, any more than reaching the bar alone is. A win banks the rival
+ * and may, with the run past the park-unlock score, open the next park.
+ */
 function endChallenge() {
   if (!challenge) return;
   const def = boss.def;
   const result = { ...challenge };
-  const win = result.playerScore > result.bossScore && result.playerTricks > result.bossTricks;
+  const req = bossRequirement(def);
+  const reqMet = score >= req.points && runTricks >= req.tricks;
+  const win =
+    result.playerScore > result.bossScore &&
+    result.playerTricks > result.bossTricks &&
+    reqMet;
   let newPark = null;
   if (win) {
-    const progression = save.recordBossWin(def.id);
-    if (progression.newPark) {
-      const nxt = PARKS.find((p) => p.id === progression.newPark);
-      newPark = nxt ? nxt.name : progression.newPark;
-    }
+    save.recordBossWin(def.id);
+    const nxt = maybeUnlockNextPark();
+    newPark = nxt ? nxt.name : null;
   }
   boss.toIdle();
   challenge = null;
   hud.setBossChallengeVisible(false);
   state = BOSSRESULT;
   input.enabled = false;
-  hud.showBossResult({ win, def, ...result, newPark });
+  hud.showBossResult({ win, def, ...result, reqMet, req, newPark });
   // A win steps the ladder: the next rival on this park (or none) takes over
   // the scene now, so the player can see what is waiting when they remount.
   if (win) setupBoss();
+}
+
+/**
+ * The park-unlock gate. A park opens only when *both* halves are satisfied at
+ * once: the park before it has had its whole rival roster beaten, and the
+ * current run has banked PARK_UNLOCK_SCORE. Reaching the score alone, or
+ * clearing the roster alone, opens nothing — main.js owns the run, so the
+ * pair is only ever checked here. @returns the park def this unlocked, or null.
+ */
+function maybeUnlockNextPark() {
+  const idx = PARKS.findIndex((p) => p.id === park.id);
+  const next = PARKS[idx + 1];
+  if (!next) return null;
+  if (!save.isParkUnlocked(park.id) || save.isParkUnlocked(next.id)) return null;
+  if (!bossLadder(park.id).every((b) => save.isBossDefeated(b.id))) return null;
+  if (score < C.PARK_UNLOCK_SCORE) return null;
+  save.unlockPark(next.id);
+  return next;
 }
 
 /**
@@ -420,6 +448,14 @@ function loadPark(def) {
   logosCollected = 0;
   bots.forEach((b, i) => b.setPark(park, i));
   socialGroup.reset();
+  // A fresh park means a fresh run: the current-run score and trick counters
+  // belong to the map they were earned on, and a rival's reveal rides the live
+  // run, so neither survives a move — setupBoss below reads them at zero and
+  // owes the park no rival until the run itself earns one.
+  score = 0;
+  runTricks = 0;
+  hud.setScore(0);
+  hud.setRunTricks(0);
   // Any duel or cutscene in flight dies with the park it belonged to.
   challenge = null;
   hud.hideBossChallenge();
@@ -500,7 +536,8 @@ const input = new Input(document.getElementById('app'));
 const gestureTrail = new GestureTrail(document.getElementById('gesture-trail'));
 
 let state = START;
-let score = 0;           // banked this session
+let score = 0;           // banked this session — the current run's score
+let runTricks = 0;       // tricks landed this session — the current run's count
 let frames = 0;
 let worldTime = 0;       // unconditional clock, for birds and the logos' spin
 let liveCombo = { names: [], points: 0 };
@@ -557,9 +594,12 @@ function respawn() {
 function startGame() {
   respawn();
   score = 0;
+  runTricks = 0;
   hud.setScore(0);
+  hud.setRunTricks(0);
   // The rival's skate-in plays when it is revealed mid-run, not on every run
-  // start — a revealed rival is simply standing there when the run loads.
+  // start — a fresh run starts at zero, so nobody is standing until the run
+  // itself banks the reveal milestone.
   state = PLAYING;
   input.enabled = true;
   hud.hide();
@@ -1389,6 +1429,10 @@ function handleEvents(events) {
         // need to pay less in coins on top of that.
         save.addCoins(Math.max(1, Math.round(e.points / 25)));
         hud.setCoins(save.coins);
+        // The current run's trick count — cumulative across the whole run,
+        // never tied to one combo. It is what a rival's requirements ask for.
+        runTricks++;
+        hud.setRunTricks(runTricks);
         liveCombo = { names: ride.combo.names.slice(), points: ride.combo.points };
         if (challenge) challenge.playerTricks++;
         break;
@@ -1408,16 +1452,14 @@ function handleEvents(events) {
           const coinText = bonus > 0 ? `  +${bonus}c` : '';
           hud.say(`${e.total.toLocaleString()}${coinText}${best ? '  new best' : ''}`, 'banked');
         }
-        // Park progression: the combo also counts towards the park's own best,
-        // and a big enough one unlocks the next park in the grid.
-        const progression = save.recordParkScore(park.id, e.total);
-        if (progression.unlockedId) {
-          const nxt = PARKS.find((p) => p.id === progression.unlockedId);
-          hud.say(`NEW PARK UNLOCKED!  ${nxt ? nxt.name.toUpperCase() : ''}`, 'unlock');
-        }
-        // The rival's reveal milestone rides the same number — crossing it is
-        // when the park's own boss steps out mid-run.
+        // Park progression: the combo counts towards the park's own best.
+        save.recordParkScore(park.id, e.total);
+        // Crossing the reveal milestone mid-run is when the park's own boss
+        // steps out. With the roster beaten and the run past the unlock
+        // score, the same banked combo can open the next park.
         maybeRevealBoss();
+        const unlocked = maybeUnlockNextPark();
+        if (unlocked) hud.say(`NEW PARK UNLOCKED!  ${unlocked.name.toUpperCase()}`, 'unlock');
         audio.chime(e.multiplier > 2);
         liveCombo = { names: [], points: 0 };
         if (challenge) challenge.playerScore += e.total;
@@ -1743,6 +1785,8 @@ function updateHud(dt) {
     hud.setBalance(balancing, ride.balance, C.BALANCE_LIMIT);
     hud.setCharge(input.flickActive || input.charging() ? ride.charge : 0);
     hud.setLogos(logosCollected, logos.length);
+    hud.setRunTricks(runTricks);
+    hud.setProgression(progressionGate());
     audio.follow(
       ride.groundSpeed,
       ride.mode === GROUND,
@@ -1767,6 +1811,8 @@ function updateHud(dt) {
     hud.setBalance(balancing, ride.balance, C.BALANCE_LIMIT);
     hud.setCharge(input.flickActive || input.charging() ? ride.charge : 0);
     hud.setLogos(logosCollected, logos.length);
+    hud.setRunTricks(runTricks);
+    hud.setProgression(progressionGate());
     audio.follow(
       ride.groundSpeed,
       ride.mode === GROUND,
@@ -1784,11 +1830,62 @@ function updateHud(dt) {
     hud.setBalance(false, 0, 1);
     hud.setCharge(0);
     hud.setBossPromptVisible(false);
+    hud.setProgression(null);
     audio.follow(0, false, false, false);
   } else {
     hud.setBossPromptVisible(false);
+    hud.setProgression(null);
     audio.follow(0, false, false, false);
   }
+}
+
+/**
+ * The current run's progression, as the HUD draws it: where the park's rival
+ * gate stands and how far the next park is. Both gates read the live run's
+ * score and trick totals — the reveal milestone, the standing rival's own
+ * requirement, and the park-unlock pair of roster plus 1,000,000 points.
+ */
+function progressionGate() {
+  const roster = bossLadder(park.id);
+  const active = roster.find((b) => !save.isBossDefeated(b.id));
+  const gate = {
+    runScore: score,
+    runTricks,
+    cleared: roster.length > 0 && !active,
+    reveal: null,
+    boss: null,
+    next: null,
+  };
+  if (active) {
+    const req = bossRequirement(active);
+    if (score < C.BOSS_REVEAL_SCORE) {
+      gate.reveal = {
+        name: active.name,
+        score,
+        target: C.BOSS_REVEAL_SCORE,
+        pct: Math.min(100, Math.max(0, Math.round((score / C.BOSS_REVEAL_SCORE) * 100))),
+      };
+    } else {
+      gate.boss = {
+        name: active.name,
+        reqPoints: req.points,
+        reqTricks: req.tricks,
+      };
+    }
+  }
+  const idx = PARKS.findIndex((p) => p.id === park.id);
+  const next = PARKS[idx + 1];
+  if (next && save.isParkUnlocked(park.id) && !save.isParkUnlocked(next.id)) {
+    gate.next = {
+      name: next.name,
+      score,
+      target: C.PARK_UNLOCK_SCORE,
+      scorePct: Math.min(100, Math.max(0, Math.round((score / C.PARK_UNLOCK_SCORE) * 100))),
+      rivals: roster.filter((b) => save.isBossDefeated(b.id)).length,
+      rivalsTotal: roster.length,
+    };
+  }
+  return gate;
 }
 
 // --- adaptive resolution --------------------------------------------------
@@ -1930,6 +2027,24 @@ window.__skate = {
   },
   get score() {
     return score;
+  },
+  get runTricks() {
+    return runTricks;
+  },
+  /** Pretend a combo just banked, for tests — feeds every progression gate. */
+  setRunScore(n) {
+    score = Math.max(0, Math.floor(n));
+    hud.setScore(score);
+    maybeRevealBoss();
+    const unlocked = maybeUnlockNextPark();
+    if (unlocked) hud.say(`NEW PARK UNLOCKED!  ${unlocked.name.toUpperCase()}`, 'unlock');
+    return { score, unlocked: unlocked ? unlocked.id : null };
+  },
+  /** Pretend tricks just landed, for tests — feeds the rival requirements. */
+  setRunTricks(n) {
+    runTricks = Math.max(0, Math.floor(n));
+    hud.setRunTricks(runTricks);
+    return runTricks;
   },
   get frames() {
     return frames;

@@ -35,11 +35,13 @@
         <div id="stats">
           <div class="readout"><span class="label">Score</span><span id="score">0</span></div>
           <div class="readout"><span class="label">Best</span><span id="best">0</span></div>
+          <div class="readout"><span class="label">Tricks</span><span id="run-tricks">0 tricks</span></div>
           <div class="readout coins"><span class="label">Coins</span><span id="coins">0</span></div>
           <div class="readout logos" id="logos-readout" hidden><span class="label">Logos</span><span id="logos-count">0/6</span></div>
           <div class="readout speed"><span id="speed">0</span><span class="label">km/h</span></div>
           <div id="air" hidden>0.00 m</div>
         </div>
+        <div id="progression" hidden></div>
         <button id="install" type="button" hidden>Install</button>
 
         <!-- Mobile has no Escape/P key to pause with — this is that button.
@@ -160,6 +162,7 @@
               <span id="boss-them-tricks" class="boss-tricks">0 tricks</span>
             </div>
           </div>
+          <div id="boss-req" class="boss-req"></div>
         </div>
 
         <div id="boss-result" hidden>
