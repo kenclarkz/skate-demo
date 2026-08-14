@@ -28,8 +28,6 @@ import { customLook, heightById, buildById } from './custom.js';
 import { designPalette, sanitizeText } from './board-design.js';
 import { GRABS } from './tricks.js';
 import { makeAiSkaters, assignBossCrowd } from './ai.js';
-import { bossLadder, BossSkater } from './boss.js';
-import { makeAiSkaters } from './ai.js';
 import { bossLadder, BossSkater, bossRequirement } from './boss.js';
 import { makeBirds } from './bird.js';
 import { makeLogos, checkPickup } from './collectible.js';
