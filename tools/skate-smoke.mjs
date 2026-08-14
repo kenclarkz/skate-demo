@@ -3224,10 +3224,10 @@ section('Skater picker');
       ),
     };
   });
-  ok(cat.count === 8, `there are eight skaters to choose between (${cat.ids.join(', ')})`);
+  ok(cat.count === 10, `there are ten skaters to choose between (${cat.ids.join(', ')})`);
   ok(cat.named, 'each with a name and a line describing them');
   ok(cat.keys, 'and a complete palette');
-  ok(new Set(cat.heads).size === 7, `and each with their own headwear (${cat.heads.join(', ')})`);
+  ok(new Set(cat.heads).size === 9, `and each with their own headwear (${cat.heads.join(', ')})`);
 
   // Picking one rebuilds the live rig, and the pick survives a reload the same
   // way the board and the shirt do.
@@ -3306,10 +3306,10 @@ section('Skater picker');
   });
   ok(screen.state === 'charselect', 'the skater rack lives on the Riders screen');
   ok(screen.visible && screen.hasBack, 'which shows, and has a back button');
-  ok(screen.cards === 8, 'and a card per skater');
+  ok(screen.cards === 10, 'and a card per skater');
   ok(screen.current === 1 && screen.currentId === 'nova', 'and exactly one marked as the one being skated');
   ok(
-    screen.painted.length === 8 && screen.painted.every((n) => n > 400),
+    screen.painted.length === 10 && screen.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
   );
   ok(!screen.shopHasRack, 'and the shop no longer has a skater rack of its own');
@@ -3494,11 +3494,11 @@ section('Character Maker');
     };
   });
   ok(riders.state === 'charselect', 'the Riders screen opens');
-  ok(riders.cards === 9, 'with a card for every rider and the made one');
+  ok(riders.cards === 11, 'with a card for every rider and the made one');
   ok(riders.hasCustom === true, 'and the made character leads the grid');
   ok(riders.current === 1, 'exactly one marked as skating');
   ok(
-    riders.painted.length === 9 && riders.painted.every((n) => n > 400),
+    riders.painted.length === 11 && riders.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${riders.painted.join(', ')} pixels)`
   );
   ok(riders.picked === true && riders.eqId === riders.customId, 'and tapping the made card equips it');
@@ -3639,7 +3639,7 @@ section('Start menu: every button opens what it says');
     const r = card?.getBoundingClientRect();
     return { cards: grid ? grid.querySelectorAll('[data-character]').length : 0, sized: !!r && r.width > 40 && r.height > 40 };
   });
-  ok(reachable.cards === 8 && reachable.sized, 'and the eight skaters are laid out inside it');
+  ok(reachable.cards === 10 && reachable.sized, 'and the ten skaters are laid out inside it');
   await page.click('#btn-charselect-back', { timeout: 4000 });
 }
 
