@@ -1290,6 +1290,23 @@ button:disabled.primary {
   min-height: 0;
 }
 
+.dg-cat {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 8px 4px 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.dg-cat:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 #dg-panel {
   display: none;
   flex: 1 1 auto;

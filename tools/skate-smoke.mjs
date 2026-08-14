@@ -5057,6 +5057,183 @@ section('The park editor shows what you ride');
 }
 
 // --------------------------------------------------------------------------
+section('The park editor decor palette');
+{
+  // The decor palette is the dressing half of the editor — trash cans, trees,
+  // fences, vehicles and spectators that are pure scenery. Every one of them
+  // still previews, places, rotates, scales and recolors like any obstacle,
+  // but none of them may add a surface, a grind, a graph node or any physics
+  // to the park: a prop is scenery, full stop.
+  const open = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1, id: 'user-decor', name: 'Decor smoke', blurb: 'Built by the smoke test.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'd0', type: 'slab', x: 0, y: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 6, d: 3, h: 0.25, color: 'concrete' },
+      ],
+    });
+    const cats = [...document.querySelectorAll('#dg-palette .dg-cat')].map((el) => el.textContent.trim());
+    const types = [...document.querySelectorAll('#dg-palette [data-type]')].map((b) => b.dataset.type);
+    return {
+      cats,
+      types,
+      objects: g.designer.file.objects.length,
+      pickables: g.designer.pickables.length,
+    };
+  });
+  ok(open.cats.length === 2 && open.cats[0] === 'Obstacles' && open.cats[1] === 'Decor', `the palette is grouped into Obstacles and Decor (${open.cats.join(' / ')})`);
+  ok(open.types.includes('tree') && open.types.includes('trashcan') && open.types.includes('foodtruck') && open.types.includes('spectator'), 'with the props and the obstacles both in the rail');
+  ok(open.objects === 1 && open.pickables === 1, `with the file's slab live in the scene (${open.pickables} pickable)`);
+
+  // Adding a decor prop works exactly like adding an obstacle: it lands in the
+  // file and gets a pickable preview in the scene, and its properties panel
+  // carries the same transform + surface color controls.
+  const added = await run(() => {
+    const g = window.__skate;
+    g.designer.addObject('tree');
+    g.designer.addObject('foodtruck');
+    const o = g.designer.file.objects.find((o) => o.type === 'foodtruck');
+    g.designer.select(o.id);
+    return {
+      objects: g.designer.file.objects.length,
+      pickables: g.designer.pickables.length,
+      foodtruck: { x: o.x, z: o.z, sx: o.sx, sz: o.sz, color: o.color },
+      panelWheel: !!document.querySelector('#dg-panel .dg-wheel'),
+      panelSwatches: !!document.querySelector('#dg-panel .dg-swatch'),
+    };
+  });
+  ok(added.objects === 3 && added.pickables === 3, 'a decor prop adds to the file and the scene like any object');
+  ok(added.foodtruck.color, 'carrying its own surface colour');
+  ok(added.panelWheel && added.panelSwatches, 'and the properties panel paints a colour picker for it');
+
+  // The preview has to line up with the footprint the game clears the pad by,
+  // the same way the obstacles' previews do. Every decor type, four rotations,
+  // one with a non-uniform scale.
+  const aligned = await run(async () => {
+    const g = window.__skate;
+    const THREE = await import('./js/game/three.js');
+    const { boundsOf, newObject, OBJECTS } = await import('./js/skate/parkObjects.js');
+    const TYPES = OBJECTS.filter((t) => t.category === 'decor').map((t) => t.id);
+    const out = [];
+    for (const type of TYPES) {
+      for (const ry of [0, 90, 180, 270]) {
+        g.openDesigner({
+          v: 1, id: 'user-align', name: 'Align', blurb: 'Decor preview/footprint alignment.',
+          extent: 40, ground: 'concrete', spawn: { x: 0, z: -25 },
+          objects: [{ ...newObject(type), id: 'm1', x: 4, y: 0, z: -3, ry, sx: 1.25, sz: 0.75 }],
+        });
+        const d = g.designer;
+        const o = d.file.objects[0];
+        const group = d.pickables.find((gr) => gr.userData.parkObjId === 'm1');
+        const preview = new THREE.Box3().setFromObject(group);
+        const b = boundsOf(o);
+        const fp = { x0: Math.min(b.x0, b.x1), x1: Math.max(b.x0, b.x1), z0: Math.min(b.z0, b.z1), z1: Math.max(b.z0, b.z1) };
+        const px = [preview.min.x, preview.max.x];
+        const pz = [preview.min.z, preview.max.z];
+        const eps = 0.11;
+        const ok = px[0] >= fp.x0 - eps && px[1] <= fp.x1 + eps && pz[0] >= fp.z0 - eps && pz[1] <= fp.z1 + eps;
+        if (!ok) {
+          out.push(
+            `${type}@${ry} preview x[${px.map((v) => v.toFixed(2))}] z[${pz.map((v) => v.toFixed(2))}]` +
+            ` vs footprint x[${fp.x0.toFixed(2)},${fp.x1.toFixed(2)}] z[${fp.z0.toFixed(2)},${fp.z1.toFixed(2)}]`
+          );
+        }
+      }
+    }
+    return out;
+  });
+  ok(aligned.length === 0, `every decor preview sits on its own clear footprint (${aligned.length || 'all 128'} aligned)`);
+
+  // And the editor preview has to match the transform the built park uses: the
+  // game stamps each prop with T(x, y, z) · Ry(ry) · S(sx, 1, sz), so a scaled
+  // and spun prop's world box here has to match the game's own recipe.
+  const recipe = await run(async () => {
+    const g = window.__skate;
+    const THREE = await import('./js/game/three.js');
+    const { newObject, boundsOf } = await import('./js/skate/parkObjects.js');
+    const type = 'foodtruck';
+    g.openDesigner({
+      v: 1, id: 'user-align', name: 'Align', blurb: 'Decor game transform.',
+      extent: 40, ground: 'concrete', spawn: { x: 0, z: -25 },
+      objects: [{ ...newObject(type), id: 'm1', x: 6, y: 0.4, z: -5, ry: 30, sx: 2, sy: 1.3, sz: 1.5 }],
+    });
+    const o = g.designer.file.objects[0];
+    const group = g.designer.pickables.find((gr) => gr.userData.parkObjId === 'm1');
+    const preview = new THREE.Box3().setFromObject(group);
+    const b = boundsOf(o);
+    const corners = [
+      new THREE.Vector3(b.x0, 0, b.z0),
+      new THREE.Vector3(b.x0, 0, b.z1),
+      new THREE.Vector3(b.x1, 0, b.z0),
+      new THREE.Vector3(b.x1, 0, b.z1),
+    ];
+    const game = new THREE.Box3().setFromPoints(corners);
+    const eps = 0.15;
+    const inX = preview.min.x >= game.min.x - eps && preview.max.x <= game.max.x + eps;
+    const inZ = preview.min.z >= game.min.z - eps && preview.max.z <= game.max.z + eps;
+    return {
+      ok: inX && inZ,
+      px: [preview.min.x.toFixed(2), preview.max.x.toFixed(2)],
+      pz: [preview.min.z.toFixed(2), preview.max.z.toFixed(2)],
+      gx: [game.min.x.toFixed(2), game.max.x.toFixed(2)],
+      gz: [game.min.z.toFixed(2), game.max.z.toFixed(2)],
+    };
+  });
+  ok(recipe.ok, `a scaled, spun prop matches the park's build recipe (preview x[${recipe.px}] z[${recipe.pz}] vs game x[${recipe.gx}] z[${recipe.gz}])`);
+
+  // Save & Test builds the props into the park as pure scenery: the rideable
+  // surfaces and grinds come only from the obstacles, the pad stays the ground
+  // under a prop, and the park graph ignores the props entirely.
+  const tested = await run(() => {
+    const g = window.__skate;
+    const base = {
+      v: 1, id: 'user-base', name: 'Base smoke', blurb: 'Built by the smoke test.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'd0', type: 'slab', x: 0, y: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 6, d: 3, h: 0.25, color: 'concrete' },
+      ],
+    };
+    const withProps = {
+      ...base,
+      id: 'user-decor',
+      objects: [
+        ...base.objects,
+        { id: 'd1', type: 'tree', x: 3, y: 0, z: -2, ry: 0, sx: 1, sz: 1, r: 1, h: 1.6, color: '#3a5a40' },
+        { id: 'd2', type: 'foodtruck', x: 10, y: 0, z: 8, ry: 90, sx: 2, sz: 1.5, len: 4.5, w: 2.1, color: '#d6c064' },
+      ],
+    };
+    g.openDesigner(base);
+    g.designer.on.test();
+    const baseline = g.park.features.length;
+    g.openDesigner(withProps);
+    g.designer.on.test();
+    const park = g.park;
+    for (let i = 0; i < 120; i++) g.drive(1 / 120, { push: true });
+    return {
+      state: g.state,
+      park: park.id,
+      baseline,
+      features: park.features.length,
+      grinds: park.grinds.length,
+      decors: park.decors.length,
+      padYAtTree: park.sample(3, -2, { y: 0 }).y,
+      graphNodes: park.graph ? park.graph.nodes.length : 'no graph',
+      graphKinds: park.graph ? park.graph.nodes.map((n) => n.kind).sort() : [],
+      rideFinite: [g.ride.pos.x, g.ride.pos.y, g.ride.pos.z].every(Number.isFinite),
+    };
+  });
+  ok(tested.state === 'playing' && tested.park === 'user-decor', 'Save & Test builds and rides the decorated park');
+  ok(tested.features === tested.baseline && tested.grinds === 0, `and the props add no surfaces or grinds (${tested.features} surfaces, ${tested.grinds} grinds)`);
+  ok(tested.decors === 2, `but does paint them into the scenery (${tested.decors} props in the park)`);
+  ok(Math.abs(tested.padYAtTree) < 0.02, 'and a prop over the pad adds no collision (the pad is still the ground)');
+  ok(tested.graphNodes === 1 && tested.graphKinds.join(',') === 'flat', `with the park graph ignoring the props (${tested.graphKinds.join(', ')})`);
+  ok(tested.rideFinite, 'and the rider stays a finite, rideable point');
+
+  await run(() => window.__skate.showStart());
+}
+
+// --------------------------------------------------------------------------
 section('The park editor is responsive');
 {
   // The editor's chrome has to re-flow by viewport width, not by device sniff:

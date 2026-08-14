@@ -135,11 +135,28 @@ export class ParkDesigner {
       if (btn) this._drawerAction(btn.dataset.dgmenu);
     });
 
-    // Build the palette rail once — the object types never change.
+    // Build the palette rail once — the object types never change. The props
+    // are grouped into two sections: the skateable obstacles first, then the
+    // decorative set, each under its own heading.
     if (this.paletteEl) {
-      this.paletteEl.innerHTML = OBJECTS.map(
-        (t) => `<button type="button" class="dg-palette-btn" data-type="${t.id}" title="${t.hint}"><b>${t.label}</b><span>${t.hint}</span></button>`
-      ).join('');
+      const groups = [
+        ['Obstacles', (t) => (t.category || 'park') !== 'decor'],
+        ['Decor', (t) => t.category === 'decor'],
+      ];
+      this.paletteEl.innerHTML = groups
+        .map(([label, pick]) => {
+          const types = OBJECTS.filter(pick);
+          if (!types.length) return '';
+          return (
+            `<div class="dg-cat">${label}</div>` +
+            types
+              .map(
+                (t) => `<button type="button" class="dg-palette-btn" data-type="${t.id}" title="${t.hint}"><b>${t.label}</b><span>${t.hint}</span></button>`
+              )
+              .join('')
+          );
+        })
+        .join('');
       this.paletteEl.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-type]');
         if (btn) {
