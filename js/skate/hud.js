@@ -31,6 +31,7 @@ import {
   ACCESSORY_CATEGORIES,
 } from './accessories.js';
 import { drawWheel, hexToHsv, hsvToHex } from './parkDesigner.js';
+import { PARK_UNLOCK_SCORE } from './config.js';
 import {
   STYLES,
   ICON_LIST,
@@ -1014,7 +1015,8 @@ export class Hud {
     this.callout.classList.remove('pop');
     void this.callout.offsetWidth;
     this.callout.classList.add('pop');
-    this.calloutTimer = 1.6;
+    // An unlock announcement earns a longer stay than a trick name.
+    this.calloutTimer = kind === 'unlock' ? 2.6 : 1.6;
   }
 
   tick(dt) {
@@ -1249,15 +1251,34 @@ export class Hud {
   }
 
   // --- park picker ---------------------------------------------------------
-  /** Build the choice of maps, once — `parks` is the PARKS array from parkLayouts.js. */
-  renderParks(parks, currentId) {
+  /** Build the choice of maps, once — `parks` is the PARKS array from
+   * parkLayouts.js, and `save` drives progression: unlocked cards are buttons
+   * that switch straight in and show their best, locked cards are inert rows
+   * showing how much more is needed on the park before them. */
+  renderParks(parks, currentId, save) {
     if (!this.parkGrid) return;
     this.parkGrid.innerHTML = parks
-      .map(
-        (p) =>
-          `<button type="button" class="park-card${p.id === currentId ? ' current' : ''}" data-park="${p.id}">` +
-          `<b>${p.name}</b><span>${p.blurb}</span></button>`
-      )
+      .map((p) => {
+        const current = p.id === currentId ? ' current' : '';
+        if (save && !save.isParkUnlocked(p.id)) {
+          const prev = parks[parks.indexOf(p) - 1];
+          const prevBest = prev ? save.parkBestOf(prev.id) : 0;
+          const pct = Math.min(100, Math.max(0, Math.round((prevBest / PARK_UNLOCK_SCORE) * 100)));
+          return (
+            `<div class="park-card locked" data-park="${p.id}" aria-disabled="true">` +
+            `<b>${p.name} <span class="park-lock" aria-label="locked">\u{1F512}</span></b>` +
+            `<span>Score ${PARK_UNLOCK_SCORE.toLocaleString()} on ${prev ? prev.name : 'the previous park'} to unlock.</span>` +
+            `<span class="park-progress"><i style="width:${pct}%"></i></span>` +
+            `<span class="park-progress-note">${prevBest.toLocaleString()} / ${PARK_UNLOCK_SCORE.toLocaleString()}</span>` +
+            `</div>`
+          );
+        }
+        return (
+          `<button type="button" class="park-card${current}" data-park="${p.id}">` +
+          `<b>${p.name}</b><span>${p.blurb}</span>` +
+          `<span class="park-best">Best ${save ? save.parkBestOf(p.id).toLocaleString() : '0'}</span></button>`
+        );
+      })
       .join('');
   }
 

@@ -292,6 +292,13 @@ export function setHoldToPush(v) {
   HOLD_TO_PUSH = !!v;
 }
 
+// --- park progression ------------------------------------------------------
+// The best score a park needs to unlock the next one in the Parks grid. One
+// value for every park on purpose — a single knob to tune the whole ladder.
+// A park is unlocked when the park before it has a banked best combo of at
+// least this many points; see parkLayouts.js and save.recordParkScore().
+export const PARK_UNLOCK_SCORE = 1000000;
+
 // --- camera mode -----------------------------------------------------------
 // Which gameplay camera is live: the original chase camera, a first-person
 // lens bolted to the rider's head, or a close board-only view. camera.js reads
