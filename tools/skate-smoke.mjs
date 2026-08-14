@@ -1934,6 +1934,125 @@ section('Birds');
 }
 
 // --------------------------------------------------------------------------
+section('The rival duel');
+{
+  // Vert Rampage is open but has no recorded best yet, so it owes no rival —
+  // the reveal rides the park's own banked best, nothing saved separately.
+  const gated = await run(() => {
+    const g = window.__skate;
+    g.switchPark('vert');
+    return { def: g.currentBossDef(), boss: g.boss !== null };
+  });
+  ok(gated.def === null && !gated.boss, 'an unlocked park below the milestone owes no rival');
+
+  // Crossing the milestone on the park best names its first rival. 500k is the
+  // reveal milestone, below the 1M park-unlock score, so this banks a rival
+  // without opening the next park — the roster-clear unlock below stays real.
+  const owed = await run(() => {
+    const g = window.__skate;
+    g.save.recordParkScore('vert', 500000);
+    return g.currentBossDef()?.id;
+  });
+  ok(owed === 'tigre', `and crossing it names the park's first rival (${owed})`);
+
+  // ...and the park card says who is waiting.
+  const card = await run(() => {
+    const g = window.__skate;
+    g.hud.renderParks(g.parks, g.park.id, g.save);
+    const el = [...g.hud.parkGrid.querySelectorAll('[data-park]')].find((c) => c.dataset.park === 'vert');
+    return el.querySelector('.park-rival')?.textContent || '';
+  });
+  ok(card.includes('Tigre'), `the park card names the standing rival (${card})`);
+
+  // Making the rival real: setupBoss stands them idle where the player finds them.
+  const standing = await run(() => {
+    const g = window.__skate;
+    g.setupBoss();
+    return { id: g.boss.def.id, mode: g.boss.mode };
+  });
+  ok(standing.id === 'tigre' && standing.mode === 'idle', 'crossing the milestone reveals the first rival, standing');
+
+  // The skate-in cutscene: the rival mounts up and rides, then steps off and idles.
+  const intro = await run(() => {
+    const g = window.__skate;
+    g.beginBossCutscene();
+    const riding = { mode: g.boss.mode, cutscene: !document.getElementById('boss-cutscene').hidden };
+    g.endBossCutscene();
+    return { riding, done: { mode: g.boss.mode, cutscene: document.getElementById('boss-cutscene').hidden } };
+  });
+  ok(intro.riding.mode === 'riding' && intro.riding.cutscene, 'the skate-in puts the rival on the board under the banner');
+  ok(intro.done.mode === 'idle' && intro.done.cutscene, 'and stepping off leaves them standing, banner gone');
+
+  // The challenge: both boards down, a timed duel, and the player's own combos
+  // bank into it through the same handleEvents the live run uses.
+  const duel = await run(() => {
+    const g = window.__skate;
+    g.freeze();
+    g.startChallenge();
+    // The combo banks on 1.35 s of rolling flat ground — place on the spawn,
+    // then hold past the window.
+    g.place(g.park.spawn.x, g.park.spawn.z, 0, 0);
+    g.ride.combo.live = true;
+    g.ride.combo.points = 150000;
+    g.ride.combo.names = ['Kickflip'];
+    g.hold(2);
+    return {
+      on: g.challenge !== null,
+      time: g.challenge.time,
+      score: g.challenge.playerScore,
+      mode: g.boss.mode,
+      panel: !document.getElementById('boss-challenge').hidden,
+    };
+  });
+  ok(duel.on && duel.mode === 'riding' && duel.panel, 'challenging the rival opens the duel panel and both ride');
+  ok(duel.time === 120, `with a two-minute countdown (${duel.time}s)`);
+  ok(duel.score === 150000, `and the player's banked combo counts towards the duel score (${duel.score})`);
+
+  // The result: out-skating the rival on both score and tricks wins the duel,
+  // banks the win, and steps the ladder to the next rival on the park.
+  const won = await run(() => {
+    const g = window.__skate;
+    g.freeze();
+    g.challenge.playerScore = 1000000;
+    g.challenge.playerTricks = 5;
+    g.challenge.bossScore = 800000;
+    g.challenge.bossTricks = 3;
+    g.endChallenge();
+    return {
+      title: document.getElementById('boss-result-title').textContent,
+      line: document.getElementById('boss-result-line').textContent,
+      rematchHidden: document.getElementById('btn-boss-rematch').hidden,
+      panel: !document.getElementById('boss-result').hidden,
+      next: g.boss && g.boss.def.id,
+      defeated: g.save.isBossDefeated('tigre'),
+    };
+  });
+  ok(won.title === 'YOU WON' && won.panel && won.rematchHidden, 'out-skating the rival on both counts wins the duel');
+  ok(won.line.includes('1,000,000') && won.line.includes('800,000'), 'and the result card shows both tallies');
+  ok(won.defeated === true && won.next === 'shove', `the win is banked and the ladder steps (next: ${won.next})`);
+
+  // Clearing the park's whole roster unlocks the next park in the grid.
+  const cleared = await run(() => {
+    const g = window.__skate;
+    const p = g.save.recordBossWin('shove');
+    g.setupBoss();
+    return { nextPark: p.newPark, def: g.currentBossDef(), boss: g.boss !== null };
+  });
+  ok(cleared.nextPark === 'railway', `clearing the park's last rival unlocks the next park (${cleared.nextPark})`);
+  ok(cleared.def === null && !cleared.boss, 'and a cleared roster owes no more rivals');
+
+  // The picker's card flips to cleared once the whole roster has fallen.
+  const clearedCard = await run(() => {
+    const g = window.__skate;
+    g.hud.renderParks(g.parks, g.park.id, g.save);
+    const el = [...g.hud.parkGrid.querySelectorAll('[data-park]')].find((c) => c.dataset.park === 'vert');
+    const rival = el.querySelector('.park-rival');
+    return { cls: rival?.className || '', text: rival?.textContent || '' };
+  });
+  ok(clearedCard.cls.includes('cleared'), `and the park card marks the roster cleared (${clearedCard.text})`);
+}
+
+// --------------------------------------------------------------------------
 section('Collectibles');
 {
   const before = await run(() => {

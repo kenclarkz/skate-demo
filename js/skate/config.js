@@ -299,6 +299,29 @@ export function setHoldToPush(v) {
 // least this many points; see parkLayouts.js and save.recordParkScore().
 export const PARK_UNLOCK_SCORE = 1000000;
 
+// --- rivals -----------------------------------------------------------------
+// The park's own banked best at which its resident rival steps out. Kept
+// deliberately below the park-unlock milestone, so the two progression paths
+// are real ones: a park can be earning rivals (at 500k) well before it opens
+// the next one (at 1M), and clearing a park's whole roster unlocks the next
+// park on its own — if the score milestone had not already. A rival appears
+// only once the park is unlocked, its parkBest has cleared this and it has
+// not been beaten yet; see boss.js and save.recordBossWin().
+export const BOSS_REVEAL_SCORE = 500000;
+
+// A rival skate-in: the boss rides its own lines for this long, with the
+// camera following it, before it steps off and idles where the player can
+// find it.
+export const BOSS_CUTSCENE_SECONDS = 5;
+
+// The duel: both skaters ride at once, and the player must be ahead on both
+// score and landed tricks when the clock runs out to take the win.
+export const CHALLENGE_TIME = 120;
+
+// How close the player has to get to a standing rival before the challenge
+// prompt appears.
+export const BOSS_PROMPT_R = 7;
+
 // --- camera mode -----------------------------------------------------------
 // Which gameplay camera is live: the original chase camera, a first-person
 // lens bolted to the rider's head, or a close board-only view. camera.js reads

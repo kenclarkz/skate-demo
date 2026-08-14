@@ -31,7 +31,8 @@ import {
   ACCESSORY_CATEGORIES,
 } from './accessories.js';
 import { drawWheel, hexToHsv, hsvToHex } from './parkDesigner.js';
-import { PARK_UNLOCK_SCORE } from './config.js';
+import { PARK_UNLOCK_SCORE, BOSS_REVEAL_SCORE } from './config.js';
+import { bossLadder } from './boss.js';
 import {
   STYLES,
   ICON_LIST,
@@ -432,6 +433,26 @@ export class Hud {
     this.statLines = document.getElementById('stat-lines');
     this.parkNow = document.getElementById('park-now');
     this.parkGrid = document.getElementById('park-grid');
+    // The rival duel panels. They live inside #hud, so hiding the menu overlay
+    // never touches them — each one shows and hides with the run's own state.
+    this.bossChallengeEl = document.getElementById('boss-challenge');
+    this.bossTimerEl = document.getElementById('boss-timer');
+    this.bossChallengeNameEl = document.getElementById('boss-challenge-name');
+    this.bossYouScoreEl = document.getElementById('boss-you-score');
+    this.bossYouTricksEl = document.getElementById('boss-you-tricks');
+    this.bossThemNameEl = document.getElementById('boss-them-name');
+    this.bossThemScoreEl = document.getElementById('boss-them-score');
+    this.bossThemTricksEl = document.getElementById('boss-them-tricks');
+    this.bossPromptEl = document.getElementById('boss-prompt');
+    this.bossPromptNameEl = document.getElementById('boss-prompt-name');
+    this.bossCutsceneEl = document.getElementById('boss-cutscene');
+    this.bossCutNameEl = document.getElementById('boss-cut-name');
+    this.bossCutTitleEl = document.getElementById('boss-cut-title');
+    this.bossResultEl = document.getElementById('boss-result');
+    this.bossResultTitleEl = document.getElementById('boss-result-title');
+    this.bossResultLineEl = document.getElementById('boss-result-line');
+    this.bossResultNewEl = document.getElementById('boss-result-new');
+    this.bossRematchBtn = document.getElementById('btn-boss-rematch');
     this.myParkGrid = document.getElementById('mypark-grid');
     this.myParkNewBtn = document.getElementById('btn-mypark-new');
     this.boardGrid = document.getElementById('board-grid');
@@ -613,6 +634,11 @@ export class Hud {
       sit: null,
       grabStart: null,
       grabEnd: null,
+      // The rival duel's three buttons: the approach prompt, and the two on the
+      // result screen. Fired from main.js, which owns the state machine.
+      bossChallenge: null,
+      bossResultRematch: null,
+      bossResultDone: null,
       // Fired on every menu transition: the menu name on show(), null on hide().
       // The radio uses it to know when a run is on screen — see main.js.
       screenChanged: null,
@@ -767,6 +793,10 @@ export class Hud {
     click('opt-holdpush', () => this.on.holdToPush?.());
     click('opt-cameramode', () => this.on.cameraMode?.());
     click('btn-camcycle', () => this.on.camcycle?.());
+    // The rival duel buttons: one lives in the run HUD, two on the result card.
+    click('btn-boss-challenge', () => this.on.bossChallenge?.());
+    click('btn-boss-rematch', () => this.on.bossResultRematch?.());
+    click('btn-boss-done', () => this.on.bossResultDone?.());
     click('opt-reset', () => this.on.reset?.());
     click('btn-tut-prev', () => this.showTutStep(this.tutStep - 1));
     click('btn-tut-next', () => {
@@ -985,6 +1015,90 @@ export class Hud {
   /** The grab row: shown exactly while airborne, hidden the rest of the time. */
   setGrabButtonsVisible(visible) {
     if (this.grabButtons) this.grabButtons.hidden = !visible;
+  }
+
+  // --- rivals ---------------------------------------------------------------
+  /**
+   * The approach prompt: a single Challenge button that appears while the run's
+   * rider is close enough to the rival. `def` is passed every frame and simply
+   * re-names the button while it is on screen — cheap, and keeps the name in
+   * step if the roster ever advances mid-run.
+   */
+  setBossPromptVisible(visible, def) {
+    if (this.bossPromptEl) this.bossPromptEl.hidden = !visible;
+    if (visible && def && this.bossPromptNameEl) this.bossPromptNameEl.textContent = def.name;
+  }
+
+  /** The skate-in intro: name and title over a full-screen banner. */
+  showBossCutscene(def) {
+    if (this.bossCutNameEl) this.bossCutNameEl.textContent = def.name;
+    if (this.bossCutTitleEl) this.bossCutTitleEl.textContent = def.title;
+    if (this.bossCutsceneEl) this.bossCutsceneEl.hidden = false;
+  }
+
+  hideBossCutscene() {
+    if (this.bossCutsceneEl) this.bossCutsceneEl.hidden = true;
+  }
+
+  /** The duel card appears for the first frame of the countdown, then just
+   * ticks through setBossChallenge every frame. */
+  showBossChallenge(def, challenge) {
+    if (this.bossChallengeNameEl) this.bossChallengeNameEl.textContent = def.name;
+    if (this.bossThemNameEl) this.bossThemNameEl.textContent = def.name;
+    this.setBossChallenge(def, challenge);
+    if (this.bossChallengeEl) this.bossChallengeEl.hidden = false;
+  }
+
+  /** The live duel readout: countdown plus both riders' score and trick tallies. */
+  setBossChallenge(def, challenge) {
+    if (!challenge) return;
+    const s = Math.max(0, Math.ceil(challenge.time));
+    if (this.bossTimerEl) this.bossTimerEl.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (this.bossYouScoreEl) this.bossYouScoreEl.textContent = challenge.playerScore.toLocaleString();
+    if (this.bossYouTricksEl) {
+      this.bossYouTricksEl.textContent = `${challenge.playerTricks} trick${challenge.playerTricks === 1 ? '' : 's'}`;
+    }
+    if (this.bossThemScoreEl) this.bossThemScoreEl.textContent = challenge.bossScore.toLocaleString();
+    if (this.bossThemTricksEl) {
+      this.bossThemTricksEl.textContent = `${challenge.bossTricks} trick${challenge.bossTricks === 1 ? '' : 's'}`;
+    }
+  }
+
+  /** Hide just the duel card — used mid-challenge, when the panel is dropped. */
+  setBossChallengeVisible(visible) {
+    if (this.bossChallengeEl) this.bossChallengeEl.hidden = !visible;
+  }
+
+  hideBossChallenge() {
+    if (this.bossChallengeEl) this.bossChallengeEl.hidden = true;
+  }
+
+  /**
+   * The result card. `newPark` is the name of a freshly unlocked park, or null.
+   * Beating the rival also hides the rematch button — a win is a win, there is
+   * nothing left to go again for until the next rival is standing in the park.
+   */
+  showBossResult({ win, def, playerScore, playerTricks, bossScore, bossTricks, newPark }) {
+    if (this.bossResultTitleEl) {
+      this.bossResultTitleEl.textContent = win ? 'YOU WON' : 'THEY WON';
+      this.bossResultTitleEl.classList.toggle('won', !!win);
+    }
+    if (this.bossResultLineEl) {
+      this.bossResultLineEl.innerHTML =
+        `<span>You <b>${playerScore.toLocaleString()}</b> \u00B7 ${playerTricks} trick${playerTricks === 1 ? '' : 's'}</span>` +
+        `<span>${def.name} <b>${bossScore.toLocaleString()}</b> \u00B7 ${bossTricks} trick${bossTricks === 1 ? '' : 's'}</span>` +
+        `<span class="tag">Win: out-skate them on both score and tricks.</span>`;
+    }
+    if (this.bossResultNewEl) {
+      this.bossResultNewEl.hidden = !newPark;
+      this.bossResultNewEl.textContent = newPark ? `NEW PARK UNLOCKED: ${newPark}` : '';
+    }
+    if (this.bossRematchBtn) this.bossRematchBtn.hidden = !!win;
+    if (this.bossResultEl) this.bossResultEl.hidden = false;
+  }
+
+  hideBossResult() {
+    if (this.bossResultEl) this.bossResultEl.hidden = true;
   }
 
   /**
@@ -1273,10 +1387,25 @@ export class Hud {
             `</div>`
           );
         }
+        // The park's rival line: who stands there waiting, or cleared. Nothing
+        // for parks without a roster — the built-in four are the ones that own
+        // rivals, so the card quietly skips the line elsewhere.
+        const roster = bossLadder(p.id);
+        let rivalNote = '';
+        if (roster.length && save) {
+          const active = roster.find((b) => !save.isBossDefeated(b.id));
+          if (!active) rivalNote = `<span class="park-rival cleared">Rivals cleared</span>`;
+          else if (save.parkBestOf(p.id) < BOSS_REVEAL_SCORE) {
+            rivalNote = `<span class="park-rival">Reach ${BOSS_REVEAL_SCORE.toLocaleString()} here to face ${active.name}.</span>`;
+          } else {
+            rivalNote = `<span class="park-rival">Rival: <b>${active.name}</b></span>`;
+          }
+        }
         return (
           `<button type="button" class="park-card${current}" data-park="${p.id}">` +
           `<b>${p.name}</b><span>${p.blurb}</span>` +
-          `<span class="park-best">Best ${save ? save.parkBestOf(p.id).toLocaleString() : '0'}</span></button>`
+          `<span class="park-best">Best ${save ? save.parkBestOf(p.id).toLocaleString() : '0'}</span>` +
+          `${rivalNote}</button>`
         );
       })
       .join('');
