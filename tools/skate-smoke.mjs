@@ -4419,10 +4419,11 @@ section('Tutorial and menus');
     const g = window.__skate;
     g.hud.show('guide');
     const first = { step: g.hud.tutStep, prevDisabled: g.hud.tutPrev.disabled, nextLabel: g.hud.tutNext.textContent };
-    for (let i = 0; i < 30; i++) g.hud.showTutStep(g.hud.tutStep + 1); // walk well past the end
+    const dots = g.hud.tutDotEls.length;
+    for (let i = 0; i < dots + 5; i++) g.hud.showTutStep(g.hud.tutStep + 1); // walk well past the end
     const last = { step: g.hud.tutStep, nextLabel: g.hud.tutNext.textContent };
     g.hud.showTutStep(0);
-    return { first, last, dots: g.hud.tutDotEls.length };
+    return { first, last, dots };
   });
   ok(tut.first.step === 0, 'the tutorial opens on its first step');
   ok(tut.first.prevDisabled, 'with no way to go back further than that');
@@ -4537,7 +4538,7 @@ section('Tutorial demos');
         const g = window.__skate;
         g.hud.showTutStep(i);
         const p = g.hud.preview;
-        const seen = { air: false, grind: false, manual: false, sliding: false, grab: false };
+        const seen = { air: false, grind: false, manual: false, sliding: false, grab: false, revert: false };
         // step(), not update(): the real loop renders once per animation
         // frame, but hundreds of synchronous WebGL draws back to back (what
         // update() would do here) is enough to bog the page down for the
@@ -4551,6 +4552,7 @@ section('Tutorial demos');
           if (p.ride.manual) seen.manual = true;
           if (p.ride.sliding) seen.sliding = true;
           if (p.ride.grab) seen.grab = true;
+          if (p.ride.revert) seen.revert = true;
         }
         const walkerMoved = p.mode === 'walk' ? p.walker.stride > 0.5 : null;
         return { seen, walkerMoved, mode: p.mode };
@@ -4587,6 +4589,7 @@ section('Tutorial demos');
   await checkDemo('Grinds', 450, (o) => o.seen.grind, 'the grind demo actually locks onto the rail');
   await checkDemo('Manuals', 450, (o) => o.seen.manual, 'the manual demo actually drops into a manual');
   await checkDemo('Powerslide', 400, (o) => o.seen.sliding, 'the powerslide demo actually slides');
+  await checkDemo('Revert', 450, (o) => o.seen.revert, 'the revert demo lands backwards and pivots round');
   await checkDemo('On foot', 200, (o) => o.walkerMoved, 'the on-foot demo actually walks');
 
   await run(() => window.__skate.hud.showTutStep(0));
