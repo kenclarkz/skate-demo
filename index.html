@@ -124,6 +124,56 @@
           </button>
         </div>
 
+        <!-- The rival duel. Four panels, all driven by main.js + hud.js, none
+             of them part of the menu overlay:
+             - #boss-cutscene: the skate-in banner when a rival arrives.
+             - #boss-prompt: the Challenge button near a standing rival.
+             - #boss-challenge: the live duel card, countdown and both tallies.
+             - #boss-result: the win/loss card when the countdown runs out. -->
+        <div id="boss-cutscene" hidden>
+          <div class="boss-cutscene-box">
+            <span class="boss-cut-kicker">RIVAL APPROACHES</span>
+            <h2 id="boss-cut-name"></h2>
+            <p id="boss-cut-title"></p>
+          </div>
+        </div>
+
+        <div id="boss-prompt" hidden>
+          <button id="btn-boss-challenge" type="button">Challenge <b id="boss-prompt-name"></b></button>
+        </div>
+
+        <div id="boss-challenge" hidden>
+          <div class="boss-challenge-head">
+            <span id="boss-challenge-name"></span>
+            <b id="boss-timer">2:00</b>
+          </div>
+          <div class="boss-scores">
+            <div class="boss-side you">
+              <span class="boss-side-name">You</span>
+              <b id="boss-you-score">0</b>
+              <span id="boss-you-tricks" class="boss-tricks">0 tricks</span>
+            </div>
+            <div class="boss-vs">VS</div>
+            <div class="boss-side them">
+              <span class="boss-side-name" id="boss-them-name"></span>
+              <b id="boss-them-score">0</b>
+              <span id="boss-them-tricks" class="boss-tricks">0 tricks</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="boss-result" hidden>
+          <div class="boss-result-box">
+            <h2 id="boss-result-title">YOU WON</h2>
+            <div id="boss-result-line"></div>
+            <p id="boss-result-new" class="boss-result-new" hidden></p>
+            <div class="boss-result-actions">
+              <button id="btn-boss-rematch" type="button">Rematch</button>
+              <button id="btn-boss-done" class="primary" type="button">Keep skating</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Hide everything else on screen and just watch the park: one tap
              in the bottom-right corner clears every readout, button and trail
              for the rest of the run. The button stays put so the same tap

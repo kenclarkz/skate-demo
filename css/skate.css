@@ -484,9 +484,244 @@ body {
    call-outs, and no gesture trail over the canvas. The game itself and its
    audio carry on. The trick chain and its multiplier are the reward readout,
    so they stay up even when the rest of the chrome is gone. */
-#app.hide-ui #hud > :not(#btn-hideui):not(#combo),
+#app.hide-ui #hud > :not(#btn-hideui):not(#combo):not(#boss-challenge),
 #app.hide-ui #gesture-trail {
   display: none !important;
+}
+
+/* --- the rival duel ---------------------------------------------------------- */
+/* Four panels, all children of #hud so the menu overlay never touches them.
+   The cutscene and the result card cover the whole screen and take the clicks
+   (the game is paused behind them); the prompt and the live duel card are
+   readouts over the running game, so only the prompt's button grabs taps. */
+#boss-cutscene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(8, 12, 18, 0.4), rgba(8, 12, 18, 0.92));
+  pointer-events: auto;
+}
+
+.boss-cutscene-box {
+  text-align: center;
+  padding: 0 20px;
+  animation: bossFadeIn 0.5s ease-out;
+}
+
+.boss-cut-kicker {
+  display: inline-block;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--hot);
+  border: 1px solid var(--hot);
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+
+#boss-cut-name {
+  margin: 0;
+  font-size: clamp(34px, 8vw, 64px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
+}
+
+#boss-cut-title {
+  margin: 10px 0 0;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+#boss-prompt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(86px + var(--pad-b));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#btn-boss-challenge {
+  pointer-events: auto;
+  padding: 12px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #101418;
+  background: var(--hot);
+  border: 1px solid rgba(255, 201, 63, 0.7);
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(255, 201, 63, 0.35);
+  animation: bossPulse 1.6s ease-in-out infinite;
+}
+
+#boss-challenge {
+  position: absolute;
+  top: calc(12px + var(--pad-t));
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: min(320px, calc(100vw - 28px));
+  padding: 12px 16px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+
+.boss-challenge-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+#boss-timer {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--hot);
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.boss-scores {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.boss-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(238, 241, 244, 0.05);
+}
+
+.boss-side-name {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.boss-side b {
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.boss-side.them b {
+  color: var(--hot);
+}
+
+.boss-tricks {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.boss-vs {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+
+#boss-result {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(8, 12, 18, 0.4), rgba(8, 12, 18, 0.94));
+  pointer-events: auto;
+}
+
+.boss-result-box {
+  width: min(420px, calc(100vw - 32px));
+  padding: 26px 24px;
+  text-align: center;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  backdrop-filter: blur(10px);
+  animation: bossFadeIn 0.4s ease-out;
+}
+
+#boss-result-title {
+  margin: 0;
+  font-size: clamp(28px, 6vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--bad);
+}
+
+#boss-result-title.won {
+  color: var(--good);
+}
+
+#boss-result-line {
+  margin: 16px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+}
+
+#boss-result-line .tag {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.boss-result-new {
+  margin: 14px 0 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--good);
+}
+
+.boss-result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.boss-result-actions button {
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+@keyframes bossFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bossPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }
 
 /* --- the radio ------------------------------------------------------------- */
@@ -1116,6 +1351,22 @@ button:disabled.primary {
   margin-top: 2px;
   font-weight: 700 !important;
   color: var(--good) !important;
+}
+
+/* The park's rival line: who stands waiting, or the score that will bring
+   them out. "Cleared" means the whole roster fell to the player. */
+.park-rival {
+  margin-top: 2px;
+  color: var(--hot) !important;
+}
+
+.park-rival b {
+  font-size: 12px !important;
+}
+
+.park-rival.cleared {
+  color: var(--good) !important;
+  font-weight: 700;
 }
 
 .park-progress {

@@ -28,6 +28,7 @@ import { customLook, heightById, buildById } from './custom.js';
 import { designPalette, sanitizeText } from './board-design.js';
 import { GRABS } from './tricks.js';
 import { makeAiSkaters } from './ai.js';
+import { bossLadder, BossSkater } from './boss.js';
 import { makeBirds } from './bird.js';
 import { makeLogos, checkPickup } from './collectible.js';
 import { registerServiceWorker, setupInstall } from '../game/pwa.js';
@@ -47,6 +48,12 @@ const SETTINGSMENU = 'settings';
 const WALKING = 'walking';
 const DESIGNER = 'designer';
 const BAILED = 'bail';
+// The rival states: a rival skates its own lines with the camera following it
+// (BOSSCUT), a two-minute head-to-head where both skaters ride at once
+// (CHALLENGE), and the result screen a duel ends on (BOSSRESULT).
+const BOSSCUT = 'bosscut';
+const CHALLENGE = 'challenge';
+const BOSSRESULT = 'bossresult';
 
 const AI_COUNT = 13;
 const BIRD_COUNT = 3;
@@ -210,17 +217,20 @@ for (const b of bots) scene.add(b.ride.frame);
 
 // The one shadow map this scene affords is spent on riders, not the park —
 // see LightingManager.setShadowCasters(). castShadow only actually turns on
-// once night has faded in; this just collects who is eligible.
+// once night has faded in; this just collects who is eligible. Kept as an
+// array (not a throwaway literal) so a rival's meshes can join the list the
+// moment one steps out, and the night pass picks them up without a rebuild.
 function collectMeshes(root, out = []) {
   root.traverse((o) => {
     if (o.isMesh) out.push(o);
   });
   return out;
 }
-lighting.setShadowCasters([
+const shadowCasters = [
   ...collectMeshes(ride.frame),
   ...bots.flatMap((b) => collectMeshes(b.ride.frame)),
-]);
+];
+lighting.setShadowCasters(shadowCasters);
 park.mesh.receiveShadow = true;
 
 const birds = makeBirds(BIRD_COUNT);
@@ -238,6 +248,128 @@ function disposeGroup(group) {
     if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
     else o.material?.dispose();
   });
+}
+
+// --- the park's rival ------------------------------------------------------
+/**
+ * The rival currently owed by this park, or null. Reveal is derived, never
+ * saved: the first boss of the park's roster that has not been beaten, and
+ * only once the park is unlocked and its own banked best has cleared the
+ * reveal milestone.
+ */
+function currentBossDef() {
+  const active = bossLadder(park.id).find((b) => !save.isBossDefeated(b.id));
+  if (!active) return null;
+  if (!save.isParkUnlocked(park.id)) return null;
+  if (save.parkBestOf(park.id) < C.BOSS_REVEAL_SCORE) return null;
+  return active;
+}
+
+/**
+ * Make the park's rival real: tear down whatever rival was standing and put
+ * the current one up, or none when the park owes none. Safe to call any time
+ * the park or the beaten-list changes.
+ */
+function setupBoss() {
+  if (boss) {
+    boss.dispose();
+    boss = null;
+  }
+  const def = currentBossDef();
+  if (!def) {
+    hud.setBossPromptVisible(false);
+    return;
+  }
+  boss = new BossSkater(park, scene, def);
+  shadowCasters.push(...collectMeshes(boss.ride.frame));
+}
+
+/**
+ * A rival whose reveal milestone just got crossed steps out mid-run, and the
+ * crossing is the introduction: the same skate-in a loaded park uses at boot,
+ * playing right now while the player is riding. (If the milestone lands outside
+ * a live run — say a combo banks while paused — the rival just appears and
+ * waits; there is no camera to cut to from a menu.)
+ */
+function maybeRevealBoss() {
+  if (currentBossDef() && !boss) {
+    setupBoss();
+    if (state === PLAYING) beginBossCutscene();
+  }
+}
+
+/**
+ * The skate-in: the rival rides its own lines while the camera follows it,
+ * then steps off and idles where the player can find it. The player cannot
+ * move for the duration — this is the boss's introduction, not a race.
+ */
+function beginBossCutscene() {
+  boss.toRide();
+  bossCut = C.BOSS_CUTSCENE_SECONDS;
+  state = BOSSCUT;
+  input.enabled = false;
+  hud.showBossCutscene(boss.def);
+}
+
+function endBossCutscene() {
+  boss.toIdle();
+  state = PLAYING;
+  input.enabled = true;
+  hud.hideBossCutscene();
+  hud.hide();
+}
+
+/** The duel: both skaters ride at once, scored by the same physics. */
+function startChallenge() {
+  if (!boss || boss.mode !== 'idle' || state === CHALLENGE) return;
+  hud.hideBossResult();
+  hud.setBossPromptVisible(false);
+  hud.hideBossCutscene();
+  challenge = {
+    time: C.CHALLENGE_TIME,
+    playerScore: 0,
+    playerTricks: 0,
+    bossScore: 0,
+    bossTricks: 0,
+  };
+  boss.toRide();
+  state = CHALLENGE;
+  input.enabled = true;
+  hud.hide();
+  hud.showBossChallenge(boss.def, challenge);
+}
+
+/** The rival's own events from its last step, added to the duel's tally. */
+function tallyBossEvents() {
+  for (const e of boss.ride.events) {
+    if (e.name === 'trick') challenge.bossTricks++;
+    else if (e.name === 'combo') challenge.bossScore += e.total;
+  }
+}
+
+/** The duel is over: compare tallies, bank a win, put the rival back on foot. */
+function endChallenge() {
+  if (!challenge) return;
+  const def = boss.def;
+  const result = { ...challenge };
+  const win = result.playerScore > result.bossScore && result.playerTricks > result.bossTricks;
+  let newPark = null;
+  if (win) {
+    const progression = save.recordBossWin(def.id);
+    if (progression.newPark) {
+      const nxt = PARKS.find((p) => p.id === progression.newPark);
+      newPark = nxt ? nxt.name : progression.newPark;
+    }
+  }
+  boss.toIdle();
+  challenge = null;
+  hud.setBossChallengeVisible(false);
+  state = BOSSRESULT;
+  input.enabled = false;
+  hud.showBossResult({ win, def, ...result, newPark });
+  // A win steps the ladder: the next rival on this park (or none) takes over
+  // the scene now, so the player can see what is waiting when they remount.
+  if (win) setupBoss();
 }
 
 /**
@@ -262,6 +394,13 @@ function loadPark(def) {
   logosCollected = 0;
   bots.forEach((b, i) => b.setPark(park, i));
   socialGroup.reset();
+  // Any duel or cutscene in flight dies with the park it belonged to.
+  challenge = null;
+  hud.hideBossChallenge();
+  hud.setBossPromptVisible(false);
+  hud.hideBossCutscene();
+  hud.hideBossResult();
+  setupBoss();
   save.setPark(def.id);
   hud.setCurrentPark(def.name);
 }
@@ -340,6 +479,13 @@ let frames = 0;
 let worldTime = 0;       // unconditional clock, for birds and the logos' spin
 let liveCombo = { names: [], points: 0 };
 
+// The park's rival, when one is standing. The skate-in cutscene plays at the
+// moment the rival is revealed mid-run; after that the rival just stands
+// there, cutscene or not.
+let boss = null;
+let bossCut = 0;
+let challenge = null;    // the duel's tally, while one is running
+
 hud.setBest(save.best);
 hud.setSound(save.sound);
 hud.setSpeedValue(save.speed);
@@ -386,6 +532,8 @@ function startGame() {
   respawn();
   score = 0;
   hud.setScore(0);
+  // The rival's skate-in plays when it is revealed mid-run, not on every run
+  // start — a revealed rival is simply standing there when the run loads.
   state = PLAYING;
   input.enabled = true;
   hud.hide();
@@ -800,7 +948,7 @@ function showSettings() {
 let prePauseState = PLAYING;
 
 function togglePause() {
-  if (state === PLAYING || state === WALKING) {
+  if (state === PLAYING || state === WALKING || state === CHALLENGE) {
     prePauseState = state;
     state = PAUSED;
     input.enabled = false;
@@ -897,6 +1045,19 @@ hud.on.bmPlace = (key, value) => changeBoardPlacement(key, value);
 hud.on.bmSave = () => saveMadeBoard();
 hud.on.bmSavedAction = (id, action) => boardSavedAction(id, action);
 hud.on.pause = () => togglePause();
+// The duel's result screen: rematch the same rival, or step back into the run.
+hud.on.bossResultRematch = () => {
+  hud.hideBossResult();
+  startChallenge();
+};
+hud.on.bossResultDone = () => {
+  hud.hideBossResult();
+  state = PLAYING;
+  input.enabled = true;
+  hud.hide();
+};
+// The challenge prompt: walk up to a standing rival and take them on.
+hud.on.bossChallenge = () => startChallenge();
 hud.on.board = (id) => selectBoard(id);
 hud.on.outfit = (id) => selectOutfit(id);
 hud.on.pants = (id) => selectPants(id);
@@ -1167,7 +1328,7 @@ hud.on.reset = () => {
   radio?.resetSettings();
 };
 input.onPause = () => {
-  if (state === PLAYING || state === WALKING || state === PAUSED) togglePause();
+  if (state === PLAYING || state === WALKING || state === CHALLENGE || state === PAUSED) togglePause();
 };
 
 // --- events from the ride model -------------------------------------------
@@ -1203,6 +1364,7 @@ function handleEvents(events) {
         save.addCoins(Math.max(1, Math.round(e.points / 25)));
         hud.setCoins(save.coins);
         liveCombo = { names: ride.combo.names.slice(), points: ride.combo.points };
+        if (challenge) challenge.playerTricks++;
         break;
       case 'combo': {
         score += e.total;
@@ -1227,8 +1389,12 @@ function handleEvents(events) {
           const nxt = PARKS.find((p) => p.id === progression.unlockedId);
           hud.say(`NEW PARK UNLOCKED!  ${nxt ? nxt.name.toUpperCase() : ''}`, 'unlock');
         }
+        // The rival's reveal milestone rides the same number — crossing it is
+        // when the park's own boss steps out mid-run.
+        maybeRevealBoss();
         audio.chime(e.multiplier > 2);
         liveCombo = { names: [], points: 0 };
+        if (challenge) challenge.playerScore += e.total;
         break;
       }
       case 'comboLost':
@@ -1248,7 +1414,10 @@ function handleEvents(events) {
 
 // Which way they were facing when it went wrong, so getting up faces the same
 // way rather than snapping to whatever the ragdoll's last tumble left behind.
+// `preBailState` is the run state to fall back into on recovery: getting up
+// mid-duel resumes the duel, not plain free skate.
 let bailYaw = 0;
+let preBailState = PLAYING;
 const _getUp = new THREE.Vector3();
 
 /** Hand the rider and the board over to the ragdoll. */
@@ -1256,6 +1425,7 @@ function startBail() {
   // Both come out of the ride frame and into the world, because from here they
   // are two independent objects that happen to have been travelling together.
   bailYaw = ride.yaw;
+  preBailState = state === CHALLENGE ? CHALLENGE : PLAYING;
   ragdoll.start(skater, ride.frame, ride.vel, ride.airYaw ? C.SPIN_RATE * Math.sign(ride.airYaw) : 0);
   scene.add(skater.group);
   scene.add(board.group);
@@ -1300,7 +1470,7 @@ function recover() {
   liveCombo = { names: [], points: 0 };
   hud.setCombo([], 0, 1);
   input.clear();
-  state = PLAYING;
+  state = preBailState;
   input.enabled = true;
 }
 
@@ -1418,6 +1588,10 @@ function step(dt, frameInput) {
   // the menu is exactly when a skatepark should still look alive.
   socialGroup.step(dt); // ticked once here, not once per bot that shares it
   for (const b of bots) b.step(dt, ride.pos);
+  // A rival waiting around does the same thing a social bot does: shifts its
+  // weight, turns to look, carries its board. It only skates its lines while a
+  // cutscene or a duel is actually running.
+  if (boss && boss.mode === 'idle') boss.step(dt, ride.pos);
 
   if (state === PLAYING) {
     handleEvents(ride.update(dt, frameInput || IDLE_INPUT));
@@ -1429,6 +1603,24 @@ function step(dt, frameInput) {
       logosCollected++;
       hud.say('Logo found', 'small');
     }
+  } else if (state === BOSSCUT) {
+    boss.step(dt, ride.pos);
+    bossCut -= dt;
+    if (bossCut <= 0) endBossCutscene();
+  } else if (state === CHALLENGE) {
+    handleEvents(ride.update(dt, frameInput || IDLE_INPUT));
+    if (ride.combo.live) liveCombo = { names: ride.combo.names, points: ride.combo.points };
+    const got = checkPickup(logos, ride.pos);
+    if (got) {
+      audio.collect();
+      save.recordLogo();
+      logosCollected++;
+      hud.say('Logo found', 'small');
+    }
+    boss.step(dt, ride.pos);
+    tallyBossEvents();
+    challenge.time -= dt;
+    if (challenge.time <= 0) endChallenge();
   } else if (state === WALKING) {
     walker.update(dt, input.readMove());
     skater.poseWalk(walker, dt);
@@ -1477,6 +1669,10 @@ function render(dt) {
       walkRide.groundSpeed = Math.abs(walker.speed);
       walkRide.vel.set(Math.sin(walker.yaw) * walker.speed, 0, Math.cos(walker.yaw) * walker.speed);
       chase.update(walkRide, null, dt);
+    } else if (state === BOSSCUT && boss && boss.mode === 'riding') {
+      // The skate-in is about the rival: the lens rides their lines while the
+      // player's run is on hold.
+      chase.update(boss.ride, null, dt);
     } else {
       chase.update(ride, ragdoll, dt);
     }
@@ -1490,24 +1686,25 @@ function render(dt) {
 function updateHud(dt) {
   hud.tick(dt);
   hud.setCoins(save.coins);
+  const inRun = state === PLAYING || state === CHALLENGE;
   const dismountReady = state === PLAYING && ride.mode === GROUND;
   // No distance test any more: the board is in the rider's hand, so getting back
   // on is always available the moment they are on foot.
   hud.setActionButtons({ dismount: dismountReady, mount: state === WALKING, sit: state === WALKING });
   // Grabs only mean anything in the air — showing the row the rest of the time
-  // would just be five buttons that do nothing.
-  hud.setGrabButtonsVisible(state === PLAYING && ride.mode === AIR);
+  // would just be five buttons that do nothing. A duel is still a run.
+  hud.setGrabButtonsVisible(inRun && ride.mode === AIR);
   // Keyboard already has Escape/P for this — the button exists for mobile,
   // where a pause has no key to fall back on.
-  hud.setPauseButtonVisible(state === PLAYING || state === WALKING);
+  hud.setPauseButtonVisible(inRun || state === WALKING);
   // The camera-cycle button has the same rhythm: pointless on menus, useful
   // the moment there is a camera to cycle.
-  hud.setCamcycleVisible(state === PLAYING || state === WALKING);
+  hud.setCamcycleVisible(inRun || state === WALKING);
   // And the hide-the-HUD button rides with them: only mid-run is there a
   // screenful of chrome worth hiding, and leaving the run brings it back. A
   // bail is still mid-run — the rider gets straight back up and carries on, so
   // the HUD stays off through a crash rather than flashing back on screen.
-  hud.setHideUiVisible(state === PLAYING || state === WALKING || state === BAILED);
+  hud.setHideUiVisible(inRun || state === WALKING || state === BAILED);
 
   if (state === PLAYING) {
     hud.setSpeed(ride.groundSpeed);
@@ -1525,14 +1722,42 @@ function updateHud(dt) {
       ride.sliding,
       ride.revertK
     );
+    // The rival's prompt: a standing boss close enough to take on.
+    const nearBoss =
+      boss && boss.mode === 'idle' && (() => {
+        const dx = boss.pos.x - ride.pos.x;
+        const dz = boss.pos.z - ride.pos.z;
+        return dx * dx + dz * dz < C.BOSS_PROMPT_R * C.BOSS_PROMPT_R;
+      })();
+    hud.setBossPromptVisible(!!nearBoss, nearBoss ? boss.def : null);
+  } else if (state === CHALLENGE) {
+    hud.setSpeed(ride.groundSpeed);
+    hud.setAir(ride.airHeight);
+    hud.setCombo(liveCombo.names, liveCombo.points, Math.max(1, liveCombo.names.length));
+    const balancing = !!ride.grind || ride.manual;
+    hud.setBalance(balancing, ride.balance, C.BALANCE_LIMIT);
+    hud.setCharge(input.flickActive || input.charging() ? ride.charge : 0);
+    hud.setLogos(logosCollected, logos.length);
+    audio.follow(
+      ride.groundSpeed,
+      ride.mode === GROUND,
+      ride.mode === GRIND,
+      ride.surf.kind === ROUGH,
+      ride.sliding,
+      ride.revertK
+    );
+    hud.setBossPromptVisible(false);
+    hud.setBossChallenge(boss.def, challenge);
   } else if (state === WALKING) {
     hud.setSpeed(Math.abs(walker.speed));
     hud.setAir(0);
     hud.setCombo([], 0, 1);
     hud.setBalance(false, 0, 1);
     hud.setCharge(0);
+    hud.setBossPromptVisible(false);
     audio.follow(0, false, false, false);
   } else {
+    hud.setBossPromptVisible(false);
     audio.follow(0, false, false, false);
   }
 }
@@ -1590,7 +1815,7 @@ for (const type of ['pointerdown', 'keydown']) {
   document.addEventListener(type, () => audio.unlock(), { capture: true, passive: true });
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && (state === PLAYING || state === WALKING)) togglePause();
+  if (document.hidden && (state === PLAYING || state === WALKING || state === CHALLENGE)) togglePause();
 });
 
 // The overlay swallows its own pointer events, so a tap on a button does not also
@@ -1616,8 +1841,8 @@ function loop(now) {
 
   const t0 = performance.now();
   // One input read per frame, not per step: a flick must fire once however many
-  // simulation steps this frame turns into.
-  const frameInput = state === PLAYING ? input.read() : null;
+  // simulation steps this frame turns into. A duel reads the same as a run.
+  const frameInput = state === PLAYING || state === CHALLENGE ? input.read() : null;
   let steps = 0;
   while (acc >= C.FIXED_DT && steps < 8) {
     step(C.FIXED_DT, frameInput);
@@ -1656,6 +1881,7 @@ applyDpr();
 resize();
 respawn();
 chase.snap(ride);
+setupBoss();
 if (save.seenGuide) showStart();
 else showGuide();
 requestAnimationFrame(loop);
@@ -1722,6 +1948,18 @@ window.__skate = {
   showStart,
   start: startGame,
   respawn,
+  get boss() {
+    return boss;
+  },
+  get challenge() {
+    return challenge;
+  },
+  currentBossDef,
+  setupBoss,
+  startChallenge,
+  beginBossCutscene,
+  endBossCutscene,
+  endChallenge,
   selectBoard,
   selectOutfit,
   selectPants,

@@ -30,6 +30,7 @@ import {
 import { TYPES, typeById } from './boards.js';
 import { PARK_UNLOCK_SCORE } from './config.js';
 import { PARKS } from './parkLayouts.js';
+import { BOSSES } from './boss.js';
 
 const KEY = 'skate.save';
 
@@ -79,6 +80,10 @@ const DEFAULTS = {
   // it in PARKS banks PARK_UNLOCK_SCORE — see recordParkScore().
   parkBest: {},
   parksUnlocked: ['home'],
+  // The rivals beaten, one id per boss. A rival's reveal is *derived* from
+  // the park's best (see BOSS_REVEAL_SCORE), so nothing about who is standing
+  // around is saved — only who has been put away.
+  bossesDefeated: [],
   lighting: 'day', // 'day', 'sunset' or 'night' — see js/skate/lighting.js
   speed: 16, // top speed, in m/s — see config.js's TOP_SPEED
   camZoom: 1, // chase camera distance, 0.5 (close) .. 1 (default) — see CAM_ZOOM
@@ -111,6 +116,8 @@ const freshColorMap = () => ({});
 // arrays above; `parkBest` is a map that starts empty.
 const freshParkBest = () => ({});
 const freshParksUnlocked = () => ['home'];
+// `bossesDefeated` is an array, so a fresh copy per state like the others.
+const freshBossesDefeated = () => [];
 const freshBoardDraft = () => ({
   ...DEFAULT_BOARD_DRAFT,
   colors: { ...DEFAULT_BOARD_DRAFT.colors },
@@ -321,6 +328,7 @@ function read() {
         pantsColors: freshColorMap(),
         parkBest: freshParkBest(),
         parksUnlocked: freshParksUnlocked(),
+        bossesDefeated: freshBossesDefeated(),
       };
     const parsed = JSON.parse(raw);
     const s = {
@@ -363,6 +371,13 @@ function read() {
       ? [...new Set(parsed.parksUnlocked.filter((id) => knownParkIds.has(id)))]
       : freshParksUnlocked();
     if (!s.parksUnlocked.includes('home')) s.parksUnlocked.unshift('home');
+    // Same cleanliness as parksUnlocked: a hand-edited save cannot credit a
+    // rival it never beat.
+    s.bossesDefeated = freshBossesDefeated();
+    if (Array.isArray(parsed.bossesDefeated)) {
+      const knownBossIds = new Set(BOSSES.map((b) => b.id));
+      s.bossesDefeated = [...new Set(parsed.bossesDefeated.filter((id) => knownBossIds.has(id)))];
+    }
     s.lighting = s.lighting === 'night' || s.lighting === 'sunset' ? s.lighting : 'day';
     s.speed = Math.min(50, Math.max(8, Number(s.speed) || DEFAULTS.speed));
     s.camZoom = Math.min(1, Math.max(0.5, Number(s.camZoom) || DEFAULTS.camZoom));
@@ -490,6 +505,7 @@ function read() {
       accessoryColors: freshColorMap(),
       outfitColors: freshColorMap(),
       pantsColors: freshColorMap(),
+      bossesDefeated: freshBossesDefeated(),
     };
   }
 }
@@ -626,6 +642,10 @@ export const save = {
   get parksUnlocked() {
     return [...state.parksUnlocked];
   },
+  /** The rivals beaten, as a copy. */
+  get bossesDefeated() {
+    return [...state.bossesDefeated];
+  },
   get lighting() {
     return state.lighting;
   },
@@ -718,6 +738,37 @@ export const save = {
   recordLogo() {
     state.logos++;
     flush();
+  },
+
+  /** @returns true if this rival has been put away. */
+  isBossDefeated(id) {
+    return state.bossesDefeated.includes(id);
+  },
+
+  /**
+   * Mark a rival as beaten. If it was the last undefeated rival on its park,
+   * unlock the next built-in park — beating a park's whole roster earns the
+   * same door the score milestone does.
+   * @returns {{ newPark: string | null }} the park this unlocked, if any.
+   */
+  recordBossWin(id) {
+    const def = BOSSES.find((b) => b.id === id);
+    if (!def || state.bossesDefeated.includes(id)) return { newPark: null };
+    state.bossesDefeated.push(id);
+    let newPark = null;
+    const allBeaten = BOSSES.filter((b) => b.parkId === def.parkId).every((b) =>
+      state.bossesDefeated.includes(b.id),
+    );
+    if (allBeaten) {
+      const idx = PARKS.findIndex((p) => p.id === def.parkId);
+      const next = PARKS[idx + 1];
+      if (next && state.parksUnlocked.includes(def.parkId) && !state.parksUnlocked.includes(next.id)) {
+        state.parksUnlocked.push(next.id);
+        newPark = next.id;
+      }
+    }
+    flush();
+    return { newPark };
   },
 
   addCoins(n) {
@@ -1133,6 +1184,9 @@ export const save = {
       accessoryColors: freshColorMap(),
       outfitColors: freshColorMap(),
       pantsColors: freshColorMap(),
+      parkBest: freshParkBest(),
+      parksUnlocked: freshParksUnlocked(),
+      bossesDefeated: freshBossesDefeated(),
     });
     flush();
   },

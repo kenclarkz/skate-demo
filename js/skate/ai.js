@@ -190,8 +190,28 @@ function buildRoute(bot, g, fromId) {
   const pool = g.nodes.filter(
     (n) => n.id !== from.id && n.kind !== 'stair' && (n.meta.difficulty ?? 1) <= maxDiff
   );
+  // A rival's focus leans the route toward the kind of feature it is known
+  // for: rails and ledges for the grinders, transitions (quarters, bowls,
+  // funboxes) for the airs, flat pads for the flatground and manual heads.
+  // It is a bias, not a lock — a random good line is taken over nothing.
+  const prefKinds =
+    bot.focus === 'rail' || bot.focus === 'grind'
+      ? ['rail', 'ledge']
+      : bot.focus === 'air'
+        ? ['transition']
+        : bot.focus === 'flat' || bot.focus === 'manual'
+          ? ['flat']
+          : null;
   for (let attempt = 0; attempt < 8 && pool.length; attempt++) {
-    const target = pool[(Math.random() * pool.length) | 0];
+    let target;
+    if (prefKinds) {
+      const pref = pool.filter((n) => prefKinds.includes(n.kind));
+      target = pref.length && Math.random() < 0.7
+        ? pref[(Math.random() * pref.length) | 0]
+        : pool[(Math.random() * pool.length) | 0];
+    } else {
+      target = pool[(Math.random() * pool.length) | 0];
+    }
     const { routes } = routesBetween(g, from.id, target.id, { max: 1 });
     if (!routes.length) continue;
     const path = routes[0].nodes.map((id) => {
@@ -322,7 +342,11 @@ function trickTimeNeeded(def) {
  * dice across the whole catalogue.
  */
 function pickTrick(bot, charge, extraAir = 0) {
-  const pool = SKILL_TRICKS[skillIndex(bot.skill)] || SKILL_TRICKS[0];
+  // A rival's trick bag is its identity — pick from it when it exists, the
+  // skill band's own catalogue otherwise.
+  const pool =
+    (bot.trickBag && bot.trickBag.length ? bot.trickBag : SKILL_TRICKS[skillIndex(bot.skill)]) ||
+    SKILL_TRICKS[0];
   const air = airTimeFor(charge) + extraAir;
   const fits = pool.filter((id) => {
     const def = TRICK_BY_ID[id];
@@ -574,9 +598,11 @@ function stepPatrol(ride, bot, dt, playerPos) {
       stepAhead < 0.2 &&
       bot.manualCool <= 0
     ) {
-      bot.manualT = 1.2 + Math.random() * 1.8;
+      // A manual-focused rival (manualFocus) balances far longer and much
+      // sooner between attempts than a bot that just happens to manual.
+      bot.manualT = bot.manualFocus ? 2.2 + Math.random() * 2.4 : 1.2 + Math.random() * 1.8;
       bot.wantManual = false;
-      bot.manualCool = 7 + Math.random() * 7;
+      bot.manualCool = bot.manualFocus ? 2 + Math.random() * 2 : 7 + Math.random() * 7;
     }
     // The charge that becomes the manual is held from the decision onwards.
     // If the way ahead goes bad mid-charge, give up on it — rolling into a
@@ -616,13 +642,37 @@ function stepPatrol(ride, bot, dt, playerPos) {
       const extra = lip ? Math.sqrt((2 * Math.min(2.5, dropAhead)) / -C.GRAVITY) : 0;
       trick = pickTrick(bot, ch, extra);
       trickCharge = ch;
-      bot.trickCool = 3 + Math.random() * 4;
-      bot.randomTrickCool = 3 + Math.random() * 4;
-      bot.wantManual = bot.skill >= 2 && Math.random() < (bot.skill >= 3 ? 0.55 : 0.3);
+      // Pace (rival identity) tightens the gap between tricks: a fast rival
+      // is popping before the last one has cooled down.
+      bot.trickCool = (3 + Math.random() * 4) / (bot.pace || 1);
+      bot.randomTrickCool = (3 + Math.random() * 4) / (bot.pace || 1);
+      bot.wantManual =
+        bot.skill >= 2 &&
+        Math.random() < (bot.manualFocus ? 0.9 : bot.skill >= 3 ? 0.55 : 0.3);
     }
   }
 
-  const input = { steer, charge, slide: false, push, brake, trick, trickCharge };
+  // --- grabs ---------------------------------------------------------------
+  // Rivals can grab in the air: once the pop has cleared, hold a grab from
+  // the rival's own grab bag for a beat, then let it go before the landing.
+  // The input stays truthy for the whole hold, exactly like a player holding
+  // the grab key, so physics scores it as a landed grab-trick on the way down.
+  let grab = null;
+  if (ride.mode === AIR && bot.grabBag && bot.grabBag.length) {
+    if (bot.grabCool > 0) bot.grabCool -= dt;
+    if (bot.heldGrab) {
+      bot.heldGrabT -= dt;
+      if (bot.heldGrabT <= 0) bot.heldGrab = null;
+      else grab = bot.heldGrab;
+    } else if (!ride.grab && bot.grabCool <= 0 && ride.airTime > 0.25) {
+      bot.heldGrab = bot.grabBag[(Math.random() * bot.grabBag.length) | 0];
+      bot.heldGrabT = 0.45 + Math.random() * 0.4;
+      bot.grabCool = 2.5 + Math.random() * 2.5;
+      grab = bot.heldGrab;
+    }
+  }
+
+  const input = { steer, charge, slide: false, push, brake, trick, trickCharge, grab };
   ride.update(dt, input);
 
   // A grind is a balance problem like a manual — hold it with the same
@@ -940,3 +990,8 @@ export function makeAiSkaters(park, scene, count = 13, socialCount = 8) {
   }
   return { bots, group };
 }
+
+// The pieces a rival (boss.js) reuses: the ride controller, the carried-board
+// pose, and a hangout pick — everything that lets a park's boss skate the same
+// physics as the crowd while standing apart from it.
+export { stepPatrol, poseCarriedBoard, pickHangout };
