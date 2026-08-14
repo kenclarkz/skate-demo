@@ -1410,6 +1410,10 @@ function handleEvents(events) {
       case 'push':
         audio.push();
         break;
+      case 'boost':
+        audio.boost();
+        hud.say('BOOST!', 'small');
+        break;
       case 'land':
         audio.land(e.impact);
         if (e.height > 0.4 && save.recordAir(e.height)) hud.say(`${e.height.toFixed(2)} m air`, 'small');

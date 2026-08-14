@@ -85,6 +85,16 @@ export const PUSH_MIN_INTERVAL = 0.22;
 // and a carving board looks nearly flat.
 export const DECK_TILT_SHARE = 0.26;
 
+// --- speed pads ------------------------------------------------------------
+// A painted pad in the park maker that hands a ride a short burst above the
+// push ceiling when ridden over. The boost pushes at full strength right up to
+// BOOST_SPEED — no taper, so crossing a pad reads as a surge — then the board
+// cruises at the cap until BOOST_TIME runs out, and the ordinary push cap and
+// rolling losses bring the speed back down to the normal top on their own.
+export const BOOST_SPEED = 20;   // m/s a boost carries you to, 1.25x the push ceiling
+export const BOOST_ACCEL = 14;   // m/s² of thrust while the boost is running
+export const BOOST_TIME = 2.5;   // seconds a boost lasts once a pad is hit
+
 // --- steering -------------------------------------------------------------
 // Turning is a balance problem, not a steering-wheel problem. Leaning the board
 // by θ commits the rider to a lateral acceleration of g·tanθ, and the radius
