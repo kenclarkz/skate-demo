@@ -177,6 +177,26 @@ export function drawPortrait(canvas, character) {
     rect(p.cap, 0, L.head + 0.14, 0.12, 0.3);  // the tube
     rect(p.cap, 0, L.head + 0.44, 0.13, 0.04); // the top
     rect(p.band, 0, L.head + 0.19, 0.125, 0.05);
+  } else if (style.head === 'monkey') {
+    // The monkey costume: a fur cap, a crest up the middle, and the two big
+    // round ears set wide of the skull that carry the whole read.
+    rect(p.hair, 0, L.head + 0.055, 0.19, 0.065);   // the fur cap
+    rect(p.hair, 0.078, L.head + 0.115, 0.05, 0.05); // crest
+    rect(p.hair, -0.078, L.head + 0.115, 0.05, 0.05);
+    rect(p.hair, 0, L.head + 0.125, 0.075, 0.035);  // crest middle
+    for (const side of [-1, 1]) {
+      rect(p.skin, side * 0.105, L.head + 0.01, 0.062, 0.062); // ears
+      rect(p.cap, side * 0.105, L.head + 0.022, 0.04, 0.04);   // inner ear
+    }
+  } else if (style.head === 'birdman') {
+    // The bird-man costume: the domed head, the feather spikes up the crown,
+    // and — from the front — the beak between the eyes.
+    rect(p.hair, 0, L.head + 0.05, 0.175, 0.06);   // under-crest
+    rect(p.cap, 0, L.head + 0.045, 0.19, 0.12);    // the dome
+    if (!fromBack) rect(p.band, 0, L.head - 0.0175, 0.06, 0.045); // the beak
+    rect(p.band, 0, L.head + 0.165, 0.03, 0.06);   // crest spikes
+    rect(p.band, 0.055, L.head + 0.16, 0.05, 0.05);
+    rect(p.band, -0.055, L.head + 0.16, 0.05, 0.05);
   } else if (style.head === 'flatcap') {
     // A low round crown sat forward over the brow, with a stubby peak — the
     // free alternative to the snapback's straight peak, so the two read as

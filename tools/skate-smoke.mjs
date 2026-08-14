@@ -1471,7 +1471,7 @@ section('Parks');
     const g = window.__skate;
     return { count: g.parks.length, ids: g.parks.map((p) => p.id), current: g.park.id };
   });
-  ok(info.count === 1, `there is one built-in park (${info.count})`);
+  ok(info.count === 2, `there are two built-in parks (${info.count})`);
   ok(new Set(info.ids).size === info.count, 'each with a distinct id');
   ok(info.current === 'home', 'and the game boots into Home Park');
 
@@ -1533,7 +1533,7 @@ section('Park boundary: nowhere to fall off the edge of the world');
   // Nothing is sampled past the dirt around each pad, so before rideBoundZ
   // existed, riding far enough off the edge would fall forever, chasing
   // ground that was never there. The bound scales with the park's own
-  // extent, so it is checked on the only built-in map.
+  // extent, so it is checked on every built-in map.
   const results = await run(() => {
     const g = window.__skate;
     return g.parks.map((def) => {
@@ -3188,17 +3188,17 @@ section('Menu scrolling and back buttons, on a short screen');
   ok(scrolled.scrollTop > 0, `scrolling the shop actually moves it (scrollTop ${scrolled.scrollTop})`);
   ok(scrolled.backOnScreen, 'and the back button scrolls into view rather than staying stranded below the fold');
 
-  // The park picker gets the same treatment — with a single built-in park it
-  // no longer needs to scroll, but it still has to render its one card and a
-  // working back button on the short screen.
+  // The park picker gets the same treatment — both built-in parks have to
+  // render their cards and a working back button on the short screen.
   const parks = await run(() => {
     const g = window.__skate;
     g.hud.renderParks(g.parks, g.park.id);
     g.hud.show('parks');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
-    return { cards: cards.length, card: cards[0]?.dataset.park, hasBack: !!document.getElementById('btn-parks-back') };
+    return { cards: cards.length, ids: cards.map((c) => c.dataset.park), hasBack: !!document.getElementById('btn-parks-back') };
   });
-  ok(parks.cards === 1 && parks.card === 'home', `the park picker lists Home Park (${parks.card ?? 'none'})`);
+  ok(parks.cards === 2, `the park picker lists both built-in parks (${parks.cards})`);
+  ok(parks.ids.includes('home') && parks.ids.includes('railway'), `and every park gets a card (${parks.ids.join(', ')})`);
   ok(parks.hasBack, 'and it has a back button too');
 
   await page.setViewportSize({ width: 900, height: 560 });
@@ -3224,10 +3224,10 @@ section('Skater picker');
       ),
     };
   });
-  ok(cat.count === 8, `there are eight skaters to choose between (${cat.ids.join(', ')})`);
+  ok(cat.count === 10, `there are ten skaters to choose between (${cat.ids.join(', ')})`);
   ok(cat.named, 'each with a name and a line describing them');
   ok(cat.keys, 'and a complete palette');
-  ok(new Set(cat.heads).size === 7, `and each with their own headwear (${cat.heads.join(', ')})`);
+  ok(new Set(cat.heads).size === 9, `and each with their own headwear (${cat.heads.join(', ')})`);
 
   // The prebuilt rack is locked until a rider is made: picking one is refused
   // and the save is left exactly where it was. The save layer still knows the
@@ -3317,8 +3317,10 @@ section('Skater picker');
     'and every prebuilt rider card is locked, with a padlock over its portrait'
   );
   ok(screen.current === 1 && screen.currentId === 'ace', 'and exactly one marked as the one being skated');
+  ok(screen.cards === 10, 'and a card per skater');
+  ok(screen.current === 1 && screen.currentId === 'nova', 'and exactly one marked as the one being skated');
   ok(
-    screen.painted.length === 8 && screen.painted.every((n) => n > 400),
+    screen.painted.length === 10 && screen.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
   );
   ok(!screen.shopHasRack, 'and the shop no longer has a skater rack of its own');
@@ -3520,10 +3522,11 @@ section('Character Maker');
   ok(riders.state === 'charselect', 'the Riders screen opens');
   ok(riders.cards === 9, 'with a card for every rider and the made one');
   ok(riders.locked === 8, 'the eight prebuilt cards still locked behind it');
+  ok(riders.cards === 11, 'with a card for every rider and the made one');
   ok(riders.hasCustom === true, 'and the made character leads the grid');
   ok(riders.current === 1, 'exactly one marked as skating');
   ok(
-    riders.painted.length === 9 && riders.painted.every((n) => n > 400),
+    riders.painted.length === 11 && riders.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${riders.painted.join(', ')} pixels)`
   );
   ok(riders.picked === true && riders.eqId === riders.customId, 'and tapping the made card equips it');
@@ -3747,7 +3750,7 @@ section('Start menu: every button opens what it says');
     const r = card?.getBoundingClientRect();
     return { cards: grid ? grid.querySelectorAll('[data-character]').length : 0, sized: !!r && r.width > 40 && r.height > 40 };
   });
-  ok(reachable.cards === 8 && reachable.sized, 'and the eight skaters are laid out inside it');
+  ok(reachable.cards === 10 && reachable.sized, 'and the ten skaters are laid out inside it');
   await page.click('#btn-charselect-back', { timeout: 4000 });
 }
 
@@ -4117,7 +4120,7 @@ section('Tutorial and menus');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
     return { count: cards.length, ids: cards.map((c) => c.dataset.park) };
   });
-  ok(picker.count === 1, `the park picker lists the one built-in map (${picker.count})`);
+  ok(picker.count === 2, `the park picker lists every built-in map (${picker.count})`);
   const known = await run(() => window.__skate.parks.map((p) => p.id));
   ok(
     picker.ids.every((id) => known.includes(id)),
