@@ -224,6 +224,9 @@ export const PARKS = [
       { type: 'bench', x: 50, z: -44, ry: 90, len: 3, color: '#6c757d' },
       { type: 'planter', x: -50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
       { type: 'planter', x: 50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+    ]
+  ),
+
   def(
     'railway',
     'RailWay',
