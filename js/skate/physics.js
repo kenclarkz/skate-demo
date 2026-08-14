@@ -140,6 +140,7 @@ export class Ride {
     this.push = -1;           // 0..1 through a push cycle; -1 when idle
     this.pushFakie = false;   // the last push drove backwards (a fakie push)
     this.pushCool = 0;
+    this.boost = 0;           // seconds of speed boost left; >0 while a pad's burst is running
     this.sliding = false;
     this.slideYaw = 0;
 
@@ -392,6 +393,17 @@ export class Ride {
     this.easeUp(dt, _n, 18);
     this.surfaceFrame(_n);
 
+    // --- speed pads --------------------------------------------------------
+    // A pad hands the board a short burst above the push ceiling the moment it
+    // rolls over one. The timer is refreshed every step the pad is under you,
+    // so the boost only starts running down once you leave it; the fresh flag
+    // is what keeps the event (and the sound) to one per crossing.
+    if (this.park.padAt(this.pos.x, this.pos.z, here.y)) {
+      const fresh = this.boost <= 0;
+      this.boost = C.BOOST_TIME;
+      if (fresh) this.emit('boost', {});
+    }
+
     // --- lean --------------------------------------------------------------
     // Screen-right is -X when travelling towards +Z, so steering right is a lean
     // towards the toe side, which is negative.
@@ -423,6 +435,16 @@ export class Ride {
     // fakie push accelerates the board backwards to the same top speed.
     if (this.pushDriving()) {
       a += sgn * C.PUSH_IMPULSE * speedSetting * Math.max(0, 1 - sp / C.TOP_SPEED);
+    }
+    // A running boost pushes the board hard — full thrust, no taper, up to its
+    // own cap — so crossing a pad reads as a surge, not a slightly stronger
+    // push. Once sp is at the cap the thrust switches off and the board cruises
+    // until the timer runs down, then the ordinary push cap and the rolling
+    // losses bring the speed back on their own.
+    if (this.boost > 0) {
+      if (sp < C.BOOST_SPEED) a += sgn * C.BOOST_ACCEL * speedSetting;
+      this.boost -= dt;
+      if (this.boost < 0) this.boost = 0;
     }
     // Dragging the back foot scrubs speed against the roll and the slope alike —
     // signed off travel, so it bites rolling forward or back the same way.

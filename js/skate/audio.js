@@ -790,6 +790,14 @@ export class Audio {
     this.knock({ freqs: [240, 560], gain: 0.09, decay: 0.05, q: 8, at: 0.14 });
   }
 
+  /** A speed pad firing: a rising whoosh as the wheels suddenly find speed
+   * they did not have to earn — the pitch climbs, so it reads as a burst
+   * rather than another scuff. */
+  boost() {
+    this.burst({ gain: 0.3, freq: 800, q: 0.8, decay: 0.55, sweep: 1.8 });
+    this.knock({ freqs: [320, 780], gain: 0.1, decay: 0.16, q: 8 });
+  }
+
   /** Urethane giving up — the bite as a powerslide breaks traction. */
   slide() {
     this.burst({ gain: 0.26, freq: 1400, q: 0.7, decay: 0.3, sweep: 0.4 });

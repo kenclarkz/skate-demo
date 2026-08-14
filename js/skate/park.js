@@ -680,6 +680,7 @@ export class Park {
     this.benches = []; // mesh specs, filled by bench() — decorative only
     this.planters = []; // mesh specs, filled by planter() — decorative only
     this.decors = [];  // mesh specs, filled by decor() — decorative only, no collision
+    this.pads = [];    // speed-pad zones, filled by speedpad() — scenery only, queried by the ride model
     this.group = new THREE.Group();
     this._hit = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
     this._probe = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
@@ -784,6 +785,12 @@ export class Park {
         d.x *= SCALE;
         d.z *= SCALE;
       }
+      for (const p of this.pads) {
+        p.x0 *= SCALE;
+        p.x1 *= SCALE;
+        p.z0 *= SCALE;
+        p.z1 *= SCALE;
+      }
     }
   }
 
@@ -839,6 +846,29 @@ export class Park {
    */
   decor(name, spec) {
     this.decors.push({ name, ...spec });
+  }
+
+  /**
+   * A painted speed pad — the palette's `speedpad` object. Scenery only: the
+   * paint is a decor entry of its own and nothing here touches the height
+   * field. What is registered is the pad's world rectangle and the elevation
+   * it sits at, which is exactly what padAt() needs to hand the ride model a
+   * boost when a board rolls over one.
+   */
+  speedpad({ x0, x1, z0, z1, y }) {
+    this.pads.push({ x0, x1, z0, z1, y: y || 0 });
+  }
+
+  /** The speed pad under (x, z) at elevation `y`, or null. */
+  padAt(x, z, y) {
+    for (const p of this.pads) {
+      if (x < p.x0 || x > p.x1 || z < p.z0 || z > p.z1) continue;
+      // A pad raised onto a deck must only fire when you are actually on that
+      // deck, not when the ground below you happens to pass under it.
+      if (Math.abs((y || 0) - p.y) > 0.35) continue;
+      return p;
+    }
+    return null;
   }
 
   /** A ledge edge — the grindable line only; the platform is a Slab of its own. */

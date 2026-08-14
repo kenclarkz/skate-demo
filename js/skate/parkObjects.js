@@ -1561,6 +1561,30 @@ export const OBJECTS = [
     preview: decorPreview,
     shapes: spectatorShapes,
   },
+
+  {
+    id: 'speedpad',
+    label: 'Speed Pad',
+    hint: 'A painted pad that hands you a quick speed boost when you ride over it, then fades back down to your normal top speed.',
+    category: 'flat',
+    defaults: { w: 3, d: 2, color: '#e0552f' },
+    meta: {
+      kind: 'flat',
+      grindable: false,
+      difficulty: 1,
+      tags: ['flat', 'boost', 'speed', 'ground'],
+    },
+    props: [
+      { key: 'w', label: 'Width', min: 1, max: 12, step: 0.1, unit: 'm' },
+      { key: 'd', label: 'Depth', min: 1, max: 12, step: 0.1, unit: 'm' },
+    ],
+    build: speedpadBuild,
+    footprint(o) {
+      return decorWorldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
+    },
+    preview: decorPreview,
+    shapes: speedpadShapes,
+  },
 ];
 
 export function objectType(id) {
@@ -2166,6 +2190,38 @@ function spectatorShapes(o) {
     pc('sphere', 0xe8c39a, [0.16, 0.18, 0.16], [0, 1.56, 0]),
     pc('cyl', shade(c, 0.7), [0.17, 0.09, 0.17], [0, 1.68, 0]),
   ];
+}
+
+/** A speed pad's paint: a flat coloured slab with a lighter inner panel, thin
+ * enough to read as paint on the ground rather than a curb to ride over. */
+function speedpadShapes(o) {
+  const c = objectColor(o.color);
+  return [
+    pc('box', c, [o.w, 0.03, o.d], [0, 0.015, 0]),
+    pc('box', shade(c, 1.22), [o.w * 0.82, 0.01, o.d * 0.82], [0, 0.028, 0]),
+  ];
+}
+
+/**
+ * The speed pad's shared builder: the same painted scenery every decor prop
+ * gets, plus the pad's world rectangle handed to the Park as a boost zone the
+ * ride model queries (park.padAt). The rect is the exact box the paint
+ * occupies after the object's own transform, so what you ride matches what you
+ * see; the pad sits at the object's elevation, so one raised onto a deck only
+ * fires on that deck.
+ */
+function speedpadBuild(p, o) {
+  p.decor(objectType(o.type).label, {
+    pieces: shapesOf(o),
+    x: o.x,
+    y: o.y || 0,
+    z: o.z,
+    ry: (o.ry || 0) * DEG,
+    sx: o.sx || 1,
+    sz: o.sz || 1,
+  });
+  const r = decorWorldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
+  p.speedpad({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y: o.y || 0 });
 }
 
 /** The axis-aligned world rectangle an object occupies after its transform,

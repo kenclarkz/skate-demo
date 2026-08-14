@@ -4901,6 +4901,71 @@ section('The park editor');
 }
 
 // --------------------------------------------------------------------------
+section('Speed pads');
+{
+  // A speed pad is a palette object: build a park holding one, ride over it,
+  // and the run should punch past the push ceiling (PUSH_TOP_SPEED) while the
+  // boost lasts, then bleed back down below it once it runs out on its own.
+  const ceiling = await run(() => window.__skate.config.PUSH_TOP_SPEED);
+
+  const built = await run(() => {
+    const g = window.__skate;
+    g.openDesigner({
+      v: 1, id: 'user-boost', name: 'Boost pad', blurb: 'A speed pad.',
+      extent: 20, ground: 'concrete', spawn: { x: 0, z: -17 },
+      objects: [
+        { id: 'p1', type: 'speedpad', x: 0, z: 0, ry: 0, sx: 1, sz: 1, w: 4, d: 2, color: '#e0552f' },
+      ],
+    });
+    g.designer.on.test();
+    return { park: g.park.id, pads: g.park.pads.length };
+  });
+  ok(built.park === 'user-boost', 'a park holding a speed pad builds and starts');
+  ok(built.pads === 1, `and registers the pad for the ride model (${built.pads} pad)`);
+
+  // Ride onto the pad at a sprint and keep pushing: the pad must carry the
+  // board past where legs alone could push it.
+  const over = await run(() => {
+    const g = window.__skate;
+    g.place(0, 0, 0, 12);
+    let peak = 0;
+    let sawBoost = false;
+    for (let i = 0; i < 360; i++) {
+      g.drive(1 / 120, { push: true });
+      sawBoost = sawBoost || g.ride.boost > 0;
+      peak = Math.max(peak, g.ride.speed);
+    }
+    return { peak, sawBoost };
+  });
+  ok(over.sawBoost, 'riding over the pad starts a boost');
+  ok(
+    over.peak > ceiling + 1,
+    `and carries the board past the push ceiling (peak ${over.peak.toFixed(2)} m/s vs ${ceiling} m/s)`
+  );
+
+  // Then coast it out: the boost ends on its own and the speed settles back
+  // under the normal ceiling without any input dragging it there.
+  const decay = await run(() => {
+    const g = window.__skate;
+    g.place(0, 0, 0, 12);
+    let peak = 0;
+    let boostEnded = false;
+    for (let i = 0; i < 360; i++) {
+      g.drive(1 / 120, { push: true });
+      peak = Math.max(peak, g.ride.speed);
+      boostEnded = boostEnded || g.ride.boost <= 0;
+    }
+    for (let i = 0; i < 540; i++) g.drive(1 / 120, {});
+    return { peak, boostEnded, final: g.ride.speed };
+  });
+  ok(decay.boostEnded, 'the boost runs out on its own');
+  ok(decay.peak > ceiling + 1, `and peaks above the ceiling too (peak ${decay.peak.toFixed(2)} m/s)`);
+  ok(decay.final < ceiling, `then decays back under it (${decay.final.toFixed(2)} m/s)`);
+
+  await run(() => window.__skate.showStart());
+}
+
+// --------------------------------------------------------------------------
 section('Park Suite ramp transitions: real rideable surfaces');
 {
   // The four new ramp-family objects (mini, roll-in, spine, vert — the quarter
