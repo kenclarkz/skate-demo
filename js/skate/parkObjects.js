@@ -649,6 +649,7 @@ export const OBJECTS = [
     id: 'hoop',
     label: 'Hoop',
     hint: 'A decorative ring to jump through — no collision or grind, just style.',
+    category: 'decor',
     defaults: { r: 1.6, tube: 0.12, color: '#e0552f' },
     meta: {
       kind: 'deco',
@@ -661,10 +662,13 @@ export const OBJECTS = [
       { key: 'tube', label: 'Tube', min: 0.05, max: 0.4, step: 0.01, unit: 'm' },
     ],
     build(p, o) {
-      p.hoop(o.x, o.y, o.z, o.r, o.tube, o.ry || 0);
+      p.hoop(o.x, o.y, o.z, o.r, o.tube, (o.ry || 0) * DEG - Math.PI / 2);
     },
-    footprint() {
-      return { x0: 0, x1: 0, z0: 0, z1: 0 };
+    footprint(o) {
+      // The ring stands in the XY plane (its local z extent is just the tube),
+      // exactly where the preview draws it — so spawn and patrol keep clear of
+      // the ring, not just of a nothing where it happens to hang.
+      return decorWorldRect(o, -(o.r + o.tube), o.r + o.tube, -o.tube, o.tube);
     },
     preview(o) {
       return new THREE.Mesh(new THREE.TorusGeometry(o.r, o.tube, 10, 28), mat(objectColor(o.color)));
@@ -675,15 +679,25 @@ export const OBJECTS = [
     id: 'bench',
     label: 'Bench',
     hint: 'A park bench for spectators — decorative, no collision or grind.',
+    category: 'decor',
     defaults: { len: 2.4, color: 'steel' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'seating'],
+    },
     props: [
       { key: 'len', label: 'Length', min: 0.8, max: 6, step: 0.1, unit: 'm' },
     ],
     build(p, o) {
-      p.bench(o.x, o.y, o.z, o.len * o.sz, o.ry * DEG, objectColor(o.color));
+      p.bench(o.x, o.y, o.z, o.len * o.sx, o.ry * DEG, objectColor(o.color));
     },
     footprint(o) {
-      return worldRect(o, -0.45, 0.45, -o.len / 2, o.len / 2);
+      // The bench's length runs along local x — the seat and backrest are `len`
+      // long — with its width and legs reaching about 0.1 past the foot of
+      // each leg, so the clear rect is the box the preview really fills.
+      return decorWorldRect(o, -o.len / 2, o.len / 2, -(o.len / 2 - 0.1), o.len / 2 - 0.1);
     },
     preview(o) {
       const color = objectColor(o.color);
@@ -701,7 +715,14 @@ export const OBJECTS = [
     id: 'planter',
     label: 'Planter',
     hint: 'A low bed of shrubs — decorative, no collision or grind.',
+    category: 'decor',
     defaults: { w: 1.6, d: 1.6, color: 'concrete' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'greenery'],
+    },
     props: [
       { key: 'w', label: 'Width', min: 0.6, max: 6, step: 0.1, unit: 'm' },
       { key: 'd', label: 'Depth', min: 0.6, max: 6, step: 0.1, unit: 'm' },
@@ -710,7 +731,7 @@ export const OBJECTS = [
       p.planter(o.x, o.y, o.z, o.w * o.sx, o.d * o.sz, o.ry * DEG, objectColor(o.color));
     },
     footprint(o) {
-      return worldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
+      return decorWorldRect(o, -o.w / 2, o.w / 2, -o.d / 2, o.d / 2);
     },
     preview(o) {
       const g = new THREE.Group();
@@ -908,10 +929,1243 @@ export const OBJECTS = [
       return launchPreview(o, true);
     },
   },
+
+  {
+    id: 'trashcan',
+    label: 'Trash Can',
+    hint: 'A roadside bin — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { r: 0.35, h: 0.95, color: '#3a5a40' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'r', label: 'Radius', min: 0.2, max: 1, step: 0.05, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.5, max: 2, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: trashcanShapes,
+  },
+
+  {
+    id: 'dumpster',
+    label: 'Dumpster',
+    hint: 'A wheeled skip for building rubble — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { w: 2.4, d: 1.3, h: 1.2, color: '#37506b' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'w', label: 'Width', min: 1, max: 5, step: 0.1, unit: 'm' },
+      { key: 'd', label: 'Depth', min: 0.8, max: 3, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.6, max: 2.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: dumpsterShapes,
+  },
+
+  {
+    id: 'tree',
+    label: 'Tree',
+    hint: 'A broadleaf shade tree — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { r: 0.9, h: 2.6, color: '#415f39' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'greenery'],
+    },
+    props: [
+      { key: 'r', label: 'Crown', min: 0.4, max: 3, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 1, max: 6, step: 0.1, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: treeShapes,
+  },
+
+  {
+    id: 'bush',
+    label: 'Bush',
+    hint: 'A low shrub — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { r: 0.85, color: '#3f5a3a' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'greenery'],
+    },
+    props: [
+      { key: 'r', label: 'Radius', min: 0.3, max: 2.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: bushShapes,
+  },
+
+  {
+    id: 'rock',
+    label: 'Rock',
+    hint: 'A lump of stone — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { r: 0.6, color: '#8a8d92' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'landscape'],
+    },
+    props: [
+      { key: 'r', label: 'Size', min: 0.2, max: 2.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: rockShapes,
+  },
+
+  {
+    id: 'fence',
+    label: 'Fence',
+    hint: 'A chain-link panel between two posts — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { len: 4, h: 1.8, color: '#6f7580' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street', 'barrier'],
+    },
+    props: [
+      { key: 'len', label: 'Length', min: 1, max: 12, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.6, max: 3.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: fenceShapes,
+  },
+
+  {
+    id: 'wall',
+    label: 'Wall',
+    hint: 'A low wall — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { w: 4, h: 1.4, d: 0.3, color: 'concrete' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'w', label: 'Length', min: 1, max: 16, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.4, max: 3, step: 0.05, unit: 'm' },
+      { key: 'd', label: 'Depth', min: 0.15, max: 1.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: wallShapes,
+  },
+
+  {
+    id: 'gate',
+    label: 'Gate',
+    hint: 'A pair of posts with a barred gate between — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { w: 3, h: 1.3, color: '#6f7580' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street', 'barrier'],
+    },
+    props: [
+      { key: 'w', label: 'Width', min: 1, max: 8, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.6, max: 2.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: gateShapes,
+  },
+
+  {
+    id: 'lamp',
+    label: 'Street Lamp',
+    hint: 'A light post — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { h: 5, color: '#8b9099' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'lighting'],
+    },
+    props: [
+      { key: 'h', label: 'Height', min: 2, max: 9, step: 0.1, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: lampShapes,
+  },
+
+  {
+    id: 'floodlight',
+    label: 'Floodlight',
+    hint: 'A stadium light on a pole — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { h: 4.5, color: '#e8e8e0' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'lighting'],
+    },
+    props: [
+      { key: 'h', label: 'Height', min: 2, max: 9, step: 0.1, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: floodlightShapes,
+  },
+
+  {
+    id: 'cone',
+    label: 'Traffic Cone',
+    hint: 'A road cone — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { h: 0.7, color: '#e8702c' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'h', label: 'Height', min: 0.3, max: 1.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: coneShapes,
+  },
+
+  {
+    id: 'barrier',
+    label: 'Barrier',
+    hint: 'An A-frame safety barrier — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { len: 1.8, h: 1.1, color: '#e8702c' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street', 'barrier'],
+    },
+    props: [
+      { key: 'len', label: 'Length', min: 0.8, max: 5, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.5, max: 2, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: barrierShapes,
+  },
+
+  {
+    id: 'sign',
+    label: 'Sign',
+    hint: 'A street sign on a post — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { h: 1.7, w: 0.9, color: '#37506b' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'h', label: 'Height', min: 0.8, max: 4, step: 0.05, unit: 'm' },
+      { key: 'w', label: 'Panel', min: 0.4, max: 2.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: signShapes,
+  },
+
+  {
+    id: 'pallet',
+    label: 'Pallet',
+    hint: 'A wooden pallet left on the pad — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { w: 1.2, d: 1.0, h: 0.15, color: '#9a7b4f' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'w', label: 'Width', min: 0.6, max: 3, step: 0.1, unit: 'm' },
+      { key: 'd', label: 'Depth', min: 0.6, max: 3, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.08, max: 0.4, step: 0.01, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: palletShapes,
+  },
+
+  {
+    id: 'barrel',
+    label: 'Barrel',
+    hint: 'A steel drum — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { r: 0.45, h: 0.9, color: '#c9533a' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'r', label: 'Radius', min: 0.2, max: 1, step: 0.05, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.4, max: 1.8, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: barrelShapes,
+  },
+
+  {
+    id: 'pipe',
+    label: 'Pipe',
+    hint: 'A concrete drainage pipe lying on the pad — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { len: 3.2, r: 0.4, color: '#9fa5ad' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'len', label: 'Length', min: 1, max: 10, step: 0.1, unit: 'm' },
+      { key: 'r', label: 'Radius', min: 0.2, max: 1.2, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: pipeShapes,
+  },
+
+  {
+    id: 'graffiti',
+    label: 'Graffiti Wall',
+    hint: 'A spray-painted wall — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { w: 3, h: 2.2, color: '#c94f3a' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street', 'art'],
+    },
+    props: [
+      { key: 'w', label: 'Width', min: 1, max: 10, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.8, max: 4, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: graffitiShapes,
+  },
+
+  {
+    id: 'poster',
+    label: 'Poster',
+    hint: 'A poster board on posts — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { w: 1.1, h: 1.5, color: '#d6c064' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street', 'art'],
+    },
+    props: [
+      { key: 'w', label: 'Width', min: 0.6, max: 3, step: 0.05, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.8, max: 3, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: posterShapes,
+  },
+
+  {
+    id: 'banner',
+    label: 'Banner',
+    hint: 'A cloth banner hung between two poles — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { w: 4.5, h: 1.0, color: '#37506b' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'event'],
+    },
+    props: [
+      { key: 'w', label: 'Width', min: 2, max: 10, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.5, max: 2.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: bannerShapes,
+  },
+
+  {
+    id: 'car',
+    label: 'Car',
+    hint: 'A parked car — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { len: 4.2, w: 1.8, h: 0.6, color: '#3f5a3a' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'vehicle'],
+    },
+    props: [
+      { key: 'len', label: 'Length', min: 2.5, max: 6, step: 0.1, unit: 'm' },
+      { key: 'w', label: 'Width', min: 1.2, max: 2.5, step: 0.05, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.4, max: 1.2, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: carShapes,
+  },
+
+  {
+    id: 'bike',
+    label: 'Bike',
+    hint: 'A bicycle leaned on its stand — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { len: 1.7, color: '#c94f3a' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'vehicle'],
+    },
+    props: [
+      { key: 'len', label: 'Length', min: 1, max: 2.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: bikeShapes,
+  },
+
+  {
+    id: 'van',
+    label: 'Van',
+    hint: 'A parked van — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { len: 4.8, w: 1.9, color: '#e8e4d8' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'vehicle'],
+    },
+    props: [
+      { key: 'len', label: 'Length', min: 3, max: 8, step: 0.1, unit: 'm' },
+      { key: 'w', label: 'Width', min: 1.4, max: 2.8, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: vanShapes,
+  },
+
+  {
+    id: 'rack',
+    label: 'Skate Rack',
+    hint: 'A rail of parked boards — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { len: 2.4, h: 0.9, color: '#8b9099' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'len', label: 'Length', min: 1, max: 6, step: 0.1, unit: 'm' },
+      { key: 'h', label: 'Height', min: 0.5, max: 1.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: rackShapes,
+  },
+
+  {
+    id: 'manhole',
+    label: 'Manhole',
+    hint: 'A round cover set in the pad — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { r: 0.55, color: '#6f7580' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'r', label: 'Radius', min: 0.25, max: 1.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: manholeShapes,
+  },
+
+  {
+    id: 'drain',
+    label: 'Drain',
+    hint: 'A grated storm drain — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { w: 0.7, d: 1.3, color: '#6f7580' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'w', label: 'Width', min: 0.3, max: 2, step: 0.05, unit: 'm' },
+      { key: 'd', label: 'Length', min: 0.6, max: 4, step: 0.1, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: drainShapes,
+  },
+
+  {
+    id: 'puddle',
+    label: 'Puddle',
+    hint: 'A slick of water — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { r: 1.1, color: '#4a5a68' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'wet'],
+    },
+    props: [
+      { key: 'r', label: 'Radius', min: 0.3, max: 3, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: puddleShapes,
+  },
+
+  {
+    id: 'litter',
+    label: 'Litter',
+    hint: 'Scattered leaves and rubbish — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { r: 0.8, color: '#8a7a58' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'street'],
+    },
+    props: [
+      { key: 'r', label: 'Radius', min: 0.3, max: 2.5, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: litterShapes,
+  },
+
+  {
+    id: 'foodtruck',
+    label: 'Food Truck',
+    hint: 'A parked street-food van — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { len: 4.5, w: 2.1, color: '#d6c064' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'vehicle', 'event'],
+    },
+    props: [
+      { key: 'len', label: 'Length', min: 3, max: 7, step: 0.1, unit: 'm' },
+      { key: 'w', label: 'Width', min: 1.4, max: 2.8, step: 0.05, unit: 'm' },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: foodtruckShapes,
+  },
+
+  {
+    id: 'spectator',
+    label: 'Spectator',
+    hint: 'A standing onlooker — decorative, no collision or grind.',
+    category: 'decor',
+    defaults: { color: '#37506b' },
+    meta: {
+      kind: 'deco',
+      grindable: false,
+      difficulty: 1,
+      tags: ['decorative', 'crowd'],
+    },
+    props: [
+      { key: 'color', label: 'Shirt', colors: SURFACES.map((s) => s.id) },
+    ],
+    build: decorBuild,
+    footprint: decorFootprint,
+    preview: decorPreview,
+    shapes: spectatorShapes,
+  },
 ];
 
 export function objectType(id) {
   return OBJECTS.find((t) => t.id === id) || OBJECTS[0];
+}
+
+// --- decor props -----------------------------------------------------------
+// A decorative prop (a trash can, a tree, a food truck) is a list of simple
+// shapes in its own local frame, authored once and shared by the game's merged
+// scenery and the editor's preview, so the two can never disagree. Every piece
+// is a `{ kind, color, s, p, r }`: a box, cylinder, cone, sphere or rock,
+// sized `s`, placed at `p` and rotated `r` (Euler XYZ, like geo.js). The
+// prop's own transform (position, quarter-turn `ry`, non-uniform `sx`/`sz`)
+// is applied around that frame afterwards — by the editor's group and by the
+// park's buildDecor alike — which is what keeps what you see exactly what you
+// get. None of it is ever part of the height field or the park graph.
+
+/** One shape piece of a decor prop. */
+const pc = (kind, color, s, p, r) => ({ kind, color, s, p, r });
+
+/** A fixed colour darkened (`f < 1`) or lightened (`f > 1`) — for the detail
+ * pieces of a prop (a bin's rim, a tree's crown) that share its palette
+ * colour without being identical to it. */
+function shade(color, f) {
+  const c = new THREE.Color(color);
+  c.multiplyScalar(f);
+  return c.getHex();
+}
+
+/** The local-frame pieces of the object's type, vertically stretched by the
+ * player's `sy` so a prop raised or stretched reads the same in the editor
+ * and in the built park (the world transform only scales sx/sz). */
+function shapesOf(o) {
+  const raw = objectType(o.type).shapes(o);
+  const sy = o.sy || 1;
+  if (sy === 1) return raw;
+  return raw.map((p) => ({
+    ...p,
+    s: [p.s[0], p.s[1] * sy, p.s[2]],
+    p: [p.p[0], p.p[1] * sy, p.p[2]],
+  }));
+}
+
+/** The unit-geometry half-extents each decor kind is drawn from, so a prop's
+ * footprint is the box its pieces really fill. Boxes are ±half their size;
+ * cylinders and cones are radius 1 by height 1, so their half-extents are
+ * (±size, ∓size, ±size) with the height halved; spheres reach the full radius;
+ * and a low-poly rock's icosahedron reaches φ/√(1 + φ²) ≈ 0.851 of its
+ * circumradius, not the whole radius. The preview and the built scenery draw
+ * the same unit geometries through the same scale/rotate/translate recipe, so
+ * these numbers keep the footprint exactly over the mesh. */
+const DECOR_HALF = {
+  box: [0.5, 0.5, 0.5],
+  cyl: [1, 0.5, 1],
+  cone: [1, 0.5, 1],
+  sphere: [1, 1, 1],
+  rock: [0.85065080835204, 0.85065080835204, 0.85065080835204],
+};
+
+const _dbS = new THREE.Vector3();
+const _dbE = new THREE.Euler();
+const _dbQ = new THREE.Quaternion();
+const _dbR = new THREE.Matrix4();
+const _dbV = new THREE.Vector3();
+
+/** The local-frame bounds of a prop's pieces, for its footprint and size. Each
+ * piece is its unit geometry run through scale, rotation and position — the
+ * same recipe the preview and the built park use — so the footprint is the box
+ * the pieces actually fill, not a boxy guess. */
+function decorBounds(o) {
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  for (const p of shapesOf(o)) {
+    const h = DECOR_HALF[p.kind] || DECOR_HALF.box;
+    const s = p.s;
+    const r = p.r;
+    if (r && (r[0] || r[1] || r[2])) {
+      _dbS.set(s[0], s[1], s[2]);
+      _dbE.set(r[0], r[1], r[2]);
+      _dbQ.setFromEuler(_dbE);
+      _dbR.makeRotationFromQuaternion(_dbQ);
+      for (let ci = 0; ci < 8; ci++) {
+        _dbV.set(
+          (ci & 1 ? h[0] : -h[0]) * s[0],
+          (ci & 2 ? h[1] : -h[1]) * s[1],
+          (ci & 4 ? h[2] : -h[2]) * s[2]
+        );
+        _dbV.applyMatrix4(_dbR);
+        x0 = Math.min(x0, p.p[0] + _dbV.x);
+        x1 = Math.max(x1, p.p[0] + _dbV.x);
+        y0 = Math.min(y0, p.p[1] + _dbV.y);
+        y1 = Math.max(y1, p.p[1] + _dbV.y);
+        z0 = Math.min(z0, p.p[2] + _dbV.z);
+        z1 = Math.max(z1, p.p[2] + _dbV.z);
+      }
+    } else {
+      const hx = h[0] * s[0];
+      const hy = h[1] * s[1];
+      const hz = h[2] * s[2];
+      x0 = Math.min(x0, p.p[0] - hx);
+      x1 = Math.max(x1, p.p[0] + hx);
+      y0 = Math.min(y0, p.p[1] - hy);
+      y1 = Math.max(y1, p.p[1] + hy);
+      z0 = Math.min(z0, p.p[2] - hz);
+      z1 = Math.max(z1, p.p[2] + hz);
+    }
+  }
+  return { x0, x1, y0, y1, z0, z1 };
+}
+
+/** The world footprint the spawn/patrol generators keep clear: the prop's own
+ * pieces, run through the object's transform like any other footprint. A prop
+ * may sit at any angle — it is scenery, so nothing stops a diagonal — so its
+ * rect is taken from the exact T·Ry(ry)·S(sx, 1, sz) recipe the editor preview
+ * and the park's buildDecor use, not from the quarter-turn-snapped frame the
+ * collision features are confined to. */
+function decorFootprint(o) {
+  const b = decorBounds(o);
+  return decorWorldRect(o, b.x0, b.x1, b.z0, b.z1);
+}
+
+/** The exact axis-aligned world rectangle a local rect occupies after the
+ * prop's own full-precision rotation and non-uniform scale. */
+function decorWorldRect(o, lx0, lx1, lz0, lz1) {
+  const ry = (o.ry || 0) * DEG;
+  const cos = Math.cos(ry);
+  const sin = Math.sin(ry);
+  const sx = o.sx || 1;
+  const sz = o.sz || 1;
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  for (const lx of [lx0, lx1]) {
+    for (const lz of [lz0, lz1]) {
+      const vx = sx * lx;
+      const vz = sz * lz;
+      const wx = o.x + vx * cos + vz * sin;
+      const wz = o.z - vx * sin + vz * cos;
+      x0 = Math.min(x0, wx);
+      x1 = Math.max(x1, wx);
+      z0 = Math.min(z0, wz);
+      z1 = Math.max(z1, wz);
+    }
+  }
+  return { x0, x1, z0, z1 };
+}
+
+/** The prop's real on-the-ground size, from the same pieces it draws. */
+function decorDimensions(o) {
+  const b = decorBounds(o);
+  return {
+    width: (b.x1 - b.x0) * (o.sx || 1),
+    depth: (b.z1 - b.z0) * (o.sz || 1),
+    height: Math.max(0.01, b.y1 - b.y0),
+  };
+}
+
+/** The shared builder: every decor type paints its pieces through p.decor(),
+ * and the park's buildDecor stamps the object's own transform on them. */
+function decorBuild(p, o) {
+  p.decor(objectType(o.type).label, {
+    pieces: shapesOf(o),
+    x: o.x,
+    y: o.y || 0,
+    z: o.z,
+    ry: (o.ry || 0) * DEG,
+    sx: o.sx || 1,
+    sz: o.sz || 1,
+  });
+}
+
+/** The editor's preview for a decor prop: the same pieces as the game's
+ * merged scenery, as plain meshes in the local frame. */
+function decorPreview(o) {
+  const g = new THREE.Group();
+  for (const p of shapesOf(o)) {
+    const mesh = new THREE.Mesh(previewDecorGeo(p.kind), mat(p.color));
+    mesh.scale.set(p.s[0], p.s[1], p.s[2]);
+    mesh.position.set(p.p[0], p.p[1], p.p[2]);
+    mesh.rotation.set(p.r?.[0] || 0, p.r?.[1] || 0, p.r?.[2] || 0);
+    g.add(mesh);
+  }
+  return g;
+}
+
+function previewDecorGeo(kind) {
+  switch (kind) {
+    case 'cyl':
+      return new THREE.CylinderGeometry(1, 1, 1, 14);
+    case 'cone':
+      return new THREE.ConeGeometry(1, 1, 14);
+    case 'sphere':
+      return new THREE.SphereGeometry(1, 10, 8);
+    case 'rock':
+      return new THREE.IcosahedronGeometry(1, 0);
+    default:
+      return new THREE.BoxGeometry(1, 1, 1);
+  }
+}
+
+// Shared piece colours for the props below.
+const DARK = 0x22262b;
+const GREY = 0x8b9099;
+const TRUNK = 0x5a4630;
+
+function trashcanShapes(o) {
+  const c = objectColor(o.color);
+  const r = o.r;
+  const h = o.h;
+  return [
+    pc('cyl', c, [r, h, r], [0, h / 2, 0]),
+    pc('cyl', shade(c, 0.82), [r * 1.08, 0.06, r * 1.08], [0, h - 0.04, 0]),
+    pc('cyl', shade(c, 0.82), [r * 1.05, 0.09, r * 1.05], [0, h + 0.06, 0]),
+    pc('cyl', DARK, [r * 0.32, 0.07, r * 0.32], [0, h + 0.14, 0]),
+  ];
+}
+
+function dumpsterShapes(o) {
+  const c = objectColor(o.color);
+  const w = o.w;
+  const d = o.d;
+  const h = o.h;
+  const wx = w / 2 - 0.2;
+  return [
+    pc('box', c, [w, h * 0.92, d], [0, h * 0.46, 0]),
+    pc('box', shade(c, 0.82), [w * 0.96, 0.08, d * 0.96], [0, h * 0.94, 0]),
+    pc('box', shade(c, 0.85), [w, 0.05, d * 1.02], [0, 0.03, 0]),
+    pc('box', DARK, [0.07, 0.14, d * 0.92], [wx, h * 0.6, 0]),
+    pc('box', DARK, [0.07, 0.14, d * 0.92], [-wx, h * 0.6, 0]),
+    pc('cyl', DARK, [0.17, 0.18, 0.17], [wx - 0.04, 0.09, d / 2 - 0.06], [0, 0, Math.PI / 2]),
+    pc('cyl', DARK, [0.17, 0.18, 0.17], [-wx + 0.04, 0.09, d / 2 - 0.06], [0, 0, Math.PI / 2]),
+  ];
+}
+
+function treeShapes(o) {
+  const c = objectColor(o.color);
+  const r = o.r;
+  const h = o.h;
+  const cy = 1.3 + h * 0.32;
+  return [
+    pc('cyl', TRUNK, [0.14, 1.3, 0.14], [0, 0.65, 0]),
+    pc('sphere', c, [r, h, r], [0, cy, 0]),
+    pc('sphere', shade(c, 1.14), [r * 0.55, h * 0.42, r * 0.55], [r * 0.45, cy + h * 0.12, 0]),
+    pc('sphere', shade(c, 0.86), [r * 0.5, h * 0.38, r * 0.5], [-r * 0.4, cy - h * 0.16, r * 0.2]),
+  ];
+}
+
+function bushShapes(o) {
+  const c = objectColor(o.color);
+  const r = o.r;
+  const base = r * 0.72;
+  return [
+    pc('sphere', c, [r, base, r], [0, base / 2, 0]),
+    pc('sphere', shade(c, 1.15), [r * 0.6, base * 0.5, r * 0.6], [r * 0.42, base * 0.8, 0]),
+    pc('sphere', shade(c, 0.85), [r * 0.5, base * 0.45, r * 0.5], [-r * 0.38, base * 0.62, r * 0.3]),
+  ];
+}
+
+function rockShapes(o) {
+  const c = objectColor(o.color);
+  const r = o.r;
+  return [
+    pc('rock', c, [r, r * 0.75, r * 0.85], [-r * 0.3, r * 0.36, 0]),
+    pc('rock', shade(c, 0.88), [r * 0.65, r * 0.55, r * 0.6], [r * 0.4, r * 0.26, r * 0.15]),
+  ];
+}
+
+function fenceShapes(o) {
+  const c = objectColor(o.color);
+  const len = o.len;
+  const h = o.h;
+  const diag = Math.atan2(h - 0.3, len);
+  const brace = Math.hypot(len, h - 0.3);
+  return [
+    pc('box', c, [0.07, h, 0.07], [-len / 2, h / 2, 0]),
+    pc('box', c, [0.07, h, 0.07], [len / 2, h / 2, 0]),
+    pc('box', c, [len, 0.05, 0.05], [0, h - 0.03, 0]),
+    pc('box', c, [len, 0.05, 0.05], [0, 0.3, 0]),
+    pc('box', c, [len, 0.04, 0.04], [0, h * 0.62, 0]),
+    pc('box', c, [brace, 0.04, 0.04], [0, h * 0.62, 0], [0, 0, diag]),
+  ];
+}
+
+function wallShapes(o) {
+  const c = objectColor(o.color);
+  return [
+    pc('box', c, [o.w, o.h, o.d], [0, o.h / 2, 0]),
+    pc('box', shade(c, 0.82), [o.w, 0.07, o.d + 0.08], [0, o.h + 0.035, 0]),
+  ];
+}
+
+function gateShapes(o) {
+  const c = objectColor(o.color);
+  const w = o.w;
+  const h = o.h;
+  const span = w * 0.74;
+  const out = [
+    pc('box', c, [0.09, h, 0.09], [-w / 2, h / 2, 0]),
+    pc('box', c, [0.09, h, 0.09], [w / 2, h / 2, 0]),
+    pc('box', c, [w * 0.82, 0.06, 0.06], [0, h - 0.08, 0]),
+    pc('box', c, [w * 0.82, 0.06, 0.06], [0, 0.35, 0]),
+  ];
+  for (let i = 1; i < 5; i++) {
+    const x = -span / 2 + (span * i) / 5;
+    out.push(pc('box', c, [0.05, h - 0.5, 0.05], [x, (h + 0.35) / 2, 0]));
+  }
+  return out;
+}
+
+function lampShapes(o) {
+  const c = objectColor(o.color);
+  const h = o.h;
+  return [
+    pc('cyl', shade(c, 0.8), [0.24, 0.1, 0.24], [0, 0.05, 0]),
+    pc('cyl', c, [0.07, h, 0.07], [0, h / 2, 0]),
+    pc('box', c, [0.5, 0.05, 0.05], [0.24, h - 0.05, 0]),
+    pc('box', 0x50545c, [0.45, 0.13, 0.2], [0.54, h - 0.14, 0]),
+    pc('box', 0xfff1c4, [0.2, 0.07, 0.12], [0.54, h - 0.26, 0]),
+  ];
+}
+
+function floodlightShapes(o) {
+  const c = objectColor(o.color);
+  const h = o.h;
+  return [
+    pc('cyl', 0x6f7580, [0.25, 0.12, 0.25], [0, 0.06, 0]),
+    pc('cyl', GREY, [0.06, h, 0.06], [0, h / 2, 0]),
+    pc('box', 0x6f7580, [0.12, 0.12, 0.5], [0, h - 0.3, 0]),
+    pc('box', c, [0.9, 0.4, 0.5], [0, h - 0.22, -0.25], [0.45, 0, 0]),
+  ];
+}
+
+function coneShapes(o) {
+  const c = objectColor(o.color);
+  const h = o.h;
+  const body = h * 0.84;
+  return [
+    pc('cyl', shade(c, 0.85), [0.36, 0.08, 0.36], [0, 0.04, 0]),
+    pc('cone', c, [0.26, body, 0.26], [0, 0.08 + body / 2, 0]),
+    pc('cyl', 0xe8e8e0, [0.21, 0.05, 0.21], [0, 0.08 + body * 0.35, 0]),
+  ];
+}
+
+function barrierShapes(o) {
+  const c = objectColor(o.color);
+  const len = o.len;
+  const h = o.h;
+  return [
+    pc('box', c, [len, 0.08, 0.06], [0, h, 0]),
+    pc('box', shade(c, 0.82), [0.07, h, 0.07], [-len * 0.4, h * 0.55, 0], [0, 0, -0.5]),
+    pc('box', shade(c, 0.82), [0.07, h, 0.07], [len * 0.4, h * 0.55, 0], [0, 0, 0.5]),
+    pc('box', DARK, [0.3, 0.06, 0.06], [-len * 0.4, 0.03, 0]),
+    pc('box', DARK, [0.3, 0.06, 0.06], [len * 0.4, 0.03, 0]),
+  ];
+}
+
+function signShapes(o) {
+  const c = objectColor(o.color);
+  const h = o.h;
+  const w = o.w;
+  return [
+    pc('cyl', GREY, [0.05, h, 0.05], [0, h / 2, 0]),
+    pc('box', shade(c, 0.85), [w, 0.55, 0.05], [0, h - 0.35, 0]),
+    pc('box', c, [w * 0.9, 0.42, 0.02], [0, h - 0.35, 0.04]),
+    pc('box', shade(c, 0.85), [w, 0.3, 0.05], [0, h - 1.25, 0]),
+  ];
+}
+
+function palletShapes(o) {
+  const c = objectColor(o.color);
+  const w = o.w;
+  const d = o.d;
+  const h = o.h;
+  const out = [];
+  for (const x of [-0.4, -0.2, 0, 0.2, 0.4]) {
+    out.push(pc('box', c, [0.15, h * 0.2, d], [x * w, h * 0.82, 0]));
+  }
+  for (const z of [-d * 0.35, 0, d * 0.35]) {
+    out.push(pc('box', shade(c, 0.82), [w * 0.85, h * 0.6, 0.1], [0, h * 0.45, z]));
+  }
+  for (const x of [-0.3, 0.3]) {
+    out.push(pc('box', shade(c, 0.82), [0.15, h * 0.2, d * 0.6], [x * w, h * 0.12, 0]));
+  }
+  return out;
+}
+
+function barrelShapes(o) {
+  const c = objectColor(o.color);
+  const r = o.r;
+  const h = o.h;
+  return [
+    pc('cyl', c, [r, h, r], [0, h / 2, 0]),
+    pc('cyl', shade(c, 0.82), [r * 1.04, 0.03, r * 1.04], [0, h * 0.3, 0]),
+    pc('cyl', shade(c, 0.82), [r * 1.04, 0.03, r * 1.04], [0, h * 0.7, 0]),
+    pc('cyl', GREY, [r * 1.07, 0.05, r * 1.07], [0, h - 0.02, 0]),
+    pc('cyl', GREY, [r * 1.07, 0.05, r * 1.07], [0, 0.025, 0]),
+  ];
+}
+
+function pipeShapes(o) {
+  const c = objectColor(o.color);
+  const len = o.len;
+  const r = o.r;
+  const up = [Math.PI / 2, 0, 0];
+  return [
+    pc('cyl', c, [r, len, r], [0, r, 0], up),
+    pc('cyl', shade(c, 0.8), [r * 1.07, 0.06, r * 1.07], [0, r, len / 2], up),
+    pc('cyl', shade(c, 0.8), [r * 1.07, 0.06, r * 1.07], [0, r, -len / 2], up),
+  ];
+}
+
+function graffitiShapes(o) {
+  const c = objectColor(o.color);
+  const w = o.w;
+  const h = o.h;
+  return [
+    pc('box', shade(c, 0.75), [w, h, 0.25], [0, h / 2, 0]),
+    pc('box', c, [w * 0.5, h * 0.4, 0.02], [0, h * 0.62, 0.14]),
+    pc('box', shade(c, 1.2), [w * 0.28, h * 0.26, 0.02], [w * 0.27, h * 0.34, 0.14]),
+    pc('box', c, [w * 0.3, h * 0.18, 0.02], [-w * 0.28, h * 0.2, 0.14]),
+  ];
+}
+
+function posterShapes(o) {
+  const c = objectColor(o.color);
+  const w = o.w;
+  const h = o.h;
+  return [
+    pc('box', GREY, [0.05, h, 0.05], [-w / 2, h / 2, 0]),
+    pc('box', GREY, [0.05, h, 0.05], [w / 2, h / 2, 0]),
+    pc('box', shade(c, 0.7), [w, h * 0.7, 0.04], [0, h * 0.53, 0]),
+    pc('box', c, [w * 0.9, h * 0.58, 0.02], [0, h * 0.53, 0.03]),
+  ];
+}
+
+function bannerShapes(o) {
+  const c = objectColor(o.color);
+  const w = o.w;
+  const h = o.h;
+  const ph = 1.4 + h;
+  return [
+    pc('cyl', GREY, [0.04, ph, 0.04], [-w / 2, ph / 2, 0]),
+    pc('cyl', GREY, [0.04, ph, 0.04], [w / 2, ph / 2, 0]),
+    pc('box', c, [w * 0.92, h, 0.03], [0, 1.4 + h / 2, 0]),
+    pc('box', shade(c, 0.85), [w * 0.22, h * 0.92, 0.02], [w * 0.4, 1.4 + h / 2, 0], [0, 0, 0.05]),
+  ];
+}
+
+function carShapes(o) {
+  const c = objectColor(o.color);
+  const len = o.len;
+  const w = o.w;
+  const h = o.h;
+  const wheel = (x, z) => pc('cyl', DARK, [0.24, 0.32, 0.32], [x, 0.32, z], [0, 0, Math.PI / 2]);
+  return [
+    pc('box', c, [w, h, len], [0, h / 2, 0]),
+    pc('box', shade(c, 0.85), [w * 0.86, 0.5, len * 0.46], [0, h + 0.3, -len * 0.12]),
+    pc('box', 0x3a4650, [w * 0.78, 0.34, len * 0.4], [0, h + 0.38, -len * 0.12]),
+    pc('box', 0xfff1c4, [w * 0.36, 0.1, 0.02], [0, h * 0.72, len / 2 + 0.01]),
+    wheel(w / 2, len * 0.3),
+    wheel(-w / 2, len * 0.3),
+    wheel(w / 2, -len * 0.3),
+    wheel(-w / 2, -len * 0.3),
+  ];
+}
+
+function bikeShapes(o) {
+  const c = objectColor(o.color);
+  const len = o.len;
+  const wheel = (z) => pc('cyl', DARK, [0.05, 0.3, 0.3], [0, 0.3, z], [0, 0, Math.PI / 2]);
+  return [
+    wheel(len / 2),
+    wheel(-len / 2),
+    pc('cyl', c, [0.04, len * 0.8, 0.04], [0, 0.75, 0], [0, 0, -0.08]),
+    pc('cyl', c, [0.035, len * 0.65, 0.035], [0, 0.72, 0.15], [0, 0, 0.55]),
+    pc('box', c, [0.46, 0.03, 0.03], [0, 0.98, len / 2 - 0.12]),
+    pc('cyl', c, [0.025, 0.3, 0.025], [0, 0.82, -len / 2 + 0.3]),
+    pc('box', DARK, [0.07, 0.04, 0.24], [0, 1.0, -len / 2 + 0.32]),
+  ];
+}
+
+function vanShapes(o) {
+  const c = objectColor(o.color);
+  const len = o.len;
+  const w = o.w;
+  const wheel = (x, z) => pc('cyl', DARK, [0.26, 0.34, 0.34], [x, 0.34, z], [0, 0, Math.PI / 2]);
+  return [
+    pc('box', c, [w, 1.9, len], [0, 1.05, 0]),
+    pc('box', shade(c, 0.85), [w * 0.96, 0.4, len * 0.98], [0, 2.15, 0]),
+    pc('box', 0x3a4650, [w * 0.88, 0.45, 0.02], [0, 1.6, -len / 2 + 0.01]),
+    pc('box', 0x3a4650, [0.02, 0.45, len * 0.34], [w / 2 + 0.01, 1.6, len * 0.12]),
+    pc('box', 0x3a4650, [0.02, 0.45, len * 0.34], [-w / 2 - 0.01, 1.6, len * 0.12]),
+    pc('box', 0x6f7580, [w, 0.22, 0.06], [0, 0.3, len / 2 + 0.02]),
+    pc('box', 0x6f7580, [w, 0.22, 0.06], [0, 0.3, -len / 2 - 0.02]),
+    wheel(w / 2, len * 0.3),
+    wheel(-w / 2, len * 0.3),
+    wheel(w / 2, -len * 0.3),
+    wheel(-w / 2, -len * 0.3),
+  ];
+}
+
+function rackShapes(o) {
+  const c = objectColor(o.color);
+  const len = o.len;
+  const h = o.h;
+  const out = [
+    pc('box', c, [0.05, h, 0.05], [-len / 2, h / 2, 0]),
+    pc('box', c, [0.05, h, 0.05], [len / 2, h / 2, 0]),
+    pc('box', c, [len, 0.05, 0.05], [0, h - 0.08, 0]),
+    pc('box', c, [len, 0.05, 0.05], [0, 0.3, 0]),
+  ];
+  for (const [x, z, yaw] of [
+    [-0.2, 0.1, 0.45],
+    [0.12, -0.08, -0.4],
+    [0.3, 0.15, 0.3],
+  ]) {
+    out.push(pc('box', 0xd6c064, [0.2, 0.02, 0.9], [x, 0.35, z], [0, 0, yaw]));
+    out.push(pc('box', 0x4a4438, [0.05, 0.05, 0.05], [x, 0.37, z + 0.35], [0, 0, yaw]));
+    out.push(pc('box', 0x4a4438, [0.05, 0.05, 0.05], [x, 0.37, z - 0.35], [0, 0, yaw]));
+  }
+  return out;
+}
+
+function manholeShapes(o) {
+  const c = objectColor(o.color);
+  const r = o.r;
+  return [
+    pc('cyl', shade(c, 0.85), [r, 0.07, r], [0, 0.035, 0]),
+    pc('cyl', c, [r * 0.88, 0.03, r * 0.88], [0, 0.08, 0]),
+    pc('box', DARK, [r * 1.1, 0.02, 0.035], [0, 0.11, 0]),
+    pc('box', DARK, [0.035, 0.02, r * 1.1], [0, 0.11, 0]),
+  ];
+}
+
+function drainShapes(o) {
+  const c = objectColor(o.color);
+  const w = o.w;
+  const d = o.d;
+  const out = [pc('box', shade(c, 0.85), [w, 0.06, d], [0, 0.03, 0])];
+  for (let i = 1; i <= 5; i++) {
+    const x = -w / 2 + (w * i) / 6;
+    out.push(pc('box', c, [0.07, 0.025, d * 0.86], [x, 0.07, 0]));
+  }
+  return out;
+}
+
+function puddleShapes(o) {
+  const c = objectColor(o.color);
+  const r = o.r;
+  return [
+    pc('cyl', c, [r, 0.02, r], [0, 0.01, 0]),
+    pc('cyl', shade(c, 1.25), [r * 0.68, 0.015, r * 0.68], [r * 0.1, 0.02, r * 0.08]),
+  ];
+}
+
+function litterShapes(o) {
+  const c = objectColor(o.color);
+  const r = o.r;
+  const out = [];
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.39996;
+    const rad = (0.2 + ((i * 7) % 10) / 10) * r;
+    const x = Math.cos(a) * rad;
+    const z = Math.sin(a) * rad * 0.7;
+    const w = 0.04 + ((i * 3) % 5) / 60;
+    const col = i % 2 ? shade(c, 0.82) : shade(c, 1.18);
+    out.push(pc('box', col, [w, 0.008, w + 0.025], [x, 0.004, z], [0, ((i * 37) % 360) * DEG, 0]));
+  }
+  return out;
+}
+
+function foodtruckShapes(o) {
+  const c = objectColor(o.color);
+  const len = o.len;
+  const w = o.w;
+  const wheel = (x, z) => pc('cyl', DARK, [0.26, 0.36, 0.36], [x, 0.36, z], [0, 0, Math.PI / 2]);
+  return [
+    pc('box', c, [w, 2.1, len], [0, 1.1, 0]),
+    pc('box', shade(c, 0.82), [w * 1.06, 0.35, len * 1.03], [0, 2.3, 0]),
+    pc('box', 0x3a4650, [w * 0.8, 0.7, 0.04], [0, 1.5, len / 2 + 0.01]),
+    pc('box', shade(c, 0.9), [w * 0.92, 0.12, 0.16], [0, 1.06, len / 2 + 0.05]),
+    pc('box', shade(c, 0.72), [w * 0.7, 0.42, 0.02], [0, 2.02, len / 2 + 0.02]),
+    wheel(w / 2, len * 0.3),
+    wheel(-w / 2, len * 0.3),
+    wheel(w / 2, -len * 0.3),
+    wheel(-w / 2, -len * 0.3),
+  ];
+}
+
+function spectatorShapes(o) {
+  const c = objectColor(o.color);
+  return [
+    pc('box', 0x2e3440, [0.12, 0.85, 0.12], [-0.1, 0.425, 0]),
+    pc('box', 0x2e3440, [0.12, 0.85, 0.12], [0.1, 0.425, 0]),
+    pc('box', c, [0.4, 0.55, 0.24], [0, 1.12, 0]),
+    pc('box', shade(c, 0.85), [0.1, 0.5, 0.1], [-0.26, 1.12, 0]),
+    pc('box', shade(c, 0.85), [0.1, 0.5, 0.1], [0.26, 1.12, 0]),
+    pc('sphere', 0xe8c39a, [0.16, 0.18, 0.16], [0, 1.56, 0]),
+    pc('cyl', shade(c, 0.7), [0.17, 0.09, 0.17], [0, 1.68, 0]),
+  ];
 }
 
 /** The axis-aligned world rectangle an object occupies after its transform,
@@ -925,6 +2179,8 @@ export function boundsOf(o) {
  * Each type derives it from the same params its builder reads, so the number
  * a future AI sees is the shape it will actually have to skate. */
 export function objectDimensions(o) {
+  const t = objectType(o.type);
+  if (t.category === 'decor' && typeof t.shapes === 'function') return decorDimensions(o);
   const sy = o.sy || 1;
   const sx = o.sx || 1;
   const sz = o.sz || 1;
@@ -966,6 +2222,10 @@ export function objectDimensions(o) {
       return { width: o.len * sx, depth: o.w * sz, height: hs(o.h) };
     case 'hoop':
       return { width: o.r * 2, depth: o.r * 2, height: o.r * 2 };
+    case 'bench':
+      return { width: o.len * sx, depth: 0.6, height: 0.7 };
+    case 'planter':
+      return { width: o.w * sx, depth: o.d * sz, height: 0.65 };
     case 'funbox':
       return { width: o.w * sx, depth: o.d * sz, height: hs(o.h) };
     default:

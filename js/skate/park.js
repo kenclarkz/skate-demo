@@ -679,6 +679,7 @@ export class Park {
     this.hoops = [];   // mesh specs, filled by hoop() — decorative only, no collision
     this.benches = []; // mesh specs, filled by bench() — decorative only
     this.planters = []; // mesh specs, filled by planter() — decorative only
+    this.decors = [];  // mesh specs, filled by decor() — decorative only, no collision
     this.group = new THREE.Group();
     this._hit = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
     this._probe = { y: 0, nx: 0, ny: 1, nz: 0, kind: SMOOTH };
@@ -779,6 +780,10 @@ export class Park {
         p.w *= SCALE;
         p.d *= SCALE;
       }
+      for (const d of this.decors) {
+        d.x *= SCALE;
+        d.z *= SCALE;
+      }
     }
   }
 
@@ -822,6 +827,18 @@ export class Park {
   /** A low bed of shrubs — decorative only, like a bench or hoop. */
   planter(cx, cy, cz, w, d, ry = 0, color = 0x8a7a58) {
     this.planters.push({ cx, cy, cz, w, d, ry, color });
+  }
+
+  /**
+   * A decorative prop from the Park Editor's decor palette — a trash can, a
+   * tree, a fence, a food truck — anything with no collision. `spec` carries
+   * the local-frame pieces the prop is built from (`pieces`) plus its world
+   * placement (`x`, `y`, `z` in map units, `ry` in radians, `sx`/`sz` the
+   * player's non-uniform scale, all applied around the pieces' origin). Like
+   * hoop/bench/planter, decor never touches the height field or the graph.
+   */
+  decor(name, spec) {
+    this.decors.push({ name, ...spec });
   }
 
   /** A ledge edge — the grindable line only; the platform is a Slab of its own. */
@@ -1274,6 +1291,7 @@ export class Park {
     // player in the designer) and never part of the height field.
     for (const b of this.benches) buildBench(entries, b);
     for (const pt of this.planters) buildPlanter(entries, pt);
+    for (const d of this.decors) buildDecor(entries, d);
 
     this.sceneryMaterial = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 5 });
     const mesh = new THREE.Mesh(merge(entries, 0.4), this.sceneryMaterial);
@@ -1423,6 +1441,70 @@ function buildPlanter(entries, pt) {
   const [px, pz] = at(0, 0);
   entries.push(box(pt.color, pt.w, 0.4, pt.d, px, h - 0.2, pz, 0, ry, 0));
   entries.push(box(0x3f5a3a, pt.w * 0.82, 0.5, pt.d * 0.82, px, h + 0.1, pz, 0, ry, 0));
+}
+
+// Shared unit geometries for merged decor pieces. Like geo.js' own unit box,
+// a merged entry scales the unit shape with its matrix, so every piece of a
+// prop costs one cloned geometry of the shared mesh.
+const _decorUnitBox = new THREE.BoxGeometry(1, 1, 1);
+const _decorUnitCyl = new THREE.CylinderGeometry(1, 1, 1, 14);
+const _decorUnitCone = new THREE.ConeGeometry(1, 1, 14);
+const _decorUnitSphere = new THREE.SphereGeometry(1, 10, 8);
+const _decorUnitRock = new THREE.IcosahedronGeometry(1, 0);
+
+function _decorGeo(kind) {
+  switch (kind) {
+    case 'cyl':
+      return _decorUnitCyl;
+    case 'cone':
+      return _decorUnitCone;
+    case 'sphere':
+      return _decorUnitSphere;
+    case 'rock':
+      return _decorUnitRock;
+    default:
+      return _decorUnitBox;
+  }
+}
+
+const _decore = new THREE.Euler();
+const _decorq = new THREE.Quaternion();
+const _decorp = new THREE.Vector3();
+const _decors = new THREE.Vector3();
+const _decorm = new THREE.Matrix4();
+
+/**
+ * A player's placed decor prop, built into the merged scenery. Each piece is a
+ * local-frame `{ kind, color, s, p, r }` box/cyl/cone/sphere/rock entry; the
+ * whole prop is then stamped with the object's own world transform — the same
+ * T · Ry(deg) · S(sx, 1, sz) recipe the editor preview uses — so a prop that
+ * is previewed scaled and spun looks identical when the park is ridden.
+ */
+function buildDecor(entries, d) {
+  const local = [];
+  for (const pc of d.pieces) {
+    const sx = pc.s[0];
+    const sy = pc.s[1];
+    const sz = pc.s[2];
+    const px = pc.p[0];
+    const py = pc.p[1];
+    const pz = pc.p[2];
+    const rx = pc.r?.[0] || 0;
+    const ry = pc.r?.[1] || 0;
+    const rz = pc.r?.[2] || 0;
+    if (pc.kind === 'box') {
+      local.push(box(pc.color, sx, sy, sz, px, py, pz, rx, ry, rz));
+    } else {
+      local.push(piece(_decorGeo(pc.kind), pc.color, sx, sy, sz, px, py, pz, rx, ry, rz));
+    }
+  }
+  _decore.set(0, d.ry || 0, 0);
+  _decorq.setFromEuler(_decore);
+  _decorp.set(d.x, d.y || 0, d.z);
+  _decors.set(d.sx || 1, 1, d.sz || 1);
+  _decorm.compose(_decorp, _decorq, _decors);
+  for (const e of local) e.matrix.premultiply(_decorm);
+  for (const e of local) entries.push(e);
 }
 
 const _up = new THREE.Vector3(0, 1, 0);
