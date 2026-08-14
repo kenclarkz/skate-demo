@@ -251,8 +251,14 @@ const freshOwned = () => ({
 // save.js and never translate between the two.
 const OWNED_ROLES = ['pants', 'shoes', 'shirt', 'hat', 'shades'];
 
-/** Only ids the maker knows about, and only for their own slots. */
-function cleanCustom(raw) {
+/**
+ * Only ids the maker knows about, and only for their own slots — a hand-edited
+ * save must not be able to invent a part. `ownedIds` is the player's bought
+ * accessories; when passed, the made rider's own `accessoryIds` (the three
+ * slots it wears) is cleaned too, so a character cannot wear something the
+ * player does not own.
+ */
+function cleanCustom(raw, ownedIds) {
   const c = freshCustom();
   if (!raw || typeof raw !== 'object') return c;
   if (typeof raw.name === 'string') c.name = raw.name.trim().slice(0, 40);
@@ -266,6 +272,7 @@ function cleanCustom(raw) {
   c.shirt = slot('shirt', shirtById);
   c.hat = slot('hat', hatById);
   c.shades = slot('shades', shadeById);
+  c.accessoryIds = cleanAccessoryIds(raw.accessoryIds, undefined, ownedIds || [DEFAULT_ACCESSORY_ID]);
   return c;
 }
 
@@ -405,7 +412,7 @@ function read() {
     s.customCharacters = Array.isArray(parsed.customCharacters)
       ? parsed.customCharacters
           .map((raw, i) => {
-            const c = cleanCustom(raw);
+            const c = cleanCustom(raw, s.accessories);
             c.id =
               raw && typeof raw.id === 'string' && raw.id
                 ? raw.id.slice(0, 40)
@@ -420,12 +427,12 @@ function read() {
     // the collection so an old custom rider keeps riding — the maker's legacy
     // one-slot behaviour, folded into the new rack with the draft's id.
     if (s.customCharacters.length === 0 && parsed.customSaved === true) {
-      const c = cleanCustom(parsed.custom);
+      const c = cleanCustom(parsed.custom, s.accessories);
       c.id = `c${Date.now().toString(36)}0`;
       if (!c.name.trim()) c.name = 'My Character';
       s.customCharacters.push(c);
     }
-    s.custom = cleanCustom(parsed.custom);
+    s.custom = cleanCustom(parsed.custom, s.accessories);
     s.owned = cleanOwned(parsed.owned);
     s.characterId = typeof s.characterId === 'string' ? s.characterId : DEFAULT_CHARACTER_ID;
     if (s.characterId.startsWith('custom:')) {
@@ -534,7 +541,7 @@ export const save = {
   },
   /** The maker's saved custom characters, as copies. */
   get customCharacters() {
-    return state.customCharacters.map((c) => ({ ...c }));
+    return state.customCharacters.map((c) => ({ ...c, accessoryIds: { ...c.accessoryIds } }));
   },
   /** @returns true if the maker has ever saved a custom character. */
   get customSaved() {
@@ -800,7 +807,7 @@ export const save = {
 
   /** Store the maker's draft as it changes; a reload must not lose it. */
   setCustom(config) {
-    state.custom = cleanCustom(config);
+    state.custom = cleanCustom(config, state.accessories);
     flush();
   },
 
@@ -812,7 +819,7 @@ export const save = {
    * copy was not wanted.
    */
   saveCustomCharacter(config) {
-    const c = cleanCustom(config);
+    const c = cleanCustom(config, state.accessories);
     if (!c.name.trim()) c.name = 'My Character';
     const id = `c${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
     state.customCharacters.push({ id, ...c });
@@ -831,10 +838,33 @@ export const save = {
   updateCustomCharacter(id, config) {
     const i = state.customCharacters.findIndex((c) => c.id === id);
     if (i === -1) return false;
-    const c = cleanCustom(config);
+    const c = cleanCustom(config, state.accessories);
     if (!c.name.trim()) c.name = 'My Character';
     state.customCharacters[i] = { id, ...c };
     state.characterId = `custom:${id}`;
+    flush();
+    return true;
+  },
+
+  /**
+   * Set one accessory slot on a made rider, so each character keeps its own
+   * outfit rather than sharing the global shop slots. Same category rules as
+   * setAccessory: an item fills its own slot, "Original" empties them all.
+   * Buying in the shop still fills the global slots — this only touches the
+   * chosen character.
+   */
+  setCharacterAccessory(id, accessoryId) {
+    const c = state.customCharacters.find((x) => x.id === id);
+    if (!c) return false;
+    if (accessoryId === DEFAULT_ACCESSORY_ID) {
+      c.accessoryIds = freshAccessoryIds();
+      flush();
+      return true;
+    }
+    const acc = accessoryById[accessoryId];
+    if (!acc || !state.accessories.includes(accessoryId)) return false;
+    const raw = { ...(c.accessoryIds || {}), [acc.category]: accessoryId };
+    c.accessoryIds = cleanAccessoryIds(raw, undefined, state.accessories);
     flush();
     return true;
   },

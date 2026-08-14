@@ -259,21 +259,30 @@
 
         <section id="screen-charselect" class="screen wide" hidden>
           <h1>Riders</h1>
-          <p class="tag">Pick a rider to skate as. They all ride exactly the same. <b id="cs-coins">0</b> coins</p>
+          <p class="tag">Make a rider to skate as — the rack below is locked until you build one. They all ride exactly the same. <b id="cs-coins">0</b> coins</p>
+          <button id="btn-charselect-maker" class="primary" type="button">MAKE A CHARACTER</button>
           <div class="char-grid" id="cs-char-grid"></div>
-          <button id="btn-charselect-maker" class="primary" type="button">Make your own character</button>
-          <h2 class="store-section-title">Shirts</h2>
-          <p class="board-type-blurb">Shirts go on over whichever rider you pick.</p>
-          <div class="board-grid" id="cs-outfit-grid"></div>
-          <div class="repaint" id="repaint-cs-outfit" hidden></div>
-          <h2 class="store-section-title">Pants</h2>
-          <p class="board-type-blurb">Legs and shoes live on the rider — these are the bottoms that go over them.</p>
-          <div class="board-grid" id="cs-pants-grid"></div>
-          <div class="repaint" id="repaint-cs-pants" hidden></div>
-          <h2 class="store-section-title">Accessories</h2>
-          <p class="board-type-blurb">Three slots, one per kind: wear a hat, a pair of shades and a backpack all at once — but never two of the same.</p>
-          <div class="board-grid" id="cs-accessory-grid"></div>
-          <div class="repaint" id="repaint-cs-accessory" hidden></div>
+
+          <!-- The ACCESSORIES option: once a made rider is picked, it opens the
+               panel below — that rider's own hat, shades and pack, which stay
+               with them whatever you skate next. -->
+          <button id="btn-cs-accessories" type="button" hidden>ACCESSORIES</button>
+
+          <!-- A made rider's own accessory rack, opened from the ACCESSORIES
+               option. Saving or backing out drops the player back on the
+               character select above. -->
+          <div id="cs-accessories" hidden>
+            <h2 class="store-section-title">Accessories</h2>
+            <p class="board-type-blurb">Three slots, one per kind: wear a hat, a pair of shades and a backpack all at once — but never two of the same. These stay on this rider, whatever you pick next.</p>
+            <div class="board-grid" id="cs-accessory-grid"></div>
+            <div class="repaint" id="repaint-cs-accessory" hidden></div>
+            <div class="maker-actions">
+              <span class="tag"><b id="cs-accessory-coins">0</b> coins</span>
+              <button id="btn-cs-accessories-save" class="primary" type="button">Save</button>
+              <button id="btn-cs-accessories-back" type="button">Back</button>
+            </div>
+          </div>
+
           <button id="btn-charselect-back" type="button">Back</button>
         </section>
 
