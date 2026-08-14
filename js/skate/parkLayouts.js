@@ -160,6 +160,108 @@ export const PARKS = [
     ]
   ),
 
+  // Flatline: Nova's own arena. A long manual pad down the middle with low
+  // ledges and flatbars flanking it, elevated manual lines up both sides,
+  // a funbox and pyramid on the south plaza, and twin roll-ins framing a
+  // spine transfer at the top of the pad.
+  def(
+    'nova',
+    'Flatline',
+    'The manual palace: pad the long line, ride the elevated decks, transfer the spine.',
+    {
+      seed: 0xf1a7,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#2b3a4a',
+      spawn: { x: 0, y: 0, z: -44, yaw: 0 },
+      patrol: [
+        { x: 0, z: -44 }, { x: 0, z: -26 }, { x: -20, z: -18 }, { x: 24, z: 8 },
+        { x: 0, z: 24 }, { x: -36, z: 38 }, { x: 38, z: 4 },
+      ],
+      logos: [
+        { x: -12, z: -18 }, { x: 12, z: -18 }, { x: -12, z: 0 }, { x: 12, z: 0 },
+        { x: -38, z: 28 }, { x: 38, z: 28 },
+      ],
+    },
+    [
+      // North: twin roll-ins framing a spine transfer, pump across the flat.
+      { type: 'rollin', x: -22, z: 34, ry: 0, w: 12, R: 2.0, H: 1.3, deck: 6, color: '#2a2e36' },
+      { type: 'rollin', x: 22, z: 34, ry: 0, w: 12, R: 2.0, H: 1.3, deck: 6, color: '#2a2e36' },
+      { type: 'spine', x: 0, z: 34, ry: 90, w: 12, R: 2.0, H: 1.3, gap: 4, color: '#4cc9f0' },
+      // The long manual pad, with low grindable ledges down each side.
+      { type: 'slab', x: 0, z: 0, ry: 0, w: 10, d: 44, h: 0.28, color: '#3d444e' },
+      { type: 'ledge', x: -5.8, z: -6, ry: 270, len: 12, w: 1.2, h: 0.28, color: '#4cc9f0' },
+      { type: 'ledge', x: 5.8, z: -6, ry: 90, len: 12, w: 1.2, h: 0.28, color: '#4cc9f0' },
+      { type: 'ledge', x: -5.8, z: 10, ry: 270, len: 12, w: 1.2, h: 0.28, color: '#e76f51' },
+      { type: 'ledge', x: 5.8, z: 10, ry: 90, len: 12, w: 1.2, h: 0.28, color: '#e76f51' },
+      // West elevated manual line: bank up, deck, bank down.
+      { type: 'bank', x: -30, z: -27, ry: 0, w: 14, len: 8, h: 1.2, color: '#e9c46a' },
+      { type: 'slab', x: -30, z: -14, ry: 0, w: 14, d: 18, h: 1.2, color: '#e9c46a' },
+      { type: 'bank', x: -30, z: -1, ry: 180, w: 14, len: 8, h: 1.2, color: '#e9c46a' },
+      // East elevated line, a shorter run.
+      { type: 'bank', x: 30, z: -29, ry: 0, w: 14, len: 8, h: 1.2, color: '#cdb4db' },
+      { type: 'slab', x: 30, z: -20, ry: 0, w: 14, d: 10, h: 1.2, color: '#cdb4db' },
+      { type: 'bank', x: 30, z: -11, ry: 180, w: 14, len: 8, h: 1.2, color: '#cdb4db' },
+      // South plaza: a funbox and pyramids for airs off the manual line.
+      { type: 'funbox', x: 0, z: -34, ry: 0, w: 8, d: 6, h: 0.9, R: 1.5, color: '#f15bb5' },
+      { type: 'pyramid', x: -30, z: 10, ry: 0, w: 5, d: 5, len: 3.5, h: 1.0, color: '#7c8691' },
+      { type: 'pyramid', x: 30, z: 10, ry: 0, w: 5, d: 5, len: 3, h: 1.0, color: '#8992a0' },
+      // South-east roll-in for a speed line back into the pad.
+      { type: 'rollin', x: 34, z: -46, ry: 180, w: 12, R: 2.2, H: 1.4, deck: 7, color: '#2a2e36' },
+      // Flatbars around the flow: the classic flatground grind.
+      { type: 'rail', x: -16, z: 0, ry: 90, len: 10, h: 0.4, color: '#ff2fa0' },
+      { type: 'rail', x: 16, z: 0, ry: 90, len: 10, h: 0.4, color: '#ff2fa0' },
+      { type: 'rail', x: 0, z: 26, ry: 0, len: 10, h: 0.4, color: '#ff2fa0' },
+      { type: 'rail', x: 0, z: -28, ry: 0, len: 10, h: 0.4, color: '#ff2fa0' },
+      // Planters and benches dressing the perimeter.
+      { type: 'planter', x: -44, z: -36, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 44, z: -36, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: -44, z: 36, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 44, z: 36, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'bench', x: -48, z: -8, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 48, z: -8, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: -48, z: 20, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 48, z: 20, ry: 90, len: 3, color: '#6c757d' },
+      // Banners along the east and west fences.
+      { type: 'banner', x: -52, z: 0, ry: 90, w: 6, h: 1.0, color: '#4cc9f0' },
+      { type: 'banner', x: 52, z: 0, ry: 90, w: 6, h: 1.0, color: '#4cc9f0' },
+      // The food-truck corner, north-west.
+      { type: 'foodtruck', x: -48, z: 52, ry: 0, len: 4.5, w: 2.1, color: '#2ec4b6' },
+      { type: 'spectator', x: -44, z: 48, color: '#37506b' },
+      { type: 'spectator', x: -46, z: 50, color: '#c94f3a' },
+      { type: 'spectator', x: -42, z: 51, color: '#8ab17d' },
+      { type: 'bench', x: -46, z: 53, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'trashcan', x: -43, z: 53, r: 0.35, h: 0.95, color: '#3a5a40' },
+      // Trees and bushes: a landscaped green edge around the pad.
+      { type: 'tree', x: -52, z: 56.5, r: 1.3, h: 3.4, color: '#46764a' },
+      { type: 'tree', x: -40, z: 56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 40, z: 56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: 52, z: 56.5, r: 1.2, h: 2.9, color: '#46764a' },
+      { type: 'tree', x: -52, z: -56.5, r: 1.2, h: 3.1, color: '#46764a' },
+      { type: 'tree', x: -40, z: -56.5, r: 1.1, h: 2.8, color: '#46764a' },
+      { type: 'tree', x: 40, z: -56.5, r: 1.3, h: 3.3, color: '#46764a' },
+      { type: 'tree', x: 50, z: -56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -53, z: 22, r: 1.2, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -53, z: 46, r: 1.1, h: 2.9, color: '#46764a' },
+      { type: 'tree', x: 53, z: 12, r: 1.2, h: 3.1, color: '#46764a' },
+      { type: 'tree', x: 53, z: 30, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'bush', x: -46, z: 55.5, r: 0.9 },
+      { type: 'bush', x: -34, z: 55.5, r: 0.8 },
+      { type: 'bush', x: 34, z: 55.5, r: 0.85 },
+      { type: 'bush', x: 46, z: 55.5, r: 0.95 },
+      { type: 'bush', x: -46, z: -55.5, r: 0.85 },
+      { type: 'bush', x: 44, z: -55.5, r: 0.9 },
+      { type: 'bush', x: 48, z: -55.5, r: 0.8 },
+      { type: 'bush', x: -52, z: 30, r: 0.9 },
+      { type: 'bush', x: -52, z: 40, r: 0.85 },
+      { type: 'bush', x: -52, z: 54, r: 0.9 },
+      { type: 'bush', x: 52, z: 18, r: 0.9 },
+      { type: 'bush', x: 52, z: 36, r: 0.85 },
+      { type: 'bush', x: 52, z: 52, r: 0.9 },
+    ]
+  ),
+
   // Metro Plaza: the streets. A stair block with a handrail anchors the centre
   // line, twin ledges and rails grind the west flank, the funbox and pyramid
   // share the east plaza, and a pair of roll-ins frames a spine transfer at the
@@ -216,6 +318,91 @@ export const PARKS = [
     ]
   ),
 
+  // Thunder Basin: Bolt's pool yard. Twin pools at the centre with a spine
+  // between them, a deep vert ramp on the west flank and a mini on the east,
+  // quarterpipes on the walls, and four corner bowls around two big roll-ins.
+  def(
+    'bolt',
+    'Thunder Basin',
+    'Pools, spines and a deep vert wall — the basin Bolt rides.',
+    {
+      seed: 0xb011,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#1d3557',
+      spawn: { x: 0, y: 0, z: 38, yaw: 0 },
+      patrol: [
+        { x: 0, z: 38 }, { x: 0, z: -10 }, { x: -32, z: -12 }, { x: -32, z: 0 },
+        { x: 0, z: 10 }, { x: 32, z: 0 }, { x: 32, z: -12 },
+      ],
+      logos: [
+        { x: -14, z: -26 }, { x: 14, z: -26 }, { x: -14, z: 26 }, { x: 14, z: 26 },
+        { x: -26, z: 30 }, { x: 26, z: 30 },
+      ],
+    },
+    [
+      // The deep end: a full vert ramp down the west flank.
+      { type: 'vert', x: -22, z: 0, ry: 90, w: 12, R: 3.2, H: 2.8, flat: 5, deck: 2, color: '#264653' },
+      // A mini ramp balancing it on the east.
+      { type: 'mini', x: 22, z: 0, ry: 90, w: 12, R: 1.8, H: 1.25, flat: 4, deck: 1.2, color: '#e76f51' },
+      // Twin pools flanking a spine transfer down the centre line.
+      { type: 'bowl', x: 0, z: -16, R: 2.6, H: 1.5, rim: 1.3, color: '#2a9d8f' },
+      { type: 'bowl', x: 0, z: 16, R: 2.6, H: 1.5, rim: 1.3, color: '#2a9d8f' },
+      { type: 'spine', x: 0, z: 0, ry: 0, w: 18, R: 2.2, H: 1.5, gap: 4, color: '#8ab17d' },
+      // Short spines north and south of the pools.
+      { type: 'spine', x: 0, z: 24, ry: 0, w: 8, R: 1.8, H: 1.2, gap: 3, color: '#e9c46a' },
+      { type: 'spine', x: 0, z: -24, ry: 0, w: 8, R: 1.8, H: 1.2, gap: 3, color: '#e9c46a' },
+      // Quarterpipes on the east and west walls.
+      { type: 'quarter', x: -40, z: -26, ry: 90, w: 14, R: 2.0, H: 1.3, deck: 1, color: '#f4a261' },
+      { type: 'quarter', x: 40, z: -26, ry: 270, w: 14, R: 2.0, H: 1.3, deck: 1, color: '#f4a261' },
+      { type: 'quarter', x: -40, z: 26, ry: 90, w: 14, R: 2.0, H: 1.3, deck: 1, color: '#f4a261' },
+      { type: 'quarter', x: 40, z: 26, ry: 270, w: 14, R: 2.0, H: 1.3, deck: 1, color: '#f4a261' },
+      // Big roll-ins at the top and bottom of the pad.
+      { type: 'rollin', x: 0, z: 44, ry: 0, w: 20, R: 2.4, H: 1.6, deck: 10, color: '#e9c46a' },
+      { type: 'rollin', x: 0, z: -44, ry: 180, w: 20, R: 2.4, H: 1.6, deck: 10, color: '#e9c46a' },
+      // Corner bowls around the roll-in decks.
+      { type: 'bowl', x: -24, z: 40, R: 2.0, H: 1.2, rim: 1.0, color: '#2a9d8f' },
+      { type: 'bowl', x: 24, z: 40, R: 2.0, H: 1.2, rim: 1.0, color: '#2a9d8f' },
+      { type: 'bowl', x: -24, z: -40, R: 2.0, H: 1.2, rim: 1.0, color: '#2a9d8f' },
+      { type: 'bowl', x: 24, z: -40, R: 2.0, H: 1.2, rim: 1.0, color: '#2a9d8f' },
+      // Floodlights on the corners, benches and planters between the pools.
+      { type: 'floodlight', x: -50, z: 34, h: 4.5, color: '#e8e8e0' },
+      { type: 'floodlight', x: 50, z: 34, h: 4.5, color: '#e8e8e0' },
+      { type: 'floodlight', x: -50, z: -34, h: 4.5, color: '#e8e8e0' },
+      { type: 'floodlight', x: 50, z: -34, h: 4.5, color: '#e8e8e0' },
+      { type: 'bench', x: -46, z: -20, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 46, z: -20, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'bench', x: -46, z: 20, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 46, z: 20, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'planter', x: -50, z: -50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 50, z: -50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: -50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'cone', x: -34, z: 34, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: 34, z: 34, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: -34, z: -34, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: 34, z: -34, h: 0.7, color: '#e8702c' },
+      { type: 'trashcan', x: -46, z: 50, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: 46, z: 50, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: -46, z: -50, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: 46, z: -50, r: 0.35, h: 0.95, color: '#3a5a40' },
+      // Trees and bushes on the edges.
+      { type: 'tree', x: -52, z: 56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: -40, z: 56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 40, z: 56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: 52, z: 56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -52, z: -56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -40, z: -56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: 40, z: -56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 52, z: -56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'bush', x: -46, z: 55.5, r: 0.9 },
+      { type: 'bush', x: 46, z: 55.5, r: 0.85 },
+      { type: 'bush', x: -46, z: -55.5, r: 0.85 },
+      { type: 'bush', x: 46, z: -55.5, r: 0.9 },
+    ]
+  ),
+
   // Vert Rampage: the vert house. A full vert ramp and twin minis at the south,
   // two pools flanking a spine transfer in the middle, quarterpipes on the
   // walls and a long roll-in at the top of the pad.
@@ -264,6 +451,94 @@ export const PARKS = [
       { type: 'bench', x: 50, z: -44, ry: 90, len: 3, color: '#6c757d' },
       { type: 'planter', x: -50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
       { type: 'planter', x: 50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+    ]
+  ),
+
+  // Birdland: Tony Shove's vert house. A big vert ramp at the centre, twin
+  // roll-ins at the north and south for full-pipe speed lines, spine transfers
+  // on the east and west flanks, quarterpipes on the walls and a funbox row
+  // for popping airs in the middle.
+  def(
+    'shove',
+    'Birdland',
+    'Sky-high walls, tall roll-ins and spine transfers — big air for the Birdman.',
+    {
+      seed: 0xb1d0,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#4a4e69',
+      spawn: { x: 0, y: 0, z: -36, yaw: 0 },
+      patrol: [
+        { x: 0, z: -36 }, { x: 0, z: -24 }, { x: -20, z: -8 }, { x: 20, z: -8 },
+        { x: 0, z: 8 }, { x: 0, z: 32 }, { x: 16, z: 32 }, { x: -16, z: 32 },
+      ],
+      logos: [
+        { x: -14, z: -26 }, { x: 14, z: -26 }, { x: -14, z: 26 }, { x: 14, z: 26 },
+        { x: -26, z: 0 }, { x: 26, z: 0 },
+      ],
+    },
+    [
+      // The centrepiece: a full vert ramp, rims running east-west.
+      { type: 'vert', x: 0, z: -10, ry: 0, w: 16, R: 3.6, H: 3.1, flat: 6, deck: 2.5, color: '#264653' },
+      // Spine transfers on the flanks.
+      { type: 'spine', x: -24, z: 14, ry: 90, w: 12, R: 2.0, H: 1.4, gap: 4, color: '#8ab17d' },
+      { type: 'spine', x: 24, z: 14, ry: 90, w: 12, R: 2.0, H: 1.4, gap: 4, color: '#8ab17d' },
+      // Quarterpipes on the four walls.
+      { type: 'quarter', x: -24, z: -28, ry: 90, w: 14, R: 2.2, H: 1.5, deck: 2, color: '#f4a261' },
+      { type: 'quarter', x: 24, z: -28, ry: 270, w: 14, R: 2.2, H: 1.5, deck: 2, color: '#f4a261' },
+      { type: 'quarter', x: -24, z: 28, ry: 90, w: 14, R: 2.2, H: 1.5, deck: 2, color: '#f4a261' },
+      { type: 'quarter', x: 24, z: 28, ry: 270, w: 14, R: 2.2, H: 1.5, deck: 2, color: '#f4a261' },
+      // Tall roll-ins at the top and bottom of the pad.
+      { type: 'rollin', x: 0, z: 40, ry: 0, w: 20, R: 2.6, H: 1.8, deck: 12, color: '#e9c46a' },
+      { type: 'rollin', x: 0, z: -40, ry: 180, w: 20, R: 2.6, H: 1.8, deck: 12, color: '#e9c46a' },
+      // A bowl to pump on the south centre line.
+      { type: 'bowl', x: 0, z: 20, R: 2.2, H: 1.3, rim: 1.1, color: '#2a9d8f' },
+      // Funboxes for popping airs on the way through.
+      { type: 'funbox', x: -32, z: 0, ry: 0, w: 8, d: 6, h: 1.0, R: 1.5, color: '#e76f51' },
+      { type: 'funbox', x: 32, z: 0, ry: 0, w: 8, d: 6, h: 1.0, R: 1.5, color: '#e76f51' },
+      // A stair block on the south-east corner with a handrail.
+      { type: 'bank', x: 38, z: -23, ry: 0, w: 8, len: 8, h: 0.6, color: '#b388eb' },
+      { type: 'slab', x: 38, z: -14, ry: 0, w: 8, d: 10, h: 0.6, color: '#cdb4db' },
+      { type: 'stairs', x: 38, z: -8.125, ry: 180, w: 8, steps: 5, rise: 0.12, run: 0.35, color: '#b388eb' },
+      { type: 'rail', x: 38, z: -8.1, ry: 90, len: 4, h: 0.8, color: '#e5e7eb' },
+      // Ledges flanking the north roll-in.
+      { type: 'ledge', x: -10, z: 36, ry: 0, len: 14, w: 1.0, h: 0.6, color: '#8ab17d' },
+      { type: 'ledge', x: 10, z: 36, ry: 0, len: 14, w: 1.0, h: 0.6, color: '#8ab17d' },
+      // Stadium lights and benches dressing the edges.
+      { type: 'floodlight', x: -50, z: 40, h: 4.5, color: '#e8e8e0' },
+      { type: 'floodlight', x: 50, z: 40, h: 4.5, color: '#e8e8e0' },
+      { type: 'floodlight', x: -50, z: -40, h: 4.5, color: '#e8e8e0' },
+      { type: 'floodlight', x: 50, z: -40, h: 4.5, color: '#e8e8e0' },
+      { type: 'bench', x: -46, z: -20, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 46, z: -20, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'bench', x: -46, z: 20, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 46, z: 20, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'planter', x: -50, z: -50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 50, z: -50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: -50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'cone', x: -34, z: 34, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: 34, z: 34, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: -34, z: -34, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: 34, z: -34, h: 0.7, color: '#e8702c' },
+      { type: 'trashcan', x: -46, z: 50, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: 46, z: 50, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: -46, z: -50, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: 46, z: -50, r: 0.35, h: 0.95, color: '#3a5a40' },
+      // Trees and bushes on the edges.
+      { type: 'tree', x: -52, z: 56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: -40, z: 56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 40, z: 56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: 52, z: 56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -52, z: -56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -40, z: -56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: 40, z: -56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 52, z: -56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'bush', x: -46, z: 55.5, r: 0.9 },
+      { type: 'bush', x: 46, z: 55.5, r: 0.85 },
+      { type: 'bush', x: -46, z: -55.5, r: 0.85 },
+      { type: 'bush', x: 46, z: -55.5, r: 0.9 },
     ]
   ),
 
@@ -326,6 +601,298 @@ export const PARKS = [
       { type: 'rail', x: -20, z: -38, ry: 90, len: 4, h: 0.5, color: '#e5e7eb' },
       { type: 'rail', x: 20, z: 38, ry: 90, len: 4, h: 0.5, color: '#e5e7eb' },
       { type: 'rail', x: -20, z: 38, ry: 90, len: 4, h: 0.5, color: '#e5e7eb' },
+    ]
+  ),
+
+  // Garden Grove: Gnorbert's flatground garden. A row of pyramids and funboxes
+  // down the centre line, twin minis flanking them, a raised pad with banks,
+  // and planters, benches and flower beds everywhere — plenty for a garden gnome.
+  def(
+    'gnorbert',
+    'Garden Grove',
+    'Flat pads and flower beds — a tiny gnome\'s perfect flatground.',
+    {
+      seed: 0x9b37,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#588157',
+      spawn: { x: 0, y: 0, z: -34, yaw: 0 },
+      patrol: [
+        { x: 0, z: -34 }, { x: -16, z: -24 }, { x: 16, z: -24 }, { x: -16, z: 8 },
+        { x: 16, z: 8 }, { x: -12, z: 28 }, { x: 12, z: 28 }, { x: -12, z: 40 },
+      ],
+      logos: [
+        { x: -14, z: -30 }, { x: 14, z: -30 }, { x: -14, z: 8 }, { x: 14, z: 8 },
+        { x: 0, z: 2 }, { x: 0, z: 14 },
+      ],
+    },
+    [
+      // The garden line: a row of pyramids and funboxes down the centre.
+      { type: 'pyramid', x: 0, z: -24, ry: 0, w: 6, d: 6, len: 3.5, h: 1.0, color: '#7c8691' },
+      { type: 'pyramid', x: 0, z: -8, ry: 0, w: 5, d: 5, len: 3, h: 0.9, color: '#737b87' },
+      { type: 'funbox', x: 0, z: 8, ry: 0, w: 8, d: 6, h: 0.9, R: 1.5, color: '#e76f51' },
+      { type: 'funbox', x: 0, z: 18, ry: 0, w: 6, d: 5, h: 0.8, R: 1.4, color: '#f4a261' },
+      // Twin minis flanking the garden.
+      { type: 'mini', x: -18, z: 0, ry: 0, w: 10, R: 1.6, H: 1.1, flat: 3, deck: 1, color: '#2a9d8f' },
+      { type: 'mini', x: 18, z: 0, ry: 0, w: 10, R: 1.6, H: 1.1, flat: 3, deck: 1, color: '#2a9d8f' },
+      // A raised pad with banks up and down at the north of the line.
+      { type: 'bank', x: 0, z: 24, ry: 0, w: 14, len: 6, h: 0.6, color: '#e9c46a' },
+      { type: 'slab', x: 0, z: 30, ry: 0, w: 14, d: 6, h: 0.6, color: '#e9c46a' },
+      { type: 'bank', x: 0, z: 36, ry: 180, w: 14, len: 6, h: 0.6, color: '#e9c46a' },
+      // West stair block: bank up, plateau, stairs down.
+      { type: 'bank', x: -38, z: -24, ry: 0, w: 8, len: 8, h: 0.7, color: '#b388eb' },
+      { type: 'slab', x: -38, z: -14, ry: 0, w: 8, d: 12, h: 0.7, color: '#cdb4db' },
+      { type: 'stairs', x: -38, z: -7.125, ry: 180, w: 8, steps: 5, rise: 0.14, run: 0.35, color: '#b388eb' },
+      { type: 'rail', x: -38, z: -7, ry: 90, len: 4, h: 0.9, color: '#e5e7eb' },
+      // Ledges along the flanks for grinding between the minis.
+      { type: 'ledge', x: -30, z: 0, ry: 90, len: 12, w: 1.0, h: 0.5, color: '#8ab17d' },
+      { type: 'ledge', x: 30, z: 0, ry: 270, len: 12, w: 1.0, h: 0.5, color: '#8ab17d' },
+      // Long flatbars on the east of the garden.
+      { type: 'rail', x: 18, z: 24, ry: 90, len: 16, h: 0.55, color: '#ff2fa0' },
+      { type: 'rail', x: -18, z: 24, ry: 90, len: 16, h: 0.55, color: '#ff2fa0' },
+      // Twin roll-ins at the south for a speed line back in.
+      { type: 'rollin', x: 0, z: -40, ry: 180, w: 16, R: 2.2, H: 1.4, deck: 8, color: '#264653' },
+      { type: 'rollin', x: 0, z: 40, ry: 0, w: 16, R: 2.2, H: 1.4, deck: 8, color: '#264653' },
+      // Planters: a garden's worth of beds down both sides of the line.
+      { type: 'planter', x: -14, z: -38, ry: 0, w: 1.6, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 14, z: -38, ry: 0, w: 1.6, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: -10, z: -14, ry: 0, w: 1.6, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 10, z: -14, ry: 0, w: 1.6, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: -6, z: 14, ry: 0, w: 1.6, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 6, z: 14, ry: 0, w: 1.6, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: -12, z: 34, ry: 0, w: 1.6, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 12, z: 34, ry: 0, w: 1.6, d: 1.6, color: '#b7b7a4' },
+      // A garden bench corner with bushes.
+      { type: 'bench', x: 20, z: 40, ry: 0, len: 3, color: '#6c757d' },
+      { type: 'bush', x: 16, z: 40, r: 0.9 },
+      { type: 'bush', x: 24, z: 40, r: 0.9 },
+      { type: 'bush', x: 20, z: 44, r: 0.85 },
+      { type: 'bush', x: 20, z: 36, r: 0.85 },
+      { type: 'bench', x: -20, z: -32, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 20, z: -32, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'foodtruck', x: -46, z: -46, ry: 90, len: 4.5, w: 2.1, color: '#f4a261' },
+      { type: 'spectator', x: -44, z: -44, color: '#37506b' },
+      { type: 'spectator', x: -42, z: -42, color: '#c94f3a' },
+      { type: 'spectator', x: -46, z: -40, color: '#8ab17d' },
+      { type: 'trashcan', x: -48, z: -44, r: 0.35, h: 0.95, color: '#3a5a40' },
+      // Trees and bushes: a green edge around the whole garden.
+      { type: 'tree', x: -52, z: 56.5, r: 1.3, h: 3.4, color: '#3a5a40' },
+      { type: 'tree', x: -40, z: 56.5, r: 1.1, h: 3.0, color: '#3a5a40' },
+      { type: 'tree', x: 40, z: 56.5, r: 1.2, h: 3.2, color: '#3a5a40' },
+      { type: 'tree', x: 52, z: 56.5, r: 1.2, h: 2.9, color: '#3a5a40' },
+      { type: 'tree', x: -52, z: -56.5, r: 1.2, h: 3.1, color: '#3a5a40' },
+      { type: 'tree', x: -40, z: -56.5, r: 1.1, h: 2.8, color: '#3a5a40' },
+      { type: 'tree', x: 40, z: -56.5, r: 1.3, h: 3.3, color: '#3a5a40' },
+      { type: 'tree', x: 50, z: -56.5, r: 1.1, h: 3.0, color: '#3a5a40' },
+      { type: 'tree', x: -53, z: 22, r: 1.2, h: 3.0, color: '#3a5a40' },
+      { type: 'tree', x: 53, z: 22, r: 1.2, h: 3.0, color: '#3a5a40' },
+      { type: 'bush', x: -46, z: 55.5, r: 0.9 },
+      { type: 'bush', x: -34, z: 55.5, r: 0.8 },
+      { type: 'bush', x: 34, z: 55.5, r: 0.85 },
+      { type: 'bush', x: 46, z: 55.5, r: 0.95 },
+      { type: 'bush', x: -46, z: -55.5, r: 0.85 },
+      { type: 'bush', x: 44, z: -55.5, r: 0.9 },
+      { type: 'bush', x: 48, z: -55.5, r: 0.8 },
+      { type: 'bush', x: -52, z: 30, r: 0.9 },
+      { type: 'bush', x: -52, z: 40, r: 0.85 },
+      { type: 'bush', x: -52, z: 54, r: 0.9 },
+      { type: 'bush', x: 52, z: 30, r: 0.9 },
+      { type: 'bush', x: 52, z: 40, r: 0.85 },
+      { type: 'bush', x: 52, z: 54, r: 0.9 },
+    ]
+  ),
+
+  // Jungle Gym: Bananas' playground. Twin minis and a pool down the centre,
+  // pyramids and funboxes around them, hoops over the flow, roll-ins at the
+  // ends and a jungle of trees around the edge.
+  def(
+    'bananas',
+    'Jungle Gym',
+    'Minis, pyramids, hoops and pools — a playground for the ape of air.',
+    {
+      seed: 0xa91e,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#386641',
+      spawn: { x: 0, y: 0, z: -34, yaw: 0 },
+      patrol: [
+        { x: 0, z: -34 }, { x: -14, z: -34 }, { x: 14, z: -34 }, { x: 0, z: -6 },
+        { x: 0, z: 6 }, { x: -14, z: 34 }, { x: 14, z: 34 },
+      ],
+      logos: [
+        { x: -14, z: -28 }, { x: 14, z: -28 }, { x: -14, z: 28 }, { x: 14, z: 28 },
+        { x: 0, z: -12 }, { x: 0, z: 12 },
+      ],
+    },
+    [
+      // The playground line: twin minis, a pool and an a-frame each side.
+      { type: 'mini', x: 0, z: -20, ry: 0, w: 12, R: 1.8, H: 1.25, flat: 4, deck: 1.2, color: '#e76f51' },
+      { type: 'mini', x: 0, z: 20, ry: 0, w: 12, R: 1.8, H: 1.25, flat: 4, deck: 1.2, color: '#e76f51' },
+      { type: 'bowl', x: 0, z: 0, R: 2.4, H: 1.4, rim: 1.2, color: '#2a9d8f' },
+      { type: 'aframe', x: -14, z: 0, ry: 90, w: 6, d: 2, len: 3, h: 1.0, color: '#f4a261' },
+      { type: 'aframe', x: 14, z: 0, ry: 90, w: 6, d: 2, len: 3, h: 1.0, color: '#f4a261' },
+      // Pyramids and funboxes in the corners.
+      { type: 'funbox', x: -24, z: 0, ry: 0, w: 8, d: 6, h: 1.1, R: 1.5, color: '#e76f51' },
+      { type: 'funbox', x: 24, z: 0, ry: 0, w: 8, d: 6, h: 1.1, R: 1.5, color: '#e76f51' },
+      { type: 'pyramid', x: -24, z: 20, ry: 0, w: 5, d: 5, len: 3.5, h: 1.1, color: '#7c8691' },
+      { type: 'pyramid', x: 24, z: 20, ry: 0, w: 5, d: 5, len: 3.5, h: 1.1, color: '#7c8691' },
+      { type: 'pyramid', x: -24, z: -20, ry: 0, w: 5, d: 5, len: 3.5, h: 1.1, color: '#7c8691' },
+      { type: 'pyramid', x: 24, z: -20, ry: 0, w: 5, d: 5, len: 3.5, h: 1.1, color: '#7c8691' },
+      // Spine transfers at the north and south of the pool.
+      { type: 'spine', x: -36, z: 0, ry: 90, w: 10, R: 1.8, H: 1.2, gap: 3, color: '#8ab17d' },
+      { type: 'spine', x: 36, z: 0, ry: 90, w: 10, R: 1.8, H: 1.2, gap: 3, color: '#8ab17d' },
+      // Quarterpipes on the walls.
+      { type: 'quarter', x: -40, z: -30, ry: 90, w: 12, R: 2.0, H: 1.3, deck: 1, color: '#f4a261' },
+      { type: 'quarter', x: 40, z: -30, ry: 270, w: 12, R: 2.0, H: 1.3, deck: 1, color: '#f4a261' },
+      { type: 'quarter', x: -40, z: 30, ry: 90, w: 12, R: 2.0, H: 1.3, deck: 1, color: '#f4a261' },
+      { type: 'quarter', x: 40, z: 30, ry: 270, w: 12, R: 2.0, H: 1.3, deck: 1, color: '#f4a261' },
+      // A raised pad with stairs at the north, and roll-ins at both ends.
+      { type: 'bank', x: 0, z: 28, ry: 0, w: 8, len: 6, h: 0.6, color: '#b388eb' },
+      { type: 'slab', x: 0, z: 34, ry: 0, w: 8, d: 6, h: 0.6, color: '#cdb4db' },
+      { type: 'stairs', x: 0, z: 37.875, ry: 180, w: 8, steps: 5, rise: 0.12, run: 0.35, color: '#b388eb' },
+      { type: 'rail', x: 0, z: 37.9, ry: 90, len: 4, h: 0.8, color: '#e5e7eb' },
+      { type: 'rollin', x: 0, z: 40, ry: 0, w: 16, R: 2.4, H: 1.6, deck: 10, color: '#264653' },
+      { type: 'rollin', x: 0, z: -40, ry: 180, w: 16, R: 2.4, H: 1.6, deck: 10, color: '#264653' },
+      // Hoops to jump through over the flat between the minis.
+      { type: 'hoop', x: 0, y: 2.4, z: -7, ry: 0, r: 2.0, tube: 0.12, color: '#e0552f' },
+      { type: 'hoop', x: 0, y: 2.4, z: 7, ry: 0, r: 2.0, tube: 0.12, color: '#e0552f' },
+      // Playground decor: benches and lamps.
+      { type: 'bench', x: -20, z: 36, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 20, z: 36, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: -20, z: -36, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 20, z: -36, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'lamp', x: -50, z: 30, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: 50, z: 30, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: -50, z: -30, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: 50, z: -30, h: 5, color: '#8b9099' },
+      { type: 'planter', x: -50, z: -50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 50, z: -50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: -50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      // A jungle around the whole pad.
+      { type: 'tree', x: -52, z: 56.5, r: 1.3, h: 3.4, color: '#3a5a40' },
+      { type: 'tree', x: -40, z: 56.5, r: 1.1, h: 3.0, color: '#3a5a40' },
+      { type: 'tree', x: 40, z: 56.5, r: 1.2, h: 3.2, color: '#3a5a40' },
+      { type: 'tree', x: 52, z: 56.5, r: 1.2, h: 2.9, color: '#3a5a40' },
+      { type: 'tree', x: -52, z: -56.5, r: 1.2, h: 3.1, color: '#3a5a40' },
+      { type: 'tree', x: -40, z: -56.5, r: 1.1, h: 2.8, color: '#3a5a40' },
+      { type: 'tree', x: 40, z: -56.5, r: 1.3, h: 3.3, color: '#3a5a40' },
+      { type: 'tree', x: 50, z: -56.5, r: 1.1, h: 3.0, color: '#3a5a40' },
+      { type: 'tree', x: -53, z: 22, r: 1.2, h: 3.0, color: '#3a5a40' },
+      { type: 'tree', x: -53, z: 46, r: 1.1, h: 2.9, color: '#3a5a40' },
+      { type: 'tree', x: 53, z: 22, r: 1.2, h: 3.1, color: '#3a5a40' },
+      { type: 'tree', x: 53, z: 46, r: 1.1, h: 3.0, color: '#3a5a40' },
+      { type: 'bush', x: -46, z: 55.5, r: 0.9 },
+      { type: 'bush', x: -34, z: 55.5, r: 0.8 },
+      { type: 'bush', x: 34, z: 55.5, r: 0.85 },
+      { type: 'bush', x: 46, z: 55.5, r: 0.95 },
+      { type: 'bush', x: -46, z: -55.5, r: 0.85 },
+      { type: 'bush', x: 44, z: -55.5, r: 0.9 },
+      { type: 'bush', x: 48, z: -55.5, r: 0.8 },
+      { type: 'bush', x: -52, z: 30, r: 0.9 },
+      { type: 'bush', x: -52, z: 40, r: 0.85 },
+      { type: 'bush', x: -52, z: 54, r: 0.9 },
+      { type: 'bush', x: 52, z: 30, r: 0.9 },
+      { type: 'bush', x: 52, z: 40, r: 0.85 },
+      { type: 'bush', x: 52, z: 54, r: 0.9 },
+    ]
+  ),
+
+  // The Aviary: Raven's steel rail gauntlet. A central stair block with a long
+  // handrail, twin ledge lines, long rails down both flanks, a pyramid and a
+  // raised deck with grindable edges — a finale made of steel.
+  def(
+    'raven',
+    'The Aviary',
+    'A steel rail gauntlet — long bars, ledges and stairs for the finale.',
+    {
+      seed: 0x7ea8,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#3a3f47',
+      spawn: { x: 0, y: 0, z: -48, yaw: 0 },
+      patrol: [
+        { x: 0, z: -48 }, { x: -24, z: -20 }, { x: 24, z: -20 }, { x: -24, z: 20 },
+        { x: 24, z: 20 }, { x: 0, z: 48 },
+      ],
+      logos: [
+        { x: -14, z: -26 }, { x: 14, z: -26 }, { x: -30, z: 0 }, { x: 30, z: 0 },
+        { x: -30, z: 30 }, { x: 30, z: 30 },
+      ],
+    },
+    [
+      // The centre stair block: bank up, plateau, stairs down, long handrail.
+      { type: 'bank', x: 0, z: -20, ry: 0, w: 14, len: 8, h: 1.0, color: '#b388eb' },
+      { type: 'slab', x: 0, z: -10, ry: 0, w: 14, d: 12, h: 1.0, color: '#cdb4db' },
+      { type: 'stairs', x: 0, z: -3.125, ry: 180, w: 14, steps: 5, rise: 0.2, run: 0.35, color: '#b388eb' },
+      { type: 'rail', x: 0, z: -3.1, ry: 90, len: 4, h: 1.1, color: '#e5e7eb' },
+      // The second stair block: bank up from the south, stairs down the north.
+      { type: 'bank', x: 0, z: 3, ry: 0, w: 14, len: 8, h: 1.0, color: '#b388eb' },
+      { type: 'slab', x: 0, z: 12, ry: 0, w: 14, d: 10, h: 1.0, color: '#cdb4db' },
+      { type: 'stairs', x: 0, z: 17.875, ry: 180, w: 14, steps: 5, rise: 0.2, run: 0.35, color: '#b388eb' },
+      { type: 'rail', x: 0, z: 17.9, ry: 90, len: 4, h: 1.1, color: '#e5e7eb' },
+      // Twin ledge lines grinding the corridor.
+      { type: 'ledge', x: -9.5, z: 0, ry: 90, len: 24, w: 1.0, h: 0.8, color: '#8ab17d' },
+      { type: 'ledge', x: 9.5, z: 0, ry: 270, len: 24, w: 1.0, h: 0.8, color: '#8ab17d' },
+      // Long rails down both flanks of the yard.
+      { type: 'rail', x: -20, z: 0, ry: 90, len: 48, h: 0.7, color: '#d7dce2' },
+      { type: 'rail', x: 20, z: 0, ry: 90, len: 48, h: 0.7, color: '#d7dce2' },
+      // A pyramid on the north line.
+      { type: 'pyramid', x: 0, z: 28, ry: 0, w: 8, d: 8, len: 4, h: 1.4, color: '#8992a0' },
+      // Raised decks with grindable ledges, west and east.
+      { type: 'bank', x: -32, z: 6, ry: 0, w: 16, len: 8, h: 1.2, color: '#e9c46a' },
+      { type: 'slab', x: -32, z: 14, ry: 0, w: 16, d: 8, h: 1.2, color: '#e9c46a' },
+      { type: 'ledge', x: -32, z: 10, ry: 0, len: 16, w: 1.0, h: 1.2, color: '#3a86ff' },
+      { type: 'stairs', x: -32, z: 18.7, ry: 180, w: 16, steps: 4, rise: 0.3, run: 0.35, color: '#b388eb' },
+      { type: 'bank', x: 32, z: 6, ry: 0, w: 16, len: 8, h: 1.2, color: '#e9c46a' },
+      { type: 'slab', x: 32, z: 14, ry: 0, w: 16, d: 8, h: 1.2, color: '#e9c46a' },
+      { type: 'ledge', x: 32, z: 10, ry: 0, len: 16, w: 1.0, h: 1.2, color: '#3a86ff' },
+      { type: 'stairs', x: 32, z: 18.7, ry: 180, w: 16, steps: 4, rise: 0.3, run: 0.35, color: '#b388eb' },
+      // Rail garden at the south of the yard.
+      { type: 'rail', x: 0, z: -40, ry: 90, len: 8, h: 0.5, color: '#e5e7eb' },
+      { type: 'rail', x: -14, z: -34, ry: 0, len: 8, h: 0.5, color: '#e5e7eb' },
+      { type: 'rail', x: 14, z: -34, ry: 0, len: 8, h: 0.5, color: '#e5e7eb' },
+      { type: 'rail', x: 0, z: -34, ry: 0, len: 6, h: 0.6, color: '#f4a261' },
+      // Rail garden at the north.
+      { type: 'rail', x: 0, z: 40, ry: 90, len: 8, h: 0.5, color: '#e5e7eb' },
+      { type: 'rail', x: -14, z: 34, ry: 0, len: 8, h: 0.5, color: '#e5e7eb' },
+      { type: 'rail', x: 14, z: 34, ry: 0, len: 8, h: 0.5, color: '#e5e7eb' },
+      // Yard decor: lamps, benches, cones and a banner.
+      { type: 'lamp', x: -44, z: -20, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: 44, z: -20, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: -44, z: 20, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: 44, z: 20, h: 5, color: '#8b9099' },
+      { type: 'bench', x: -44, z: -44, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 44, z: -44, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: -44, z: 44, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 44, z: 44, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'banner', x: 0, z: 50, ry: 0, w: 8, h: 1.2, color: '#e0552f' },
+      { type: 'cone', x: -30, z: -40, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: 30, z: -40, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: -30, z: 40, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: 30, z: 40, h: 0.7, color: '#e8702c' },
+      { type: 'dumpster', x: -50, z: -6, ry: 0, w: 2.4, d: 1.3, h: 1.2, color: '#37506b' },
+      { type: 'dumpster', x: 50, z: -6, ry: 0, w: 2.4, d: 1.3, h: 1.2, color: '#37506b' },
+      { type: 'trashcan', x: -50, z: 30, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: 50, z: 30, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: -50, z: -30, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: 50, z: -30, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'graffiti', x: -50, z: 12, ry: 90, w: 2.4, h: 1.2, color: '#ff2fa0' },
+      { type: 'graffiti', x: 50, z: 12, ry: 90, w: 2.4, h: 1.2, color: '#ff2fa0' },
+      { type: 'graffiti', x: -50, z: -12, ry: 90, w: 2.4, h: 1.2, color: '#ff2fa0' },
+      { type: 'graffiti', x: 50, z: -12, ry: 90, w: 2.4, h: 1.2, color: '#ff2fa0' },
+      // Trees along the far edges only — the yard stays open.
+      { type: 'tree', x: -52, z: 56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: 52, z: 56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -52, z: -56.5, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 52, z: -56.5, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'bush', x: -46, z: 55.5, r: 0.85 },
+      { type: 'bush', x: 46, z: 55.5, r: 0.9 },
+      { type: 'bush', x: -46, z: -55.5, r: 0.9 },
+      { type: 'bush', x: 46, z: -55.5, r: 0.85 },
     ]
   ),
 ];
