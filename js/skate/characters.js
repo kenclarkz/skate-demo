@@ -1,4 +1,4 @@
-// Who you are, as opposed to what you are wearing: eight riders, each with
+// Who you are, as opposed to what you are wearing: ten riders, each with
 // their own skin, hair, headwear and kit.
 //
 // Everything that distinguishes them lives above the collar or in a colour,
@@ -160,6 +160,44 @@ export const CHARACTERS = [
       band: 0xc9a04e,
     },
   },
+  {
+    id: 'bananas',
+    name: 'Bananas',
+    blurb: 'A monkey costume: ears out to the sides, and no fear of heights.',
+    style: { head: 'monkey', sleeves: 'long' },
+    palette: {
+      ...PALETTE,
+      skin: 0xd8a878,
+      hair: 0x7a4a24,
+      cap: 0x5e371a,
+      shirt: 0x8a5a2a,
+      sleeve: 0x6b4420,
+      pants: 0x4a3520,
+      pantsDark: 0x3a2a18,
+      shoe: 0x2b2b30,
+      sole: 0xc9b49a,
+      band: 0x3a2512,
+    },
+  },
+  {
+    id: 'raven',
+    name: 'Raven',
+    blurb: 'A bird-man costume: crest up, beak out, glide over every rail.',
+    style: { head: 'birdman', sleeves: 'short' },
+    palette: {
+      ...PALETTE,
+      skin: 0xf0c060,
+      hair: 0xc9a04e,
+      cap: 0x2f8f86,
+      shirt: 0x2f8f86,
+      sleeve: 0x24706a,
+      pants: 0x1f4a46,
+      pantsDark: 0x163a36,
+      shoe: 0xc9573f,
+      sole: 0xe8e6df,
+      band: 0xd97b1f,
+    },
+  },
 ];
 
 export const byId = Object.fromEntries(CHARACTERS.map((c) => [c.id, c]));
@@ -169,8 +207,8 @@ export const DEFAULT_CHARACTER_ID = CHARACTERS[0].id;
  * The palette the rig is actually built from: the character, with the equipped
  * shirt and pants painted over the top, then whatever the bought accessories
  * re-colour. An outfit with no `shirt` of its own ("Original") leaves the
- * character in their own clothes, which is the only way eight riders with
- * eight different kits can share one shirt rack without all ending up in the
+ * character in their own clothes, which is the only way ten riders with
+ * ten different kits can share one shirt rack without all ending up in the
  * same off-white tee. Likewise an accessory with no `hat`/`shades`/`pack`
  * ("Original") changes nothing at all.
  *

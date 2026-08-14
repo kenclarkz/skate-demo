@@ -282,6 +282,29 @@ function headParts(p, style) {
     parts.push(box(p.cap, 0.12, 0.3, 0.12, 0, 0.27, 0));
     parts.push(box(p.cap, 0.13, 0.04, 0.13, 0, 0.43, 0));
     parts.push(box(p.band, 0.125, 0.05, 0.125, 0, 0.22, 0));
+  } else if (s === 'monkey') {
+    // A monkey costume: fur over the whole crown, big round ears set wide of
+    // the skull — the one bit that reads from the chase camera — and a little
+    // crest of fur up the middle of the scalp.
+    parts.push(box(p.hair, 0.185, 0.075, 0.205, 0, 0.09, -0.004));   // the fur cap
+    parts.push(box(p.hair, 0.028, 0.08, 0.05, 0.078, 0.15, 0.01));   // crest
+    parts.push(box(p.hair, 0.028, 0.08, 0.05, -0.078, 0.15, 0.01));
+    parts.push(box(p.hair, 0.075, 0.05, 0.03, 0, 0.155, 0.012));     // crest middle
+    parts.push(box(p.skin, 0.062, 0.062, 0.05, 0.105, 0.04, 0.005)); // ears
+    parts.push(box(p.skin, 0.062, 0.062, 0.05, -0.105, 0.04, 0.005));
+    parts.push(box(p.cap, 0.04, 0.04, 0.035, 0.105, 0.04, 0.005));   // inner ear
+    parts.push(box(p.cap, 0.04, 0.04, 0.035, -0.105, 0.04, 0.005));
+  } else if (s === 'birdman') {
+    // A bird-man costume: a domed head over the crown, feather spikes up the
+    // top (the bit the chase camera actually sees), and a beak out over the
+    // face. The base head stays skin so the mask reads as worn rather than as
+    // a bird made of one block.
+    parts.push(box(p.hair, 0.175, 0.06, 0.195, 0, 0.08, -0.004));    // under-crest
+    parts.push(box(p.cap, 0.19, 0.12, 0.205, 0, 0.105, 0));          // the dome
+    parts.push(box(p.band, 0.028, 0.05, 0.05, 0.055, 0.185, -0.01)); // crest spikes
+    parts.push(box(p.band, 0.028, 0.05, 0.05, -0.055, 0.185, -0.01));
+    parts.push(box(p.band, 0.03, 0.06, 0.05, 0, 0.195, -0.01));
+    parts.push(box(p.band, 0.06, 0.045, 0.09, 0, 0.005, 0.115));     // the beak
   } else {
     // 'cap' — the original: a slab of hair, a crown, and a peak.
     parts.push(box(p.hair, 0.17, 0.06, 0.19, 0, 0.08, -0.004));
