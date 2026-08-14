@@ -6,7 +6,7 @@
 //
 // To ship an update: bump VERSION. That is the entire release process.
 
-const VERSION = 'v28';
+const VERSION = 'v29';
 const CACHE = `skate-${VERSION}`;
 
 // All relative — this worker's scope is the repo's own Pages root.
@@ -74,8 +74,15 @@ const ASSETS = [
 // with it. They still end up cached, just through their own best-effort adds.
 const MUSIC = [
   'audio/theme.mp3',
-  'audio/Rnb High Hats, Hip Hop___  (Synth).mp3',
-  'audio/Rnb High Hats, Hip Hop___  (Synth) (1).mp3',
+  'audio/kickflip-kids.mp3',
+  'audio/nollie-nights.mp3',
+  'audio/curb-ritual.mp3',
+  'audio/powerslide.mp3',
+  'audio/manual-over.mp3',
+  'audio/dogtown.mp3',
+  'audio/wallride.mp3',
+  'audio/dark-slide.mp3',
+  'audio/bowl-season.mp3',
 ];
 
 // Resolved once so the fetch handler can compare pathnames cheaply.

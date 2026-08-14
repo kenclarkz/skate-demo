@@ -4740,8 +4740,15 @@ section('The loop and the page');
   ok(sw.includes('index.html') && sw.includes('css/skate.css'), 'and so are the page and its stylesheet');
   const musicFiles = [
     'audio/theme.mp3',
-    'audio/Rnb High Hats, Hip Hop___  (Synth).mp3',
-    'audio/Rnb High Hats, Hip Hop___  (Synth) (1).mp3',
+    'audio/kickflip-kids.mp3',
+    'audio/nollie-nights.mp3',
+    'audio/curb-ritual.mp3',
+    'audio/powerslide.mp3',
+    'audio/manual-over.mp3',
+    'audio/dogtown.mp3',
+    'audio/wallride.mp3',
+    'audio/dark-slide.mp3',
+    'audio/bowl-season.mp3',
   ];
   ok(
     musicFiles.every((f) => sw.includes(f) && existsSync(join(ROOT, f))),

@@ -40,9 +40,16 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 // about the files behind them. The order here is the order they play in, and
 // the loop wraps around the list.
 const MUSIC = [
-  { url: 'audio/theme.mp3', id: 'theme', name: 'The park’s own speakers', artists: ['Skate FM'] },
-  { url: 'audio/Rnb High Hats, Hip Hop___  (Synth).mp3', id: 'rnb-high-hats', name: 'Rnb High Hats, Hip Hop___  (Synth)', artists: ['Skate FM'] },
-  { url: 'audio/Rnb High Hats, Hip Hop___  (Synth) (1).mp3', id: 'rnb-high-hats-2', name: 'Rnb High Hats, Hip Hop___  (Synth) (1)', artists: ['Skate FM'] },
+  { url: 'audio/theme.mp3', id: 'theme', name: 'First Push', artists: ['Skate FM'] },
+  { url: 'audio/kickflip-kids.mp3', id: 'kickflip-kids', name: 'Kickflip Kids', artists: ['Skate FM'] },
+  { url: 'audio/nollie-nights.mp3', id: 'nollie-nights', name: 'Nollie Nights', artists: ['Skate FM'] },
+  { url: 'audio/curb-ritual.mp3', id: 'curb-ritual', name: 'Curb Ritual', artists: ['Skate FM'] },
+  { url: 'audio/powerslide.mp3', id: 'powerslide', name: 'Powerslide', artists: ['Skate FM'] },
+  { url: 'audio/manual-over.mp3', id: 'manual-over', name: 'Manual Over', artists: ['Skate FM'] },
+  { url: 'audio/dogtown.mp3', id: 'dogtown', name: 'Dogtown', artists: ['Skate FM'] },
+  { url: 'audio/wallride.mp3', id: 'wallride', name: 'Wallride', artists: ['Skate FM'] },
+  { url: 'audio/dark-slide.mp3', id: 'dark-slide', name: 'Dark Slide', artists: ['Skate FM'] },
+  { url: 'audio/bowl-season.mp3', id: 'bowl-season', name: 'Bowl Season', artists: ['Skate FM'] },
 ];
 
 export class Audio {
