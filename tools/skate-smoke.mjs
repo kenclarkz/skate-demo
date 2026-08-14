@@ -1471,14 +1471,14 @@ section('Parks');
     const g = window.__skate;
     return { count: g.parks.length, ids: g.parks.map((p) => p.id), current: g.park.id };
   });
-  ok(info.count === 1, `there is one built-in park (${info.count})`);
+  ok(info.count === 3, `there are three built-in parks (${info.count})`);
   ok(new Set(info.ids).size === info.count, 'each with a distinct id');
   ok(info.current === 'home', 'and the game boots into Home Park');
 
   // Every map needs a rideable spawn, a patrol loop the AI can actually
-  // follow, and six logos — checked by actually loading each of the six in
-  // turn, since `parks` is the raw list of definitions and only the live
-  // `park` — the one switchPark just built — has a height field to query.
+  // follow, and six logos — checked by actually loading each park in turn,
+  // since `parks` is the raw list of definitions and only the live `park` —
+  // the one switchPark just built — has a height field to query.
   const shapes = await run(() =>
     window.__skate.parks.map((def) => {
       const p = window.__skate.switchPark(def.id);
@@ -1528,12 +1528,143 @@ section('Parks');
 }
 
 // --------------------------------------------------------------------------
-section('Park boundary: nowhere to fall off the edge of the world');
+section('Park progression');
+{
+  // Progression starts fresh: only the first built-in park is open, and no
+  // park has a recorded best yet.
+  const fresh = await run(() => ({
+    unlocked: window.__skate.save.parksUnlocked,
+    best: window.__skate.save.parkBestOf('home'),
+    ids: window.__skate.parks.map((p) => p.id),
+  }));
+  ok(JSON.stringify(fresh.unlocked) === JSON.stringify(['home']), `only Home Park starts unlocked (${fresh.unlocked.join(', ')})`);
+  ok(fresh.best === 0, 'with no per-park best recorded yet');
+
+  // A save pointing at a locked park must boot into the first unlocked one,
+  // not straight past the ladder.
+  await run(() => window.__skate.save.setPark('plaza'));
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => !!window.__skate, null, { timeout: 20000 });
+  await run(() => {
+    window.__skate.start();
+    window.__skate.freeze();
+  });
+  const boot = await run(() => ({ id: window.__skate.park.id, unlocked: window.__skate.save.parksUnlocked.slice() }));
+  ok(boot.id === 'home', `a saved pick of a locked park boots into Home Park instead (booted into ${boot.id})`);
+  ok(JSON.stringify(boot.unlocked) === JSON.stringify(['home']), 'and it does not silently unlock anything');
+
+  // The picker: Home Park is a button with its best, the other two are inert
+  // locked rows spelling out what they need and how far along it is.
+  const cards = await run(() => {
+    const g = window.__skate;
+    g.hud.renderParks(g.parks, g.park.id, g.save);
+    return [...g.hud.parkGrid.querySelectorAll('[data-park]')].map((c) => ({
+      id: c.dataset.park,
+      locked: c.classList.contains('locked'),
+      button: c.tagName === 'BUTTON',
+      text: c.textContent,
+    }));
+  });
+  const homeCard = cards.find((c) => c.id === 'home');
+  const plazaCard = cards.find((c) => c.id === 'plaza');
+  const vertCard = cards.find((c) => c.id === 'vert');
+  ok(!!homeCard && !homeCard.locked && homeCard.button, 'Home Park renders as a selectable button');
+  ok(!!plazaCard && plazaCard.locked && !plazaCard.button, 'Metro Plaza renders as a locked, non-clickable card');
+  ok(!!vertCard && vertCard.locked, 'and Vert Rampage is locked behind it');
+  ok(/1,000,000/.test(plazaCard.text) && /Home Park/.test(plazaCard.text), 'the locked card names the score and the park to beat it on');
+  ok(/0 \/ 1,000,000/.test(plazaCard.text), 'with the progress counted out as best-on-previous over the bar');
+
+  // Recording below the bar banks a park best but unlocks nothing.
+  const below = await run(() => {
+    const g = window.__skate;
+    const r = g.save.recordParkScore('home', 750000);
+    return { best: g.save.parkBestOf('home'), unlocked: g.save.parksUnlocked.slice(), unlockedId: r.unlockedId };
+  });
+  ok(below.best === 750000 && below.unlockedId === null, 'a score below the bar records the park best and unlocks nothing');
+  ok(JSON.stringify(below.unlocked) === JSON.stringify(['home']), 'and Metro Plaza stays locked');
+
+  // The locked card's progress bar tracks that best against the bar.
+  const progress = await run(() => {
+    const g = window.__skate;
+    g.hud.renderParks(g.parks, g.park.id, g.save);
+    const card = [...g.hud.parkGrid.querySelectorAll('[data-park]')].find((c) => c.dataset.park === 'plaza');
+    return { text: card.textContent, width: card.querySelector('.park-progress i')?.style.width, note: card.querySelector('.park-progress-note')?.textContent };
+  });
+  ok(progress.width === '75%', `the locked card fills its progress bar to match (${progress.width})`);
+  ok(progress.note.includes('750,000') && progress.note.includes('1,000,000'), 'and the note reads best-on-previous / required');
+
+  // The guard: selecting a locked park through the real picker callback does
+  // not switch the live map.
+  const guarded = await run(() => {
+    const g = window.__skate;
+    const before = g.park.id;
+    g.hud.on.selectPark('vert');
+    return { before, after: g.park.id };
+  });
+  ok(guarded.before === 'home' && guarded.after === 'home', 'selecting a locked park never loads it');
+
+  // The real banking path: ride out a seeded combo past the bar on Home Park.
+  // The combo event flows through the same handleEvents the player drives, so
+  // recordParkScore and the unlock callout run exactly as they do in play.
+  const banked = await run(() => {
+    const g = window.__skate;
+    g.place(-14, 6, 0, 7);
+    g.ride.combo.live = true;
+    g.ride.combo.points = 2000000;
+    g.ride.combo.names = ['Kickflip'];
+    g.hold(2.2);
+    const callout = document.getElementById('callout');
+    return {
+      unlocked: g.save.parksUnlocked.slice(),
+      best: g.save.parkBestOf('home'),
+      callout: callout.textContent,
+      kind: callout.className,
+      hidden: callout.hidden,
+    };
+  });
+  ok(
+    banked.unlocked.includes('plaza') && !banked.unlocked.includes('vert'),
+    'banking 2,000,000 on Home unlocks Metro Plaza but not Vert Rampage'
+  );
+  ok(banked.best === 2000000, 'and Home Park records the new best');
+  ok(/NEW PARK UNLOCKED/.test(banked.callout), `and the callout announces it (${banked.callout})`);
+  ok(banked.kind.includes('unlock'), 'wearing the unlock callout style');
+  ok(!banked.hidden, 'which stays visible long enough to read');
+
+  // Now that Metro Plaza is open, a score on it unlocks the next park.
+  const chain = await run(() => {
+    const g = window.__skate;
+    g.switchPark('plaza');
+    const r = g.save.recordParkScore('plaza', 1000000);
+    return { unlocked: g.save.parksUnlocked.slice(), unlockedId: r.unlockedId, current: g.park.id };
+  });
+  ok(chain.current === 'plaza' && chain.unlockedId === 'vert', 'a score of 1,000,000 on Metro Plaza unlocks Vert Rampage');
+  ok(JSON.stringify(chain.unlocked) === JSON.stringify(['home', 'plaza', 'vert']), 'and the whole chain is open');
+
+  // The unlocks and per-park bests survive a reload, straight from storage.
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => !!window.__skate, null, { timeout: 20000 });
+  await run(() => {
+    window.__skate.start();
+    window.__skate.freeze();
+  });
+  const persisted = await run(() => ({
+    unlocked: window.__skate.save.parksUnlocked,
+    home: window.__skate.save.parkBestOf('home'),
+    plaza: window.__skate.save.parkBestOf('plaza'),
+    boot: window.__skate.park.id,
+  }));
+  ok(JSON.stringify(persisted.unlocked) === JSON.stringify(['home', 'plaza', 'vert']), 'unlocks persist across a reload');
+  ok(persisted.home === 2000000 && persisted.plaza === 1000000, 'and so do the per-park bests');
+  ok(persisted.boot === 'plaza', 'and the game boots into the saved, now-unlocked park');
+
+  await run(() => window.__skate.switchPark('home'));
+}
 {
   // Nothing is sampled past the dirt around each pad, so before rideBoundZ
   // existed, riding far enough off the edge would fall forever, chasing
   // ground that was never there. The bound scales with the park's own
-  // extent, so it is checked on the only built-in map.
+  // extent, so it is checked on every built-in map.
   const results = await run(() => {
     const g = window.__skate;
     return g.parks.map((def) => {
@@ -3188,17 +3319,17 @@ section('Menu scrolling and back buttons, on a short screen');
   ok(scrolled.scrollTop > 0, `scrolling the shop actually moves it (scrollTop ${scrolled.scrollTop})`);
   ok(scrolled.backOnScreen, 'and the back button scrolls into view rather than staying stranded below the fold');
 
-  // The park picker gets the same treatment — with a single built-in park it
-  // no longer needs to scroll, but it still has to render its one card and a
-  // working back button on the short screen.
+  // The park picker gets the same treatment — three built-in parks no longer
+  // need to scroll, but they still have to render and keep a working back
+  // button on the short screen.
   const parks = await run(() => {
     const g = window.__skate;
-    g.hud.renderParks(g.parks, g.park.id);
+    g.hud.renderParks(g.parks, g.park.id, g.save);
     g.hud.show('parks');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
     return { cards: cards.length, card: cards[0]?.dataset.park, hasBack: !!document.getElementById('btn-parks-back') };
   });
-  ok(parks.cards === 1 && parks.card === 'home', `the park picker lists Home Park (${parks.card ?? 'none'})`);
+  ok(parks.cards === 3 && parks.card === 'home', `the park picker lists Home Park first (${parks.card ?? 'none'})`);
   ok(parks.hasBack, 'and it has a back button too');
 
   await page.setViewportSize({ width: 900, height: 560 });
@@ -4005,11 +4136,11 @@ section('Tutorial and menus');
 
   const picker = await run(() => {
     const g = window.__skate;
-    g.hud.renderParks(g.parks, g.park.id);
+    g.hud.renderParks(g.parks, g.park.id, g.save);
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
     return { count: cards.length, ids: cards.map((c) => c.dataset.park) };
   });
-  ok(picker.count === 1, `the park picker lists the one built-in map (${picker.count})`);
+  ok(picker.count === 3, `the park picker lists all three built-in maps (${picker.count})`);
   const known = await run(() => window.__skate.parks.map((p) => p.id));
   ok(
     picker.ids.every((id) => known.includes(id)),

@@ -176,6 +176,12 @@ body {
   animation: callout 1.6s ease-out forwards;
 }
 
+#callout.unlock {
+  color: var(--good);
+  font-size: clamp(18px, 4.6vw, 32px);
+  animation: callout 2.6s ease-out forwards;
+}
+
 @keyframes callout {
   0% {
     opacity: 0;
@@ -1089,6 +1095,48 @@ button:disabled.primary {
 
 .park-card.current b {
   color: var(--hot);
+}
+
+.park-card.locked {
+  border-color: var(--line);
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.park-card.locked b {
+  color: var(--dim);
+}
+
+.park-lock {
+  font-size: 13px;
+  margin-left: 2px;
+}
+
+.park-best {
+  margin-top: 2px;
+  font-weight: 700 !important;
+  color: var(--good) !important;
+}
+
+.park-progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin-top: 2px;
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.park-progress i {
+  display: block;
+  height: 100%;
+  background: var(--good);
+  border-radius: 3px;
+}
+
+.park-progress-note {
+  font-size: 11px;
 }
 
 /* --- the park editor ------------------------------------------------------ */

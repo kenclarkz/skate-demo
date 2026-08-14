@@ -28,6 +28,8 @@ import {
   freshFaceDesign,
 } from './board-design.js';
 import { TYPES, typeById } from './boards.js';
+import { PARK_UNLOCK_SCORE } from './config.js';
+import { PARKS } from './parkLayouts.js';
 
 const KEY = 'skate.save';
 
@@ -71,6 +73,12 @@ const DEFAULTS = {
   sound: true,
   seenGuide: false,
   park: 'home',
+  // Park progression: `parkBest` is the best banked combo on each built-in park
+  // (id → points); `parksUnlocked` is the chain of parks opened so far, always
+  // starting with the first built-in park. A park unlocks when the one before
+  // it in PARKS banks PARK_UNLOCK_SCORE — see recordParkScore().
+  parkBest: {},
+  parksUnlocked: ['home'],
   lighting: 'day', // 'day', 'sunset' or 'night' — see js/skate/lighting.js
   speed: 16, // top speed, in m/s — see config.js's TOP_SPEED
   camZoom: 1, // chase camera distance, 0.5 (close) .. 1 (default) — see CAM_ZOOM
@@ -99,6 +107,10 @@ const freshCustom = () => ({ ...DEFAULT_CUSTOM });
 const freshCustomCharacters = () => [];
 const freshCustomBoards = () => [];
 const freshColorMap = () => ({});
+// `parksUnlocked` is an array, so a fresh copy per state just like the other
+// arrays above; `parkBest` is a map that starts empty.
+const freshParkBest = () => ({});
+const freshParksUnlocked = () => ['home'];
 const freshBoardDraft = () => ({
   ...DEFAULT_BOARD_DRAFT,
   colors: { ...DEFAULT_BOARD_DRAFT.colors },
@@ -300,6 +312,8 @@ function read() {
         accessoryColors: freshColorMap(),
         outfitColors: freshColorMap(),
         pantsColors: freshColorMap(),
+        parkBest: freshParkBest(),
+        parksUnlocked: freshParksUnlocked(),
       };
     const parsed = JSON.parse(raw);
     const s = {
@@ -317,6 +331,8 @@ function read() {
       accessoryColors: freshColorMap(),
       outfitColors: freshColorMap(),
       pantsColors: freshColorMap(),
+      parkBest: freshParkBest(),
+      parksUnlocked: freshParksUnlocked(),
       ...parsed,
     };
     // A hand-edited or half-written record must not be able to break the game.
@@ -327,6 +343,19 @@ function read() {
     s.sound = s.sound !== false;
     s.seenGuide = s.seenGuide === true;
     s.park = typeof s.park === 'string' ? s.park : 'home';
+    // Progression records from a hand-edited or half-written save are cleaned
+    // the same way every other field is: junk keys dropped, numbers floored.
+    s.parkBest = freshParkBest();
+    if (parsed.parkBest && typeof parsed.parkBest === 'object') {
+      for (const [id, v] of Object.entries(parsed.parkBest)) {
+        if (typeof id === 'string' && Number.isFinite(v)) s.parkBest[id] = Math.max(0, Math.floor(Number(v) || 0));
+      }
+    }
+    const knownParkIds = new Set(PARKS.map((p) => p.id));
+    s.parksUnlocked = Array.isArray(parsed.parksUnlocked)
+      ? [...new Set(parsed.parksUnlocked.filter((id) => knownParkIds.has(id)))]
+      : freshParksUnlocked();
+    if (!s.parksUnlocked.includes('home')) s.parksUnlocked.unshift('home');
     s.lighting = s.lighting === 'night' || s.lighting === 'sunset' ? s.lighting : 'day';
     s.speed = Math.min(50, Math.max(8, Number(s.speed) || DEFAULTS.speed));
     s.camZoom = Math.min(1, Math.max(0.5, Number(s.camZoom) || DEFAULTS.camZoom));
@@ -582,6 +611,14 @@ export const save = {
   get park() {
     return state.park;
   },
+  /** The best banked combo on each built-in park, as a copy. */
+  get parkBest() {
+    return { ...state.parkBest };
+  },
+  /** The chain of unlocked built-in parks, as a copy. */
+  get parksUnlocked() {
+    return [...state.parksUnlocked];
+  },
   get lighting() {
     return state.lighting;
   },
@@ -620,6 +657,37 @@ export const save = {
     state.best = n;
     flush();
     return true;
+  },
+
+  /** The best banked combo ever recorded on this built-in park. */
+  parkBestOf(id) {
+    return Math.max(0, Math.floor(Number(state.parkBest[id]) || 0));
+  },
+
+  /** Whether a park has been unlocked. The first built-in park always is; any
+   * later park needs the park before it to have banked PARK_UNLOCK_SCORE. */
+  isParkUnlocked(id) {
+    return state.parksUnlocked.includes(id);
+  },
+
+  /**
+   * Bank a combo on a park: record the park's own best and, if the park is
+   * unlocked and the total clears PARK_UNLOCK_SCORE, unlock the next built-in
+   * park in the chain. @returns {{ newBest: boolean, unlockedId: string | null }}
+   */
+  recordParkScore(id, points) {
+    const n = Math.floor(points);
+    const newBest = n > this.parkBestOf(id);
+    if (newBest) state.parkBest[id] = n;
+    let unlockedId = null;
+    const idx = PARKS.findIndex((p) => p.id === id);
+    const next = PARKS[idx + 1];
+    if (next && state.parksUnlocked.includes(id) && n >= PARK_UNLOCK_SCORE && !state.parksUnlocked.includes(next.id)) {
+      state.parksUnlocked.push(next.id);
+      unlockedId = next.id;
+    }
+    flush();
+    return { newBest, unlockedId };
   },
 
   recordTrick(points) {

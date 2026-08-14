@@ -90,7 +90,19 @@ function allParks() {
   return [...PARKS, ...userParks.map((f) => buildDef(f))];
 }
 
-let park = new Park(allParks().find((p) => p.id === save.park) || PARKS[0]);
+/**
+ * The park the game boots into. The saved park wins when it is unlocked — or
+ * when it is a player-built park, which are never gated by progression; a
+ * saved pick pointing at a locked built-in park falls back to the first
+ * unlocked one so nobody can boot straight past the ladder.
+ */
+function initialParkDef() {
+  const saved = allParks().find((p) => p.id === save.park);
+  if (saved && (save.isParkUnlocked(saved.id) || !PARKS.some((p) => p.id === saved.id))) return saved;
+  return PARKS.find((p) => save.isParkUnlocked(p.id)) || PARKS[0];
+}
+
+let park = new Park(initialParkDef());
 scene.add(park.group);
 lighting.setPark(park);
 
@@ -391,7 +403,7 @@ function showGuide() {
 function showParks() {
   state = PARKMENU;
   input.enabled = false;
-  hud.renderParks(PARKS, park.id);
+  hud.renderParks(PARKS, park.id, save);
   hud.renderMyParks(userParks, park.id);
   hud.setLightingMode(save.lighting);
   hud.show('parks');
@@ -792,7 +804,9 @@ hud.on.back = () => showStart();
 hud.on.parks = () => showParks();
 hud.on.selectPark = (id) => {
   const def = allParks().find((p) => p.id === id);
-  if (def && def.id !== park.id) {
+  // A locked park is not selectable from the grid; the guard is belt-and-
+  // braces for anything that reaches here around the locked card's click.
+  if (def && save.isParkUnlocked(id) && def.id !== park.id) {
     loadPark(def);
     respawn();
   }
@@ -1124,6 +1138,13 @@ function handleEvents(events) {
         if (e.multiplier > 1 || e.total > 400) {
           const coinText = bonus > 0 ? `  +${bonus}c` : '';
           hud.say(`${e.total.toLocaleString()}${coinText}${best ? '  new best' : ''}`, 'banked');
+        }
+        // Park progression: the combo also counts towards the park's own best,
+        // and a big enough one unlocks the next park in the grid.
+        const progression = save.recordParkScore(park.id, e.total);
+        if (progression.unlockedId) {
+          const nxt = PARKS.find((p) => p.id === progression.unlockedId);
+          hud.say(`NEW PARK UNLOCKED!  ${nxt ? nxt.name.toUpperCase() : ''}`, 'unlock');
         }
         audio.chime(e.multiplier > 2);
         liveCombo = { names: [], points: 0 };

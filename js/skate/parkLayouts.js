@@ -119,4 +119,111 @@ export const PARKS = [
       { type: 'planter', x: -40, z: 40, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
     ]
   ),
+
+  // Metro Plaza: the streets. A stair block with a handrail anchors the centre
+  // line, twin ledges and rails grind the west flank, the funbox and pyramid
+  // share the east plaza, and a pair of roll-ins frames a spine transfer at the
+  // top of the pad — all within the same pad the players already know.
+  def(
+    'plaza',
+    'Metro Plaza',
+    'The streets: pop the centre gap, grind the ledges, transfer the spine.',
+    {
+      seed: 0xca71,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#2a6f97',
+      spawn: { x: 0, y: 0, z: -28, yaw: 0 },
+      patrol: [
+        { x: 0, z: -32 }, { x: 36, z: 0 }, { x: 0, z: 8 }, { x: -8, z: 30 },
+        { x: 0, z: 46 }, { x: -20, z: 16 },
+      ],
+      logos: [
+        { x: -14, z: -26 }, { x: 14, z: -26 }, { x: -14, z: 24 }, { x: 14, z: 24 },
+        { x: -34, z: 20 }, { x: 34, z: -6 },
+      ],
+    },
+    [
+      // Centre stair block: bank up to the plaza deck, stairs down the north
+      // side with a handrail over them.
+      { type: 'bank', x: 0, z: -17, ry: 0, w: 10, len: 8, h: 0.9, color: '#e9c46a' },
+      { type: 'slab', x: 0, z: -8, ry: 0, w: 10, d: 10, h: 0.9, color: '#e9c46a' },
+      { type: 'stairs', x: 0, z: -2.125, ry: 180, w: 10, steps: 5, rise: 0.18, run: 0.35, color: '#f4a261' },
+      { type: 'rail', x: 0, z: -2.1, ry: 90, len: 5, h: 1.2, color: '#e5e7eb' },
+      // West street line: two ledges with flat bars between them.
+      { type: 'ledge', x: -26, z: 0, ry: 90, len: 12, w: 1.2, h: 0.6, color: '#8ab17d' },
+      { type: 'ledge', x: -26, z: -16, ry: 90, len: 12, w: 1.2, h: 0.6, color: '#8ab17d' },
+      { type: 'rail', x: -20, z: -4, ry: 0, len: 10, h: 0.7, color: '#e5e7eb' },
+      { type: 'rail', x: -20, z: 8, ry: 0, len: 10, h: 0.4, color: '#e5e7eb' },
+      // East plaza: the funbox and a pyramid, with a long rail behind them.
+      { type: 'funbox', x: 26, z: 4, ry: 0, w: 8, d: 6, h: 1.0, R: 1.5, color: '#e76f51' },
+      { type: 'pyramid', x: 26, z: -14, ry: 0, w: 6, d: 6, len: 3, h: 1.0, color: '#f4a261' },
+      { type: 'rail', x: 26, z: 14, ry: 0, len: 10, h: 0.85, color: '#e5e7eb' },
+      // North: the plaza deck — twin roll-ins framing a spine transfer.
+      { type: 'rollin', x: -22, z: 34, ry: 0, w: 20, R: 2.2, H: 1.5, deck: 8, color: '#264653' },
+      { type: 'rollin', x: 22, z: 34, ry: 0, w: 20, R: 2.2, H: 1.5, deck: 8, color: '#264653' },
+      { type: 'spine', x: 0, z: 34, ry: 90, w: 14, R: 2.0, H: 1.4, gap: 4, color: '#8ab17d' },
+      // North-west corner: bank up to a ledge deck.
+      { type: 'bank', x: -42, z: 18, ry: 270, w: 32, len: 12, h: 1.6, color: '#8ab17d' },
+      { type: 'slab', x: -50, z: 18, ry: 0, w: 4, d: 32, h: 1.6, color: '#e9c46a' },
+      { type: 'ledge', x: -48.6, z: 18, ry: 90, len: 32, w: 1.0, h: 1.6, color: '#f4a261' },
+      // Benches and planters dressing the edges.
+      { type: 'bench', x: -50, z: -44, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 50, z: -44, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'planter', x: 50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: -50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+    ]
+  ),
+
+  // Vert Rampage: the vert house. A full vert ramp and twin minis at the south,
+  // two pools flanking a spine transfer in the middle, quarterpipes on the
+  // walls and a long roll-in at the top of the pad.
+  def(
+    'vert',
+    'Vert Rampage',
+    'Big walls, twin pools and a spine: the vert house.',
+    {
+      seed: 0xbad0,
+      padOnly: true,
+      extentX: 56,
+      extentZ: 60,
+      ground: '#7f5539',
+      spawn: { x: 0, y: 0, z: -28, yaw: 0 },
+      patrol: [
+        { x: 0, z: -32 }, { x: 0, z: -19 }, { x: 16, z: 0 }, { x: 0, z: 10 },
+        { x: 0, z: 30 }, { x: 26, z: 30 }, { x: -26, z: 30 }, { x: 0, z: 56 },
+      ],
+      logos: [
+        { x: -14, z: -26 }, { x: 14, z: -26 }, { x: -16, z: 14 }, { x: 16, z: 14 },
+        { x: 0, z: 0 }, { x: 32, z: -30 },
+      ],
+    },
+    [
+      // Big-air centrepiece: a full vert ramp, rims running north-south.
+      { type: 'vert', x: 0, z: -8, ry: 90, w: 14, R: 3.5, H: 3.0, flat: 6, deck: 2.5, color: '#264653' },
+      // Twin mini ramps framing the big one.
+      { type: 'mini', x: -24, z: -8, ry: 0, w: 12, R: 1.8, H: 1.25, flat: 4, deck: 1.2, color: '#e76f51' },
+      { type: 'mini', x: 24, z: -8, ry: 0, w: 12, R: 1.8, H: 1.25, flat: 4, deck: 1.2, color: '#e76f51' },
+      // Pool section: two bowls with a spine transfer between them.
+      { type: 'bowl', x: -20, z: 22, R: 2.4, H: 1.4, rim: 1.2, color: '#2a9d8f' },
+      { type: 'bowl', x: 20, z: 22, R: 2.4, H: 1.4, rim: 1.2, color: '#2a9d8f' },
+      { type: 'spine', x: 0, z: 20, ry: 0, w: 20, R: 2.0, H: 1.4, gap: 4, color: '#8ab17d' },
+      // Roll-in at the top of the pad.
+      { type: 'rollin', x: 0, z: 40, ry: 0, w: 44, R: 2.4, H: 1.6, deck: 12, color: '#e9c46a' },
+      // Quarterpipes on the east and west walls.
+      { type: 'quarter', x: -44, z: 6, ry: 90, w: 16, R: 2.0, H: 1.3, deck: 0, color: '#f4a261' },
+      { type: 'quarter', x: 44, z: 6, ry: 270, w: 16, R: 2.0, H: 1.3, deck: 0, color: '#f4a261' },
+      // Ledges down the flanks of the roll-in deck.
+      { type: 'ledge', x: -32, z: 38, ry: 90, len: 14, w: 1.2, h: 0.6, color: '#8ab17d' },
+      { type: 'ledge', x: 32, z: 38, ry: 90, len: 14, w: 1.2, h: 0.6, color: '#8ab17d' },
+      // A rail on the jump line out of spawn.
+      { type: 'rail', x: 0, z: -22, ry: 0, len: 12, h: 0.7, color: '#e5e7eb' },
+      // Benches and planters dressing the edges.
+      { type: 'bench', x: -50, z: -44, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 50, z: -44, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'planter', x: -50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 50, z: 50, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+    ]
+  ),
 ];
