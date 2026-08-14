@@ -72,7 +72,7 @@ export const BUILTIN_STATION = {
 // yet (no user gesture). A track datum like any other, so the announce() path
 // stays a single one — the moment music actually begins, audio.js announces
 // the real track through this.ctx.audio.onTrack instead.
-const THEME_TRACK = { id: 'theme', name: 'The park’s own speakers', artists: ['Skate FM'] };
+const THEME_TRACK = { id: 'theme', name: 'First Push', artists: ['Skate FM'] };
 
 // --- Spotify plumbing -----------------------------------------------------
 // The app is a static site, so there is nowhere safe to hide a secret; the
