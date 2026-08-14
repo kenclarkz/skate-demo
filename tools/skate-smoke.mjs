@@ -3229,8 +3229,10 @@ section('Skater picker');
   ok(cat.keys, 'and a complete palette');
   ok(new Set(cat.heads).size === 7, `and each with their own headwear (${cat.heads.join(', ')})`);
 
-  // Picking one rebuilds the live rig, and the pick survives a reload the same
-  // way the board and the shirt do.
+  // The prebuilt rack is locked until a rider is made: picking one is refused
+  // and the save is left exactly where it was. The save layer still knows the
+  // prebuilt riders — it is the picker that locks the door, so the game can
+  // boot with the default while no custom character exists yet.
   const picked = await run(() => {
     const g = window.__skate;
     const before = g.save.characterId;
@@ -3240,25 +3242,24 @@ section('Skater picker');
     g.selectCharacter('rae');
     return { before, ok3, head, capHex, nowHead: g.skater.style.head, nowId: g.save.characterId };
   });
-  ok(picked.ok3 === true, 'selectCharacter() equips one');
-  ok(picked.head === 'helmet', "and rebuilds the rig with that character's own headwear");
-  ok(picked.capHex === 0xc4433a, 'and their own colours');
-  ok(picked.nowHead === 'hair' && picked.nowId === 'rae', 'and swapping again takes effect immediately');
+  ok(picked.ok3 === false, 'the prebuilt rack is locked — selectCharacter() refuses it');
+  ok(picked.head === 'cap' && picked.capHex === 0x2f3b52, "and the live rig keeps its own rider's headwear and colours");
+  ok(picked.nowHead === 'cap' && picked.nowId === picked.before, 'and a second prebuilt pick changes nothing either');
 
   // The shirt rack layers over whichever skater is equipped, rather than
   // replacing them — the whole reason outfits are overrides now.
   const layered = await run(() => {
     const g = window.__skate;
-    g.selectCharacter('nova');
     const own = g.skater.palette;
     const ownSkin = own.skin;
+    const ownShirt = own.shirt;
     g.save.addCoins(500);
     g.selectOutfit('crimson');
     const dressed = g.skater.palette;
     g.selectOutfit('street');
     return {
       ownSkin,
-      ownShirt: 0x3d444e,
+      ownShirt,
       dressedShirt: dressed.shirt,
       dressedSkin: dressed.skin,
       backToOwn: g.skater.palette.shirt,
@@ -3269,7 +3270,9 @@ section('Skater picker');
   ok(layered.backToOwn === layered.ownShirt, '"Original" puts them back in their own clothes');
 
   // The rack itself, which lives on the Riders screen — not the shop. A card
-  // each, with a portrait actually drawn on each.
+  // each, with a portrait actually drawn on each. Every prebuilt card is
+  // locked: a padlock over the figure, and the pick refused until the maker
+  // is used.
   const screen = await run(() => {
     const g = window.__skate;
     g.showRiders();
@@ -3288,6 +3291,8 @@ section('Skater picker');
     return {
       state: g.state,
       cards: cards.length,
+      locked: grid.querySelectorAll('.char-card.locked').length,
+      lockIcons: grid.querySelectorAll('.char-lock').length,
       current: grid.querySelectorAll('.char-card.current').length,
       currentId: grid.querySelector('.char-card.current')?.dataset.character,
       painted,
@@ -3295,48 +3300,55 @@ section('Skater picker');
       visible: !document.getElementById('screen-charselect').hidden,
       // The characters have left the shop entirely — no skater rack there.
       shopHasRack: !!document.getElementById('char-grid'),
-      // And the Riders screen carries the character's racks too: the shirts,
-      // pants and accessories the shop sells, right under the picker.
-      racks: [
-        document.getElementById('cs-outfit-grid')?.querySelectorAll('[data-outfit]').length || 0,
-        document.getElementById('cs-pants-grid')?.querySelectorAll('[data-pants]').length || 0,
-        document.getElementById('cs-accessory-grid')?.querySelectorAll('[data-accessory]').length || 0,
-      ],
+      // And the clothes racks left the Riders screen for the shop: the shirts
+      // and pants have no copy here, and the accessory rack lives inside the
+      // made rider's own panel — hidden until a character is made.
+      csOutfit: !!document.getElementById('cs-outfit-grid'),
+      csPants: !!document.getElementById('cs-pants-grid'),
+      panelClosed: document.getElementById('cs-accessories').hidden,
+      accessoriesHidden: document.getElementById('btn-cs-accessories').hidden,
     };
   });
   ok(screen.state === 'charselect', 'the skater rack lives on the Riders screen');
   ok(screen.visible && screen.hasBack, 'which shows, and has a back button');
   ok(screen.cards === 8, 'and a card per skater');
-  ok(screen.current === 1 && screen.currentId === 'nova', 'and exactly one marked as the one being skated');
+  ok(
+    screen.locked === 8 && screen.lockIcons === 8,
+    'and every prebuilt rider card is locked, with a padlock over its portrait'
+  );
+  ok(screen.current === 1 && screen.currentId === 'ace', 'and exactly one marked as the one being skated');
   ok(
     screen.painted.length === 8 && screen.painted.every((n) => n > 400),
     `and a portrait actually drawn on every card (${screen.painted.join(', ')} pixels)`
   );
   ok(!screen.shopHasRack, 'and the shop no longer has a skater rack of its own');
+  ok(!screen.csOutfit && !screen.csPants, 'and the shirts and pants racks have left the Riders screen for the shop');
   ok(
-    screen.racks.every((n) => n > 0),
-    `and the Riders screen carries the shirts, pants and accessories too (${screen.racks.join(' / ')})`
+    screen.panelClosed && screen.accessoriesHidden,
+    'and the accessory rack sits behind the made rider panel, closed until one exists'
   );
 
-  // Tapping a card goes through the same click path the player's finger does.
+  // Tapping a locked card goes through the same click path the player's finger
+  // does — a disabled button, so nothing can be picked.
   const tapped = await run(() => {
     const g = window.__skate;
-    document.querySelector('[data-character="ace"]').click();
+    document.querySelector('[data-character="bolt"]').click();
     return { id: g.save.characterId, head: g.skater.style.head };
   });
-  ok(tapped.id === 'ace' && tapped.head === 'cap', 'and tapping a card picks that skater');
+  ok(tapped.id === 'ace' && tapped.head === 'cap', 'and tapping a locked card picks nobody');
 
   // The tutorial's demo rider is a second, separate rig — it has to follow the
-  // pick too, or How to play shows somebody else doing the tricks.
+  // pick too, or How to play shows somebody else doing the tricks. A refused
+  // locked pick must not yank it around either.
   const demoFollows = await run(() => {
     const g = window.__skate;
-    g.selectCharacter('bolt');
+    g.selectCharacter('bolt'); // locked — changes nothing
     const demo = g.hud.preview?.skater;
     return demo ? { head: demo.style.head, cap: demo.palette.cap } : null;
   });
   ok(
-    demoFollows && demoFollows.head === 'helmet' && demoFollows.cap === 0xc4433a,
-    "and the tutorial's demo rider changes to match"
+    demoFollows && demoFollows.head === 'cap' && demoFollows.cap === 0x2f3b52,
+    "and the tutorial's demo rider still matches the one being skated"
   );
 
   await run(() => window.__skate.hud.show('start'));
@@ -3465,6 +3477,17 @@ section('Character Maker');
   ok(saved.shirt === 0xcf9c3e, 'and the bought shirt');
   ok(saved.coins === paid.coins, 'and saving itself costs nothing');
 
+  // Saving drops the player back on the Riders screen — the made rider is in
+  // front of them, ready to be picked or dressed — and because that rider is
+  // equipped, the ACCESSORIES option is showing.
+  const backToRiders = await run(() => ({
+    state: window.__skate.state,
+    visible: !document.getElementById('screen-charselect').hidden,
+    accessoriesShown: !document.getElementById('btn-cs-accessories').hidden,
+  }));
+  ok(backToRiders.state === 'charselect' && backToRiders.visible, 'saving returns to the Riders screen, not the start');
+  ok(backToRiders.accessoriesShown, 'and the ACCESSORIES option is showing for the made rider');
+
   // The Riders screen shows the made character leading the grid, drawn as a
   // real portrait, and tapping it equips it.
   const riders = await run(() => {
@@ -3487,6 +3510,7 @@ section('Character Maker');
       customId,
       cards: cards.length,
       hasCustom: !!grid.querySelector(`[data-character="${customId}"]`),
+      locked: grid.querySelectorAll('.char-card.locked').length,
       current: grid.querySelectorAll('.char-card.current').length,
       painted,
       picked,
@@ -3495,6 +3519,7 @@ section('Character Maker');
   });
   ok(riders.state === 'charselect', 'the Riders screen opens');
   ok(riders.cards === 9, 'with a card for every rider and the made one');
+  ok(riders.locked === 8, 'the eight prebuilt cards still locked behind it');
   ok(riders.hasCustom === true, 'and the made character leads the grid');
   ok(riders.current === 1, 'exactly one marked as skating');
   ok(
@@ -3503,19 +3528,91 @@ section('Character Maker');
   );
   ok(riders.picked === true && riders.eqId === riders.customId, 'and tapping the made card equips it');
 
-  // Picking a prebuilt rider puts the standard body back on the live rig, and
-  // the tutorial's demo figure follows the made one too.
+  // A locked prebuilt pick leaves the made rider on the rig — only the maker
+  // is a way back to the standard body — and the tutorial's demo figure
+  // follows the made one.
   const prebuilt = await run(() => {
     const g = window.__skate;
     const customId = `custom:${g.save.customCharacters[0].id}`;
-    g.selectCharacter('nova');
+    g.selectCharacter('nova'); // locked — refused
     const afterNova = { id: g.save.characterId, scale: g.skater.scale.height };
-    g.selectCharacter(customId);
     const demo = g.hud.preview?.skater;
-    return { afterNova, demo: demo ? { scale: demo.scale.height, head: demo.style.head } : null };
+    return { customId, afterNova, demo: demo ? { scale: demo.scale.height, head: demo.style.head } : null };
   });
-  ok(prebuilt.afterNova.id === 'nova' && Math.abs(prebuilt.afterNova.scale - 1) < 1e-6, 'and a prebuilt rider restores the standard body');
+  ok(
+    prebuilt.afterNova.id === prebuilt.customId && Math.abs(prebuilt.afterNova.scale - 1.08) < 1e-6,
+    'a locked prebuilt pick leaves the made rider on the rig'
+  );
   ok(prebuilt.demo && Math.abs(prebuilt.demo.scale - 1.08) < 1e-6, 'and the tutorial demo matches the made rider');
+
+  // The ACCESSORIES option swaps the grid for the made rider's own rack: a
+  // card per accessory drawn on their figure, and the whole thing sits behind
+  // the character select rather than on top of it.
+  const accessoriesOpen = await run(() => {
+    const g = window.__skate;
+    g.hud.on.csAccessories();
+    const grid = document.getElementById('cs-accessory-grid');
+    return {
+      open: !document.getElementById('cs-accessories').hidden,
+      gridHidden: document.getElementById('cs-char-grid').hidden,
+      cards: grid ? grid.querySelectorAll('[data-accessory]').length : 0,
+      current: grid ? grid.querySelectorAll('.accessory-card.current').length : 0,
+      state: g.state,
+    };
+  });
+  ok(accessoriesOpen.open && accessoriesOpen.gridHidden, 'the ACCESSORIES option opens the made rider\'s own rack');
+  ok(accessoriesOpen.state === 'charselect', 'still on the Riders screen — a panel, not a detour');
+  ok(accessoriesOpen.cards === 16, `with a card per accessory (${accessoriesOpen.cards})`);
+  ok(accessoriesOpen.current === 1, 'and the "Original" card marked until anything is worn');
+
+  // Wearing on the rider fills their own slots: the rig wears them, and the
+  // shop's global slots stay untouched, so the next rider starts clean.
+  const dressedRider = await run(() => {
+    const g = window.__skate;
+    const riderId = g.save.customCharacters[0].id;
+    g.save.addCoins(600);
+    g.selectRiderAccessory('tophat');
+    g.selectRiderAccessory('gold-shades');
+    return {
+      hatSlot: g.save.customCharacters[0].accessoryIds.hat,
+      shadesSlot: g.save.customCharacters[0].accessoryIds.shades,
+      packSlot: g.save.customCharacters[0].accessoryIds.pack,
+      head: g.skater.style.head,
+      cap: g.skater.palette.cap,
+      global: g.save.accessoryIds,
+      riderId,
+    };
+  });
+  ok(
+    dressedRider.hatSlot === 'tophat' && dressedRider.shadesSlot === 'gold-shades',
+    'wearing on the rider fills that rider\'s own hat and shades slots'
+  );
+  ok(dressedRider.packSlot === 'none', 'while the slot nothing was worn in stays empty');
+  ok(dressedRider.head === 'tophat' && dressedRider.cap === 0x1c1c20, 'and the live rig actually wears them');
+  ok(
+    dressedRider.global.hat === 'none' && dressedRider.global.shades === 'none',
+    "and the shop's global slots are untouched"
+  );
+
+  // Save puts the character select back, with the ACCESSORIES option still in
+  // place, and the rider keeps their own rack on the next visit.
+  const savedAccessories = await run(() => {
+    const g = window.__skate;
+    g.hud.on.csAccessoriesSave();
+    const grid = document.getElementById('cs-accessory-grid');
+    return {
+      closed: document.getElementById('cs-accessories').hidden,
+      gridBack: !document.getElementById('cs-char-grid').hidden,
+      accessoriesShown: !document.getElementById('btn-cs-accessories').hidden,
+      state: g.state,
+      stillOwned: g.save.customCharacters[0].accessoryIds.hat === 'tophat',
+      cards: grid ? grid.querySelectorAll('[data-accessory]').length : 0,
+    };
+  });
+  ok(savedAccessories.closed && savedAccessories.gridBack, 'Save drops the player back on the character select grid');
+  ok(savedAccessories.state === 'charselect' && savedAccessories.accessoriesShown, 'and the ACCESSORIES option is still there');
+  ok(savedAccessories.stillOwned, 'and the rider keeps their own rack for next time');
+  ok(savedAccessories.cards === 16, 'with the rack still full when it is reopened');
 
   // The saved rider lives on a card in the maker's rack, with its own drawn
   // portrait. Re-opening the maker starts a fresh character, the same as the
@@ -3563,9 +3660,20 @@ section('Character Maker');
     const g = window.__skate;
     g.pickMakerPart('height', 'short');
     g.saveMadeCharacter();
-    return { cards: g.save.customCharacters.length, id: g.save.characterId, height: g.save.customCharacters[1].height };
+    return {
+      cards: g.save.customCharacters.length,
+      id: g.save.characterId,
+      height: g.save.customCharacters[1].height,
+      slots: g.save.customCharacters[1].accessoryIds,
+      firstKept: g.save.customCharacters[0].accessoryIds.hat,
+    };
   });
   ok(second.cards === 2 && second.height === 'short', 'saving the edited draft makes a second rider, not an overwrite');
+  ok(
+    second.slots && second.slots.hat === 'tophat' && second.slots.shades === 'gold-shades' && second.slots.pack === 'none',
+    'and the edited copy carries the rider\'s own rack with it, like its clothes'
+  );
+  ok(second.firstKept === 'tophat', 'while the first rider keeps the accessories it was given');
 
   // Delete takes a rider off the rack; deleting the one being skated falls
   // back to the default rider, and emptying the rack removes the made card.

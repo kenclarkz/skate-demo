@@ -121,10 +121,10 @@ function applyBoard() {
 /**
  * The accessories currently worn: one item per category slot — hat, shades,
  * pack — so up to three different kinds ride at once and two of the same never
- * can. "Original" slots resolve to nothing.
+ * can. "Original" slots resolve to nothing. `ids` is the three slots to read —
+ * default the shop's global ones, but a made rider hands over its own.
  */
-function equippedAccessories() {
-  const ids = save.accessoryIds;
+function equippedAccessories(ids = save.accessoryIds) {
   return ['hat', 'shades', 'pack']
     .map((c) => accessoryById[ids[c]])
     .filter((a) => a && a.category !== 'none');
@@ -140,10 +140,16 @@ function equippedAccessories() {
 function currentLook() {
   if (save.characterId.startsWith('custom:')) {
     const c = save.customCharacters.find((x) => x.id === save.characterId.slice(7)) ?? save.custom;
-    const look = customLook(c);
+    const base = customLook(c);
+    // A made rider's bought accessories live on the character, not in the
+    // shop's global slots — paint the ones this rider wears over the base,
+    // exactly as lookOf() paints them over a prebuilt character.
+    const accessories = equippedAccessories(c.accessoryIds);
+    const character = { palette: base.palette, style: base.style };
     return {
-      ...look,
-      character: { palette: look.palette },
+      palette: lookOf(character, null, accessories, null, { accessory: save.accessoryColors }),
+      style: styleOf(character, accessories),
+      character,
       scale: { height: heightById[c.height].scale, width: buildById[c.build].width },
     };
   }
@@ -423,9 +429,17 @@ function leaveDesigner() {
   hud.stats.hidden = false;
 }
 
+/** Which made rider the Riders screen's ACCESSORIES panel is styling, or null
+ * when the panel is closed. UI state, not a save value — it never persists. */
+let accessoryCharacterId = null;
+
 function showStore() {
   state = STOREMENU;
   input.enabled = false;
+  // The rider accessory panel only lives on the Riders screen; make sure its
+  // repaint override is not still in place when the shop re-renders.
+  accessoryCharacterId = null;
+  hud.setRiderAccessoryIds(null);
   const look = currentLook();
   hud.renderBoards(BOARD_TYPES, BOARD_TYPES, save);
   hud.renderOutfits(OUTFITS, save, look.character.palette);
@@ -435,17 +449,17 @@ function showStore() {
 }
 
 /** The Riders screen: who you skate as, and what they wear. Characters live
- * here and nowhere else — the shop is boards (and the clothes, shared with
- * this screen). The shirt, pants and accessory racks are the same catalogues
- * the shop shows, so a rider can be dressed where they are picked. */
+ * here and nowhere else — the shop is boards, and the clothes. The prebuilt
+ * rack is locked: the make-character card is the way a rider gets picked, and
+ * a made rider's own accessory rack opens from the ACCESSORIES option. */
 function showRiders() {
   state = CHARSELECT;
   input.enabled = false;
-  const look = currentLook();
+  accessoryCharacterId = null;
+  hud.closeAccessoryPanel();
+  hud.setRiderAccessoryIds(null);
   hud.renderCharSelect(CHARACTERS, save.characterId, save.customCharacters);
-  hud.renderOutfits(OUTFITS, save, look.character.palette);
-  hud.renderPants(PANTS, save);
-  hud.renderAccessories(ACCESSORIES, save, look);
+  hud.setRiderAccessoriesVisible(save.characterId.startsWith('custom:'));
   hud.show('charselect');
 }
 
@@ -501,14 +515,16 @@ function setMakerName(name) {
  * The maker's Save: the draft becomes a new saved character and is equipped on
  * the spot. Saving again makes a second rider, the way the Board Maker makes a
  * second deck — the rack in the maker is where the old ones go to be edited or
- * deleted, not for saving twice to mean overwriting.
+ * deleted, not for saving twice to mean overwriting. The player lands back on
+ * the Riders screen with their new rider in front of them, ready to be picked
+ * or dressed.
  */
 function saveMadeCharacter() {
   save.saveCustomCharacter(makeDraft());
   const look = currentLook();
   skater.rebuild(look.palette, look.style, look.scale);
   hud.setPreviewLook(look.palette, look.style, look.scale);
-  showStart();
+  showRiders();
 }
 
 /** Equip, edit or delete one of the player's saved custom characters. */
@@ -870,8 +886,11 @@ hud.on.pause = () => togglePause();
 hud.on.board = (id) => selectBoard(id);
 hud.on.outfit = (id) => selectOutfit(id);
 hud.on.pants = (id) => selectPants(id);
-hud.on.accessory = (id) => selectAccessory(id);
+hud.on.accessory = (id, forRider) => (forRider ? selectRiderAccessory(id) : selectAccessory(id));
 hud.on.character = (id) => selectCharacter(id);
+hud.on.csAccessories = () => openAccessoryPanel();
+hud.on.csAccessoriesSave = () => closeAccessoryPanel();
+hud.on.csAccessoriesBack = () => closeAccessoryPanel();
 
 // The shop's repaint wheels. `repaint` fires as a wheel drags or its slider
 // moves — repaint the save and rebuild the rig live, so the rider on screen
@@ -893,6 +912,12 @@ hud.on.repaint = (kind, id, key, hex) => {
   hud.setPreviewLook(look.palette, look.style, look.scale);
 };
 hud.on.repaintCommit = () => {
+  // A repaint that happened on the Riders screen's own accessory panel must
+  // re-render that panel with the rider's slots, not the shop's.
+  if (accessoryCharacterId) {
+    renderRiderAccessories();
+    return;
+  }
   const look = currentLook();
   hud.renderOutfits(OUTFITS, save, look.character.palette);
   hud.renderPants(PANTS, save);
@@ -903,6 +928,10 @@ hud.on.repaintReset = (kind, id) => {
   const look = currentLook();
   skater.rebuild(look.palette, look.style, look.scale);
   hud.setPreviewLook(look.palette, look.style, look.scale);
+  if (accessoryCharacterId) {
+    renderRiderAccessories();
+    return;
+  }
   hud.renderOutfits(OUTFITS, save, look.character.palette);
   hud.renderPants(PANTS, save);
   hud.renderAccessories(ACCESSORIES, save, look);
@@ -953,11 +982,14 @@ function selectOutfit(id) {
 
 /**
  * Swap rider. Free — this is a picker, not a shop, so there is no owned-list
- * and nothing to afford. 'custom:<id>' is a made character, which resolves from
- * its saved draft; the shirt stays as it was and re-applies over whichever
- * rider, which is why the rebuild goes through currentLook().
+ * and nothing to afford. Only a made character can be picked: the prebuilt
+ * rack is locked until the maker is used, which is why those cards render
+ * disabled. 'custom:<id>' resolves from its saved draft; the shirt stays as
+ * it was and re-applies over whichever rider, which is why the rebuild goes
+ * through currentLook().
  */
 function selectCharacter(id) {
+  if (!id.startsWith('custom:')) return false; // the prebuilt rack is locked
   if (!save.setCharacter(id)) return false;
   const look = currentLook();
   skater.rebuild(look.palette, look.style, look.scale);
@@ -965,12 +997,9 @@ function selectCharacter(id) {
   // The Riders screen carries the made characters too, so they get repainted
   // alongside the prebuilt rack when a pick happens there.
   hud.renderCharSelect(CHARACTERS, save.characterId, save.customCharacters);
-  // The shirt and accessory racks sit on the same Riders screen as the
-  // skaters, and the shirt rack's "Original" swatch is whatever the equipped
-  // rider wears — so swapping rider has to repaint those too, or the cards go
-  // on advertising the old rider's colours.
-  hud.renderOutfits(OUTFITS, save, look.character.palette);
-  hud.renderAccessories(ACCESSORIES, save, look);
+  // A made rider is equipped: the ACCESSORIES option that opens their own
+  // rack is now worth showing.
+  hud.setRiderAccessoriesVisible(true);
   return true;
 }
 
@@ -989,6 +1018,58 @@ function selectAccessory(id) {
   skater.rebuild(look.palette, look.style, look.scale);
   hud.setPreviewLook(look.palette, look.style, look.scale);
   hud.renderAccessories(ACCESSORIES, save, look);
+  return true;
+}
+
+/** Re-render the Riders screen's accessory panel for the rider being styled.
+ * `currentLook()` is that rider (only the equipped one can be styled), so the
+ * portraits draw the right figure; `renderAccessories` gets the rider's own
+ * slots so the worn marks and the repaint panel match them. */
+function renderRiderAccessories() {
+  const c = save.customCharacters.find((x) => x.id === accessoryCharacterId);
+  if (!c) return;
+  hud.setRiderAccessoryIds(c.accessoryIds);
+  hud.renderAccessories(ACCESSORIES, save, currentLook(), c.accessoryIds);
+}
+
+/**
+ * The ACCESSORIES option on the Riders screen: swap the grid for the equipped
+ * made rider's own accessory rack. Nothing is bought or worn until a card is
+ * tapped — this is just the dressing-room door.
+ */
+function openAccessoryPanel() {
+  if (!save.characterId.startsWith('custom:')) return;
+  const c = save.customCharacters.find((x) => x.id === save.characterId.slice(7));
+  if (!c) return;
+  accessoryCharacterId = c.id;
+  hud.openAccessoryPanel();
+  renderRiderAccessories();
+}
+
+/** Save or Back on the accessory panel: put the character grid back, with the
+ * ACCESSORIES option still in place while a made rider is equipped. */
+function closeAccessoryPanel() {
+  accessoryCharacterId = null;
+  hud.setRiderAccessoryIds(null);
+  hud.closeAccessoryPanel();
+  hud.renderCharSelect(CHARACTERS, save.characterId, save.customCharacters);
+  hud.setRiderAccessoriesVisible(save.characterId.startsWith('custom:'));
+}
+
+/**
+ * A card tapped in a made rider's own accessory rack. Same buy-then-wear flow
+ * as the shop, but the slots it fills live on the rider: a hat goes in that
+ * rider's hat slot, and the next rider you make wears none of it. Repaints
+ * stay global — they are about the bought item, not who is wearing it.
+ */
+function selectRiderAccessory(id) {
+  if (!accessoryCharacterId) return false;
+  if (!save.accessories.includes(id) && !save.buyAccessory(id)) return false; // can't afford it
+  if (!save.setCharacterAccessory(accessoryCharacterId, id)) return false;
+  const look = currentLook();
+  skater.rebuild(look.palette, look.style, look.scale);
+  hud.setPreviewLook(look.palette, look.style, look.scale);
+  renderRiderAccessories();
   return true;
 }
 
@@ -1631,6 +1712,9 @@ window.__skate = {
   pickMakerPart,
   saveMadeCharacter,
   characterSavedAction,
+  openAccessoryPanel,
+  closeAccessoryPanel,
+  selectRiderAccessory,
   /** Step off the board, the way the on-screen button does. */
   dismount,
   /** Hop back on, the way the on-screen button does — possible from anywhere. */
