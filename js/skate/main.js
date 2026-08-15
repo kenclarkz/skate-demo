@@ -28,7 +28,7 @@ import { customLook, heightById, buildById } from './custom.js';
 import { designPalette, sanitizeText } from './board-design.js';
 import { GRABS } from './tricks.js';
 import { makeAiSkaters, assignBossCrowd } from './ai.js';
-import { bossLadder, BossSkater, bossRequirement } from './boss.js';
+import { bossLadder, BossSkater, bossRequirement, FINALE_PARK_ID } from './boss.js';
 import { makeBirds } from './bird.js';
 import { makeLogos, checkPickup } from './collectible.js';
 import { registerServiceWorker, setupInstall } from '../game/pwa.js';
@@ -250,38 +250,68 @@ function disposeGroup(group) {
   });
 }
 
-// --- the park's rival ------------------------------------------------------
+// --- the park's rival(s) ---------------------------------------------------
 /**
  * The rival currently owed by this park, or null. Reveal is derived, never
  * saved: the first boss of the park's roster that has not been beaten, and
  * only once the park is unlocked and the *current run* has banked the reveal
- * milestone — the saved park best plays no part in who steps out.
+ * milestone — the saved park best plays no part in who steps out. The finale
+ * park is the exception: its whole roster is owed on sight, reveal or not, so
+ * it owes the first undefeated rival the moment the park loads.
  */
 function currentBossDef() {
   const active = bossLadder(park.id).find((b) => !save.isBossDefeated(b.id));
   if (!active) return null;
-  if (!save.isParkUnlocked(park.id)) return null;
-  if (score < C.BOSS_REVEAL_SCORE) return null;
+  if (park.id !== FINALE_PARK_ID && !save.isParkUnlocked(park.id)) return null;
+  if (park.id !== FINALE_PARK_ID && score < C.BOSS_REVEAL_SCORE) return null;
   return active;
 }
 
 /**
- * Make the park's rival real: tear down whatever rival was standing and put
- * the current one up, or none when the park owes none. Safe to call any time
- * the park or the beaten-list changes.
+ * Make the park's rivals real: tear down whoever was standing and put the
+ * current ones up, or none when the park owes none. Safe to call any time the
+ * park or the beaten-list changes. The finale stands every undefeated rival at
+ * once — one per section, on the spot the layout marked for it — everywhere
+ * else the park owes at most the one the reveal milestone has earned.
  */
-function setupBoss() {
-  if (boss) {
-    boss.dispose();
-    boss = null;
+function setupBosses() {
+  for (const b of bosses) b.dispose();
+  bosses = [];
+  if (park.id === FINALE_PARK_ID) {
+    const defs = bossLadder(park.id);
+    const spots = park.def.bossSpots || [];
+    for (let i = 0; i < defs.length; i++) {
+      if (save.isBossDefeated(defs[i].id)) continue;
+      bosses.push(new BossSkater(park, scene, defs[i], spots[i] || null));
+    }
+  } else {
+    const def = currentBossDef();
+    if (!def) {
+      hud.setBossPromptVisible(false);
+      return;
+    }
+    bosses = [new BossSkater(park, scene, def)];
   }
-  const def = currentBossDef();
-  if (!def) {
-    hud.setBossPromptVisible(false);
-    return;
+  for (const b of bosses) shadowCasters.push(...collectMeshes(b.ride.frame));
+}
+
+/** The boss the crowd should ring, or a prompt/challenge should target: the
+ * standing rival nearest the rider, so in the finale the ring and the "walk up
+ * and challenge" prompt track whichever section the player has rolled up to. */
+function nearestStandingBoss() {
+  let best = null;
+  let bestD = Infinity;
+  for (const b of bosses) {
+    if (b.mode !== 'idle') continue;
+    const dx = b.pos.x - ride.pos.x;
+    const dz = b.pos.z - ride.pos.z;
+    const d = dx * dx + dz * dz;
+    if (d < bestD) {
+      bestD = d;
+      best = b;
+    }
   }
-  boss = new BossSkater(park, scene, def);
-  shadowCasters.push(...collectMeshes(boss.ride.frame));
+  return best || bosses[0] || null;
 }
 
 // --- the rival's crowd ----------------------------------------------------
@@ -300,14 +330,14 @@ function releaseBossCrowd() {
  *  frame so a reveal, a remount, a defeat or a park swap all sort themselves
  *  out — cheap, because it no-ops while the ring is already right. */
 function refreshBossCrowd() {
-  const want = !!boss && state !== CHALLENGE;
-  if (!want) {
+  const target = state === CHALLENGE ? null : state === BOSSCUT ? (bosses[0] || null) : nearestStandingBoss();
+  if (!target) {
     releaseBossCrowd();
     return;
   }
-  if (bossCrowd.length && bossCrowd[0].crowd?.boss === boss) return;
+  if (bossCrowd.length && bossCrowd[0].crowd?.boss === target) return;
   releaseBossCrowd();
-  bossCrowd = assignBossCrowd(bots, boss);
+  bossCrowd = assignBossCrowd(bots, target);
 }
 
 /**
@@ -315,11 +345,13 @@ function refreshBossCrowd() {
  * crossing is the introduction: the same skate-in a loaded park uses at boot,
  * playing right now while the player is riding. Because the milestone is the
  * live run's score, it can only be crossed by a combo banking inside a run,
- * so the cutscene always has a camera to cut to.
+ * so the cutscene always has a camera to cut to. The finale owes no reveal —
+ * its rivals are already standing — so nothing ever crosses here.
  */
 function maybeRevealBoss() {
-  if (currentBossDef() && !boss) {
-    setupBoss();
+  if (park.id === FINALE_PARK_ID) return;
+  if (currentBossDef() && !bosses.length) {
+    setupBosses();
     if (state === PLAYING) beginBossCutscene();
   }
 }
@@ -330,44 +362,50 @@ function maybeRevealBoss() {
  * move for the duration — this is the boss's introduction, not a race.
  */
 function beginBossCutscene() {
-  boss.toRide();
+  const target = bosses[0];
+  target.toRide();
   bossCut = C.BOSS_CUTSCENE_SECONDS;
   state = BOSSCUT;
   input.enabled = false;
-  hud.showBossCutscene(boss.def);
+  hud.showBossCutscene(target.def);
 }
 
 function endBossCutscene() {
-  boss.toIdle();
+  if (state !== BOSSCUT) return;
+  bosses[0].toIdle();
   state = PLAYING;
   input.enabled = true;
   hud.hideBossCutscene();
   hud.hide();
 }
 
-/** The duel: both skaters ride at once, scored by the same physics. */
-function startChallenge() {
-  if (!boss || boss.mode !== 'idle' || state === CHALLENGE) return;
+/** The duel: both skaters ride at once, scored by the same physics. Takes the
+ *  rival to take on — defaults to whichever standing boss is nearest, which is
+ *  what the finale wants: the player rolls up to a section and duels that one. */
+function startChallenge(target) {
+  if (!target) target = nearestStandingBoss();
+  if (!target || target.mode !== 'idle' || state === CHALLENGE) return;
   hud.hideBossResult();
   hud.setBossPromptVisible(false);
   hud.hideBossCutscene();
   challenge = {
     time: C.CHALLENGE_TIME,
+    boss: target,
     playerScore: 0,
     playerTricks: 0,
     bossScore: 0,
     bossTricks: 0,
   };
-  boss.toRide();
+  target.toRide();
   state = CHALLENGE;
   input.enabled = true;
   hud.hide();
-  hud.showBossChallenge(boss.def, challenge);
+  hud.showBossChallenge(target.def, challenge);
 }
 
 /** The rival's own events from its last step, added to the duel's tally. */
 function tallyBossEvents() {
-  for (const e of boss.ride.events) {
+  for (const e of challenge.boss.ride.events) {
     if (e.name === 'trick') challenge.bossTricks++;
     else if (e.name === 'combo') challenge.bossScore += e.total;
   }
@@ -377,11 +415,13 @@ function tallyBossEvents() {
  * The duel is over: compare tallies, and a win needs the run to have cleared
  * the rival's own bar as well — out-skating them on both counts is not enough
  * on its own, any more than reaching the bar alone is. A win banks the rival
- * and may, with the run past the park-unlock score, open the next park.
+ * and may, with the run past the park-unlock score, open the next park. On the
+ * finale a win over the last standing rival is the whole game beaten.
  */
 function endChallenge() {
   if (!challenge) return;
-  const def = boss.def;
+  const target = challenge.boss;
+  const def = target.def;
   const result = { ...challenge };
   const req = bossRequirement(def);
   const reqMet = score >= req.points && runTricks >= req.tricks;
@@ -395,15 +435,19 @@ function endChallenge() {
     const nxt = maybeUnlockNextPark();
     newPark = nxt ? nxt.name : null;
   }
-  boss.toIdle();
+  const finaleCleared =
+    win &&
+    park.id === FINALE_PARK_ID &&
+    bossLadder(park.id).every((b) => save.isBossDefeated(b.id));
+  target.toIdle();
   challenge = null;
   hud.setBossChallengeVisible(false);
   state = BOSSRESULT;
   input.enabled = false;
-  hud.showBossResult({ win, def, ...result, reqMet, req, newPark });
+  hud.showBossResult({ win, def, ...result, reqMet, req, newPark, finaleCleared });
   // A win steps the ladder: the next rival on this park (or none) takes over
   // the scene now, so the player can see what is waiting when they remount.
-  if (win) setupBoss();
+  if (win) setupBosses();
 }
 
 /**
@@ -448,8 +492,10 @@ function loadPark(def) {
   socialGroup.reset();
   // A fresh park means a fresh run: the current-run score and trick counters
   // belong to the map they were earned on, and a rival's reveal rides the live
-  // run, so neither survives a move — setupBoss below reads them at zero and
-  // owes the park no rival until the run itself earns one.
+  // run, so neither survives a move — setupBosses below reads them at zero and
+  // owes the park no rival until the run itself earns one. (The finale is the
+  // exception: its whole roster is on show from the moment the park loads,
+  // and its score gate is skipped, so the move hands every rival its spot.)
   score = 0;
   runTricks = 0;
   hud.setScore(0);
@@ -460,7 +506,7 @@ function loadPark(def) {
   hud.setBossPromptVisible(false);
   hud.hideBossCutscene();
   hud.hideBossResult();
-  setupBoss();
+  setupBosses();
   save.setPark(def.id);
   hud.setCurrentPark(def.name);
 }
@@ -540,10 +586,12 @@ let frames = 0;
 let worldTime = 0;       // unconditional clock, for birds and the logos' spin
 let liveCombo = { names: [], points: 0 };
 
-// The park's rival, when one is standing. The skate-in cutscene plays at the
-// moment the rival is revealed mid-run; after that the rival just stands
-// there, cutscene or not.
-let boss = null;
+// The park's rivals, when any are standing. The finale stands the whole
+// undefeated roster at once, one per section; everywhere else there is at most
+// the one the reveal milestone has earned. The skate-in cutscene plays at the
+// moment a rival is revealed mid-run; after that the rival just stands there,
+// cutscene or not.
+let bosses = [];
 let bossCut = 0;
 let challenge = null;    // the duel's tally, while one is running
 
@@ -1664,7 +1712,7 @@ function step(dt, frameInput) {
   // A rival waiting around does the same thing a social bot does: shifts its
   // weight, turns to look, carries its board. It only skates its lines while a
   // cutscene or a duel is actually running.
-  if (boss && boss.mode === 'idle') boss.step(dt, ride.pos);
+  for (const b of bosses) if (b.mode === 'idle') b.step(dt, ride.pos);
 
   if (state === PLAYING) {
     handleEvents(ride.update(dt, frameInput || IDLE_INPUT));
@@ -1677,7 +1725,7 @@ function step(dt, frameInput) {
       hud.say('Logo found', 'small');
     }
   } else if (state === BOSSCUT) {
-    boss.step(dt, ride.pos);
+    bosses[0].step(dt, ride.pos);
     bossCut -= dt;
     if (bossCut <= 0) endBossCutscene();
   } else if (state === CHALLENGE) {
@@ -1690,7 +1738,7 @@ function step(dt, frameInput) {
       logosCollected++;
       hud.say('Logo found', 'small');
     }
-    boss.step(dt, ride.pos);
+    challenge.boss.step(dt, ride.pos);
     tallyBossEvents();
     challenge.time -= dt;
     if (challenge.time <= 0) endChallenge();
@@ -1742,10 +1790,10 @@ function render(dt) {
       walkRide.groundSpeed = Math.abs(walker.speed);
       walkRide.vel.set(Math.sin(walker.yaw) * walker.speed, 0, Math.cos(walker.yaw) * walker.speed);
       chase.update(walkRide, null, dt);
-    } else if (state === BOSSCUT && boss && boss.mode === 'riding') {
+    } else if (state === BOSSCUT && bosses[0] && bosses[0].mode === 'riding') {
       // The skate-in is about the rival: the lens rides their lines while the
       // player's run is on hold.
-      chase.update(boss.ride, null, dt);
+      chase.update(bosses[0].ride, null, dt);
     } else {
       chase.update(ride, ragdoll, dt);
     }
@@ -1797,14 +1845,18 @@ function updateHud(dt) {
       ride.sliding,
       ride.revertK
     );
-    // The rival's prompt: a standing boss close enough to take on.
+    // The rival's prompt: a standing boss close enough to take on. With the
+    // whole roster standing in the finale, the prompt tracks the nearest one,
+    // so it always reads the section the player has actually rolled up to.
+    const target = nearestStandingBoss();
     const nearBoss =
-      boss && boss.mode === 'idle' && (() => {
-        const dx = boss.pos.x - ride.pos.x;
-        const dz = boss.pos.z - ride.pos.z;
+      target &&
+      (() => {
+        const dx = target.pos.x - ride.pos.x;
+        const dz = target.pos.z - ride.pos.z;
         return dx * dx + dz * dz < C.BOSS_PROMPT_R * C.BOSS_PROMPT_R;
       })();
-    hud.setBossPromptVisible(!!nearBoss, nearBoss ? boss.def : null);
+    hud.setBossPromptVisible(!!nearBoss, nearBoss ? target.def : null);
   } else if (state === CHALLENGE) {
     hud.setSpeed(ride.groundSpeed);
     hud.setAir(ride.airHeight);
@@ -1824,7 +1876,7 @@ function updateHud(dt) {
       ride.revertK
     );
     hud.setBossPromptVisible(false);
-    hud.setBossChallenge(boss.def, challenge);
+    hud.setBossChallenge(challenge.boss.def, challenge);
   } else if (state === WALKING) {
     hud.setSpeed(Math.abs(walker.speed));
     hud.setAir(0);
@@ -1860,7 +1912,10 @@ function progressionGate() {
   };
   if (active) {
     const req = bossRequirement(active);
-    if (score < C.BOSS_REVEAL_SCORE) {
+    // The finale skips the reveal milestone: its rivals are standing from the
+    // moment the park loads, so the run's bar reads the next rival's duel bar
+    // instead of the score gate that summoned the one before it.
+    if (park.id !== FINALE_PARK_ID && score < C.BOSS_REVEAL_SCORE) {
       gate.reveal = {
         name: active.name,
         score,
@@ -2009,7 +2064,7 @@ applyDpr();
 resize();
 respawn();
 chase.snap(ride);
-setupBoss();
+setupBosses();
 if (save.seenGuide) showStart();
 else showGuide();
 requestAnimationFrame(loop);
@@ -2095,13 +2150,18 @@ window.__skate = {
   start: startGame,
   respawn,
   get boss() {
-    return boss;
+    // The rival a test should be driving: the duel's target while one runs,
+    // the cutscene's rider while one plays, and the nearest standing rival
+    // otherwise — so a test (or the crowd) always gets one concrete boss.
+    if (state === CHALLENGE) return challenge?.boss || null;
+    if (state === BOSSCUT) return bosses[0] || null;
+    return nearestStandingBoss();
   },
   get challenge() {
     return challenge;
   },
   currentBossDef,
-  setupBoss,
+  setupBosses,
   startChallenge,
   beginBossCutscene,
   endBossCutscene,

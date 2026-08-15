@@ -32,7 +32,7 @@ import {
 } from './accessories.js';
 import { drawWheel, hexToHsv, hsvToHex } from './parkDesigner.js';
 import { PARK_UNLOCK_SCORE, BOSS_REVEAL_SCORE } from './config.js';
-import { bossLadder, bossRequirement } from './boss.js';
+import { bossLadder, bossRequirement, FINALE_PARK_ID } from './boss.js';
 import {
   STYLES,
   ICON_LIST,
@@ -503,6 +503,7 @@ export class Hud {
     this.bossResultTitleEl = document.getElementById('boss-result-title');
     this.bossResultLineEl = document.getElementById('boss-result-line');
     this.bossResultNewEl = document.getElementById('boss-result-new');
+    this.bossResultFinaleEl = document.getElementById('boss-result-finale');
     this.bossRematchBtn = document.getElementById('btn-boss-rematch');
     this.myParkGrid = document.getElementById('mypark-grid');
     this.myParkNewBtn = document.getElementById('btn-mypark-new');
@@ -1175,11 +1176,12 @@ export class Hud {
 
   /**
    * The result card. `newPark` is the name of a freshly unlocked park, or
-   * null. Beating the rival also hides the rematch button — a win is a win,
+   * null; `finaleCleared` marks the night the last rival falls on the finale
+   * park. Beating the rival also hides the rematch button — a win is a win,
    * there is nothing left to go again for until the next rival is standing in
    * the park.
    */
-  showBossResult({ win, def, playerScore, playerTricks, bossScore, bossTricks, reqMet, req, newPark }) {
+  showBossResult({ win, def, playerScore, playerTricks, bossScore, bossTricks, reqMet, req, newPark, finaleCleared = false }) {
     if (this.bossResultTitleEl) {
       this.bossResultTitleEl.textContent = win ? 'YOU WON' : 'THEY WON';
       this.bossResultTitleEl.classList.toggle('won', !!win);
@@ -1196,6 +1198,10 @@ export class Hud {
     if (this.bossResultNewEl) {
       this.bossResultNewEl.hidden = !newPark;
       this.bossResultNewEl.textContent = newPark ? `NEW PARK UNLOCKED: ${newPark}` : '';
+    }
+    if (this.bossResultFinaleEl) {
+      this.bossResultFinaleEl.hidden = !finaleCleared;
+      this.bossResultFinaleEl.textContent = finaleCleared ? 'THE GAUNTLET IS CLEARED — YOU BEAT EVERY RIVAL' : '';
     }
     if (this.bossRematchBtn) this.bossRematchBtn.hidden = !!win;
     if (this.bossResultEl) this.bossResultEl.hidden = false;
@@ -1501,13 +1507,18 @@ export class Hud {
         // The park's rival line: who stands there waiting, or cleared. Nothing
         // for parks without a roster — the built-in parks are the ones that own
         // rivals, so the card quietly skips the line elsewhere. The reveal is
-        // run-derived, so the card shows the roster, not a score bar.
+        // run-derived, so the card shows the roster, not a score bar. The finale
+        // card skips the reveal gate entirely — its rivals are all standing on
+        // sight, so it reads who leads the night instead.
         const roster = bossLadder(p.id);
         let rivalNote = '';
         if (roster.length && save) {
           const active = roster.find((b) => !save.isBossDefeated(b.id));
           if (!active) rivalNote = `<span class="park-rival cleared">Rivals cleared</span>`;
-          else if (save.parkBestOf(p.id) < BOSS_REVEAL_SCORE) {
+          else if (p.id === FINALE_PARK_ID) {
+            const left = roster.filter((b) => !save.isBossDefeated(b.id)).length;
+            rivalNote = `<span class="park-rival">Rival: <b>${active.name}</b> \u00B7 ${left} of ${roster.length} stand tonight</span>`;
+          } else if (save.parkBestOf(p.id) < BOSS_REVEAL_SCORE) {
             rivalNote = `<span class="park-rival">${active.name} awaits a ${BOSS_REVEAL_SCORE.toLocaleString()}-point run.</span>`;
           } else {
             rivalNote = `<span class="park-rival">Rival: <b>${active.name}</b></span>`;

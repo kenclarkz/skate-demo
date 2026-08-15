@@ -41,6 +41,48 @@ function def(id, name, blurb, opts, objects) {
   };
 }
 
+// The finale park (The Gauntlet) is the one night every rival shows up for, so
+// its crowd is part of the scenery: a static knot of spectators packed around
+// each rival's section and a wall of fans just past the curb on all four sides.
+// A spectator is pure decor (see parkObjects.js), so the crowd reads on screen
+// without a single extra AI bot — the touring crowd still rings whichever
+// rival is nearest when the player rides up to duel.
+const CROWD_COLORS = ['#e76f51', '#f4a261', '#e9c46a', '#2a9d8f', '#e63946', '#457b9d', '#6a4c93', '#f77f00'];
+
+function spectator(x, z, color) {
+  return { type: 'spectator', x, z, color };
+}
+
+/** A knot of fans around a rival's spot, with a wedge left open facing `tx/tz`
+ * (the arena) so the player can skate straight in and challenge. */
+function crowdCircle(cx, cz, tx, tz, count = 6, r = 3.9, colorShift = 0) {
+  const out = [];
+  const open = Math.atan2(cx - tx, cz - tz);
+  const gap = 0.45;
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0.5 : i / (count - 1);
+    const a = open + gap + (Math.PI * 2 - gap * 2) * t;
+    out.push(spectator(cx + Math.sin(a) * r, cz + Math.cos(a) * r, CROWD_COLORS[(i + colorShift) % CROWD_COLORS.length]));
+  }
+  return out;
+}
+
+/** The wall of cheering fans packed just beyond the curb, all four sides. */
+function fenceCrowd() {
+  const out = [];
+  const xs = [-52, -44, -36, -28, -20, -12, -4, 4, 12, 20, 28, 36, 44, 52];
+  for (let i = 0; i < xs.length; i++) {
+    out.push(spectator(xs[i], 63, CROWD_COLORS[(i + 1) % CROWD_COLORS.length]));
+    out.push(spectator(xs[i], -63, CROWD_COLORS[(i + 4) % CROWD_COLORS.length]));
+  }
+  const zs = [-52, -44, -36, -28, -20, -12, -4, 4, 12, 20, 28, 36, 44, 52];
+  for (let i = 0; i < zs.length; i++) {
+    out.push(spectator(63, zs[i], CROWD_COLORS[(i + 2) % CROWD_COLORS.length]));
+    out.push(spectator(-63, zs[i], CROWD_COLORS[(i + 5) % CROWD_COLORS.length]));
+  }
+  return out;
+}
+
 export const PARKS = [
   def(
     'home',
@@ -893,6 +935,149 @@ export const PARKS = [
       { type: 'bush', x: 46, z: 55.5, r: 0.9 },
       { type: 'bush', x: -46, z: -55.5, r: 0.9 },
       { type: 'bush', x: 46, z: -55.5, r: 0.85 },
+    ]
+  ),
+
+  // ----------------------------------------------------------------------
+  // The Gauntlet — the finale. Every rival shows up for this one: ten spots
+  // ring the arena (see bossSpots, in the same order as BOSSES in boss.js),
+  // each its own cleared section with a knot of fans, and a wall of crowd
+  // lines the curb so the park never feels empty even at 5 in the morning.
+  def(
+    'gauntlet',
+    'The Gauntlet',
+    'The finale: every rival, every ramp, and a crowd to prove you came.',
+    {
+      seed: 0x62a7,
+      padOnly: true,
+      extentX: 60,
+      extentZ: 60,
+      ground: '#2b3242',
+      spawn: { x: 0, y: 0, z: -52, yaw: 0 },
+      patrol: [
+        { x: 0, z: -50 }, { x: -36, z: 24 }, { x: -36, z: -24 },
+        { x: 0, z: 42 }, { x: 36, z: -24 }, { x: 36, z: 24 },
+      ],
+      logos: [
+        { x: 0, z: -46 }, { x: -34, z: 0 }, { x: 34, z: 0 },
+        { x: 0, z: 46 }, { x: -20, z: -20 }, { x: 20, z: -20 },
+      ],
+      // The rivals' spots, one per section, in BOSSES order (boss.js): ace,
+      // nova, rae, bolt, tigre, shove, briar, gnorbert, bananas, raven. All
+      // sit on a ring just inside the curb, clear of every feature, so each
+      // challenger can roll up to a spot and start a duel.
+      bossSpots: [
+        { x: 40.99, z: 20.89 },
+        { x: 20.89, z: 40.99 },
+        { x: -7.19, z: 45.44 },
+        { x: -32.53, z: 32.53 },
+        { x: -45.44, z: 7.19 },
+        { x: -40.99, z: -20.89 },
+        { x: -20.89, z: -40.99 },
+        { x: 7.19, z: -45.44 },
+        { x: 32.53, z: -32.53 },
+        { x: 45.44, z: -7.19 },
+      ],
+    },
+    [
+      // The big vert wall dead north, under the lights — the arena's centerpiece.
+      { type: 'vert', x: 0, z: 30, ry: 0, w: 20, R: 3.2, H: 2.8, flat: 6, deck: 4, color: '#3a86ff' },
+      // Center pool: bowl, funbox with a rail over the deck, spine either side.
+      { type: 'bowl', x: 0, z: 12, R: 4.5, H: 1.6, rim: 1.2, color: '#2ec4b6' },
+      { type: 'funbox', x: 0, z: -6, ry: 0, w: 14, d: 10, h: 1.1, R: 1.6, color: '#3a86ff' },
+      { type: 'rail', x: 0, z: -6, ry: 90, len: 12, h: 1.42, color: '#e5e7eb' },
+      { type: 'spine', x: 0, z: -18, ry: 0, w: 12, R: 2.0, H: 1.5, gap: 3, color: '#e0552f' },
+      { type: 'spine', x: -14, z: 14, ry: 90, w: 12, R: 2.0, H: 1.5, gap: 3, color: '#e0552f' },
+      // South run: bank onto the deck, spine, then the funbox line.
+      { type: 'bank', x: 0, z: -36, ry: 0, w: 12, len: 8, h: 1.0, color: '#e9c46a' },
+      { type: 'slab', x: 0, z: -28, ry: 0, w: 12, d: 8, h: 1.0, color: '#e9c46a' },
+      { type: 'rail', x: 0, z: -23, ry: 0, len: 10, h: 0.5, color: '#e5e7eb' },
+      // West and east flanks: mini ramps, pyramids, aframes and a rail garden.
+      { type: 'mini', x: -25, z: -6, ry: 90, w: 14, R: 2.2, H: 1.6, flat: 5, deck: 1.2, color: '#9b5de5' },
+      { type: 'mini', x: 25, z: -6, ry: 90, w: 14, R: 2.2, H: 1.6, flat: 5, deck: 1.2, color: '#9b5de5' },
+      { type: 'pyramid', x: -25, z: 16, ry: 0, w: 8, d: 8, len: 3, h: 1.2, color: '#ffd166' },
+      { type: 'pyramid', x: 25, z: 16, ry: 0, w: 8, d: 8, len: 3, h: 1.2, color: '#ffd166' },
+      { type: 'aframe', x: -25, z: -28, ry: 0, w: 8, d: 3, len: 4, h: 1.1, color: '#ff9e00' },
+      { type: 'aframe', x: 25, z: -28, ry: 0, w: 8, d: 3, len: 4, h: 1.1, color: '#ff9e00' },
+      { type: 'rail', x: -36, z: 8, ry: 0, len: 8, h: 0.5, color: '#f4a261' },
+      { type: 'rail', x: 36, z: 8, ry: 0, len: 8, h: 0.5, color: '#f4a261' },
+      { type: 'rail', x: -36, z: -12, ry: 0, len: 8, h: 0.5, color: '#f4a261' },
+      { type: 'rail', x: 36, z: -12, ry: 0, len: 8, h: 0.5, color: '#f4a261' },
+      { type: 'rail', x: 0, z: 18, ry: 0, len: 10, h: 0.5, color: '#e5e7eb' },
+      // Corner bowls for pumping between the rival sections.
+      { type: 'bowl', x: -16, z: 30, R: 4, H: 1.5, rim: 1.2, color: '#2ec4b6' },
+      { type: 'bowl', x: 16, z: 30, R: 4, H: 1.5, rim: 1.2, color: '#2ec4b6' },
+      // The west deck: bank onto the slab, a rail to grind across the top.
+      { type: 'bank', x: -26, z: 40, ry: 0, w: 14, len: 8, h: 1.0, color: '#e9c46a' },
+      { type: 'slab', x: -26, z: 48, ry: 0, w: 14, d: 8, h: 1.0, color: '#e9c46a' },
+      { type: 'rail', x: -26, z: 48, ry: 0, len: 12, h: 1.32, color: '#e5e7eb' },
+      // The east deck, mirrored on the south side between gnorbert and bananas.
+      { type: 'bank', x: 26, z: -40, ry: 0, w: 12, len: 8, h: 1.0, color: '#e9c46a' },
+      { type: 'slab', x: 26, z: -48, ry: 0, w: 12, d: 8, h: 1.0, color: '#e9c46a' },
+      { type: 'rail', x: 26, z: -48, ry: 0, len: 10, h: 1.32, color: '#e5e7eb' },
+      // Low ledges threading the open lanes between sections.
+      { type: 'ledge', x: -14, z: -30, ry: 0, len: 10, w: 1.0, h: 0.6, color: '#3a86ff' },
+      { type: 'ledge', x: 14, z: -30, ry: 0, len: 10, w: 1.0, h: 0.6, color: '#3a86ff' },
+      { type: 'ledge', x: -16, z: 42, ry: 90, len: 8, w: 1.0, h: 0.6, color: '#3a86ff' },
+      { type: 'ledge', x: 16, z: -46, ry: 90, len: 8, w: 1.0, h: 0.6, color: '#3a86ff' },
+      { type: 'rail', x: -24, z: 30, ry: 90, len: 8, h: 0.5, color: '#f4a261' },
+      { type: 'rail', x: 24, z: 38, ry: 90, len: 8, h: 0.5, color: '#f4a261' },
+      // Night-market decor around the ring.
+      { type: 'lamp', x: -44, z: -40, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: 44, z: -40, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: -44, z: 40, h: 5, color: '#8b9099' },
+      { type: 'lamp', x: 44, z: 40, h: 5, color: '#8b9099' },
+      { type: 'bench', x: -50, z: 0, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 50, z: 0, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: -20, z: 50, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'bench', x: 20, z: 50, ry: 90, len: 3, color: '#6c757d' },
+      { type: 'cone', x: -30, z: 36, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: 30, z: 36, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: -30, z: -36, h: 0.7, color: '#e8702c' },
+      { type: 'cone', x: 30, z: -36, h: 0.7, color: '#e8702c' },
+      { type: 'trashcan', x: -44, z: -30, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: 44, z: -30, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: -44, z: 30, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'trashcan', x: 44, z: 30, r: 0.35, h: 0.95, color: '#3a5a40' },
+      { type: 'dumpster', x: -50, z: -44, ry: 0, w: 2.4, d: 1.3, h: 1.2, color: '#37506b' },
+      { type: 'dumpster', x: 50, z: -44, ry: 0, w: 2.4, d: 1.3, h: 1.2, color: '#37506b' },
+      { type: 'graffiti', x: -56, z: 0, ry: 90, w: 2.4, h: 1.2, color: '#ff2fa0' },
+      { type: 'graffiti', x: 56, z: 0, ry: 90, w: 2.4, h: 1.2, color: '#ff2fa0' },
+      { type: 'banner', x: 0, z: 52, ry: 0, w: 8, h: 1.2, color: '#e0552f' },
+      { type: 'planter', x: -40, z: -8, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'planter', x: 40, z: -8, ry: 0, w: 2.4, d: 1.6, color: '#b7b7a4' },
+      { type: 'foodtruck', x: -40, z: 28, ry: 0, len: 4.5, w: 2.1, color: '#2ec4b6' },
+      { type: 'car', x: 40, z: 28, ry: 90, len: 4.2, w: 1.8, h: 0.6, color: '#3a7ca5' },
+      // The crowd around each rival — one knot per section, wedge open to the
+      // arena — plus the wall of fans beyond the curb.
+      ...crowdCircle(40.99, 20.89, 0, 0, 6, 3.9, 0),
+      ...crowdCircle(20.89, 40.99, 0, 0, 6, 3.9, 1),
+      ...crowdCircle(-7.19, 45.44, 0, 0, 6, 3.9, 2),
+      ...crowdCircle(-32.53, 32.53, 0, 0, 6, 3.9, 3),
+      ...crowdCircle(-45.44, 7.19, 0, 0, 6, 3.9, 4),
+      ...crowdCircle(-40.99, -20.89, 0, 0, 6, 3.9, 5),
+      ...crowdCircle(-20.89, -40.99, 0, 0, 6, 3.9, 6),
+      ...crowdCircle(7.19, -45.44, 0, 0, 6, 3.9, 7),
+      ...crowdCircle(32.53, -32.53, 0, 0, 6, 3.9, 0),
+      ...crowdCircle(45.44, -7.19, 0, 0, 6, 3.9, 1),
+      ...fenceCrowd(),
+      // Trees along the far edges, inside the curb.
+      { type: 'tree', x: -56, z: 56, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: 56, z: 56, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: -56, z: -56, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: 56, z: -56, r: 1.2, h: 3.2, color: '#46764a' },
+      { type: 'tree', x: -56, z: 30, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 56, z: 30, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -56, z: -30, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 56, z: -30, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -30, z: 56, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 30, z: 56, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: -30, z: -56, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'tree', x: 30, z: -56, r: 1.1, h: 3.0, color: '#46764a' },
+      { type: 'bush', x: -52, z: 56.5, r: 0.85 },
+      { type: 'bush', x: 52, z: 56.5, r: 0.9 },
+      { type: 'bush', x: -52, z: -56.5, r: 0.9 },
+      { type: 'bush', x: 52, z: -56.5, r: 0.85 },
     ]
   ),
 ];
