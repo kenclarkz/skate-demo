@@ -1,0 +1,11 @@
+const pick = (mod) => (mod.chromium ?? mod.default?.chromium);
+const chromium = pick(await import('playwright'));
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'], executablePath: '/usr/bin/chromium' });
+const page = await (await browser.newContext({ viewport: { width: 900, height: 560 } })).newPage();
+page.on('console', (m) => console.log('console:', m.type(), m.text().slice(0, 300)));
+page.on('pageerror', (e) => console.log('pageerror:', String(e).slice(0, 500)));
+await page.goto('http://localhost:8081/skate/index.html?debug=1', { waitUntil: 'load' });
+await page.waitForTimeout(3000);
+const has = await page.evaluate(() => !!window.__skate);
+console.log('has __skate:', has);
+await browser.close();
