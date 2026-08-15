@@ -1473,7 +1473,7 @@ section('Parks');
     const g = window.__skate;
     return { count: g.parks.length, ids: g.parks.map((p) => p.id), current: g.park.id };
   });
-  ok(info.count === 10, `there are ten built-in parks (${info.count})`);
+  ok(info.count === 11, `there are eleven built-in parks (${info.count})`);
   ok(new Set(info.ids).size === info.count, 'each with a distinct id');
   ok(info.current === 'home', 'and the game boots into Home Park');
 
@@ -1555,7 +1555,7 @@ section('Park progression');
   ok(boot.id === 'home', `a saved pick of a locked park boots into Home Park instead (booted into ${boot.id})`);
   ok(JSON.stringify(boot.unlocked) === JSON.stringify(['home']), 'and it does not silently unlock anything');
 
-  // The picker: Home Park is a button with its best, the other nine are inert
+  // The picker: Home Park is a button with its best, the other ten are inert
   // locked rows spelling out the pair of doors that must both open on the
   // park before them — its whole rival roster beaten, and a 1,000,000-point
   // single run — plus how far along each door is.
@@ -3645,8 +3645,8 @@ section('Menu scrolling and back buttons, on a short screen');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
     return { cards: cards.length, ids: cards.map((c) => c.dataset.park), hasBack: !!document.getElementById('btn-parks-back') };
   });
-  ok(parks.cards === 10 && parks.ids[0] === 'home', `the park picker lists Home Park first (${parks.ids.join(', ')})`);
-  ok(parks.ids.includes('home') && parks.ids.includes('raven'), `and every park gets a card (${parks.ids.join(', ')})`);
+  ok(parks.cards === 11 && parks.ids[0] === 'home', `the park picker lists Home Park first (${parks.ids.join(', ')})`);
+  ok(parks.ids.includes('home') && parks.ids.includes('raven') && parks.ids.includes('gauntlet'), `and every park gets a card (${parks.ids.join(', ')})`);
   ok(parks.hasBack, 'and it has a back button too');
 
   await page.setViewportSize({ width: 900, height: 560 });
@@ -4569,7 +4569,7 @@ section('Tutorial and menus');
     const cards = [...g.hud.parkGrid.querySelectorAll('[data-park]')];
     return { count: cards.length, ids: cards.map((c) => c.dataset.park) };
   });
-  ok(picker.count === 10, `the park picker lists every built-in map (${picker.count})`);
+  ok(picker.count === 11, `the park picker lists every built-in map (${picker.count})`);
   const known = await run(() => window.__skate.parks.map((p) => p.id));
   ok(
     picker.ids.every((id) => known.includes(id)),

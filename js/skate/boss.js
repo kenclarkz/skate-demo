@@ -1,5 +1,7 @@
 // The park rivals: a ladder of ten bosses, one per character, each with its
-// own dedicated park.
+// own dedicated park. The finale park stands every boss at once — one boss in
+// its own section, the whole roster on show at the same time — and clearing
+// all ten is how the game is beaten.
 //
 // A rival is the player's own rig in disguise. It carries a Board, a Skater
 // and a Ride exactly like the touring bots in ai.js, and it is driven by the
@@ -13,7 +15,9 @@
 //
 // The ladder's order and its reveals are decided here; whether a boss is still
 // standing is save's business (bossesDefeated), and when one steps out is
-// main.js's (the park's best clearing BOSS_REVEAL_SCORE).
+// main.js's (the park's best clearing BOSS_REVEAL_SCORE). The finale park has
+// no reveal — its whole roster is standing from the moment the park loads —
+// so its ladder is the full ten.
 
 import * as C from './config.js';
 import { Board } from './board.js';
@@ -26,6 +30,9 @@ import { byId as charById } from './characters.js';
 const IDLE_TURN = 1.4; // how sharply a standing rival turns in place
 const IDLE_TURN_MIN = 1.5; // seconds between a rival deciding to look elsewhere
 const IDLE_TURN_MAX = 4;
+
+/** The finale park: every rival stands in its own section at once. */
+export const FINALE_PARK_ID = 'gauntlet';
 
 /** The ten bosses, in challenge order. */
 export const BOSSES = [
@@ -171,8 +178,11 @@ export const BOSSES = [
   },
 ];
 
-/** @returns the bosses whose park is the given one, in challenge order. */
+/** @returns the bosses whose park is the given one, in challenge order. The
+ * finale park is the whole ladder at once — its layout stands every boss in
+ * its own section, so it gets the full ten. */
 export function bossLadder(parkId) {
+  if (parkId === FINALE_PARK_ID) return BOSSES;
   return BOSSES.filter((b) => b.parkId === parkId);
 }
 
@@ -199,7 +209,7 @@ export function bossRequirement(def) {
  * challenge/cutscene states decide when to call toRide/toIdle.
  */
 export class BossSkater {
-  constructor(park, scene, def) {
+  constructor(park, scene, def, hangout = null) {
     const character = charById[def.characterId];
     this.def = def;
     this.board = new Board();
@@ -256,7 +266,10 @@ export class BossSkater {
     this.ride.frame.remove(this.board.group);
     this.ride.frame.remove(this.skater.group);
     scene.add(this.ride.frame);
-    this.hangout = pickHangout(park) || park.patrol[0];
+    // The finale parks every rival in its own section: a fixed spot from the
+    // layout's bossSpots, so each character has its own clearly marked ground.
+    // Everywhere else the rival picks a hangout near a feature it is known for.
+    this.hangout = hangout ? { x: hangout.x, z: hangout.z } : pickHangout(park) || park.patrol[0];
     this.dropAtHangout();
   }
 

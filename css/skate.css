@@ -780,6 +780,14 @@ body {
   color: var(--good);
 }
 
+.boss-result-finale {
+  margin: 14px 0 0;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #ffd166;
+}
+
 .boss-result-actions {
   display: flex;
   justify-content: center;
