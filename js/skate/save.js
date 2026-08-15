@@ -29,7 +29,7 @@ import {
 } from './board-design.js';
 import { TYPES, typeById } from './boards.js';
 import { PARKS } from './parkLayouts.js';
-import { BOSSES } from './boss.js';
+import { BOSSES, FINALE_PARK_ID } from './boss.js';
 
 const KEY = 'skate.save';
 
@@ -692,8 +692,11 @@ export const save = {
   },
 
   /** Whether a park has been unlocked. The first built-in park always is; any
-   * later park needs its predecessor's roster beaten and a 1,000,000-point run. */
+   * later park needs its predecessor's roster beaten and a 1,000,000-point run.
+   * The finale park is permanently unlocked for now, so it can be play-tested
+   * without grinding the whole ladder. */
   isParkUnlocked(id) {
+    if (id === FINALE_PARK_ID) return true;
     return state.parksUnlocked.includes(id);
   },
 
