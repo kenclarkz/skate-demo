@@ -67,6 +67,19 @@ const LIP_DROP = 0.32;      // a drop this deep ahead reads as a lip worth launc
 const AVOID_STEP = 0.38;    // a step-up this tall ahead reads as a wall to steer around
 const CURB_POP_MIN = 0.09;  // a step-up this tall ahead is popped over...
 const CURB_POP_MAX = 0.36;  // ...up to this tall; taller gets steered around instead
+const BOSS_LEG_UP = 0.2;    // a step-up taller than this on a planned leg reads as a wall
+const BOSS_LEG_DOWN = 0.2;  // a drop deeper than this on a planned leg reads as a cliff
+const BOSS_LEG_STEP = 0.4;  // metres between terrain samples along a planned leg
+const BOSS_GRID_STEP = 14;  // metres between the flat-ground cells sampled for a rival's loop
+const BOSS_GRID_MARGIN = 6; // metres of curb the sampling stays clear of
+const BOSS_FLAT_PROBE = 2.4; // metres out from a cell the ground is checked across
+const BOSS_FLAT_RANGE = 0.18; // a wider ground spread than this reads as a slope, not a pad
+const BOSS_LOOP_MIN = 4;    // the shortest circuit worth riding — a triangle of
+                            // waypoints is a U-turn with an extra corner, not a line
+const BOSS_LOOP_MAX = 8;    // the longest circuit the route search bothers with
+const BOSS_PTS_MAX = 14;    // the most waypoints the circuit search will consider
+const BOSS_LOOP_WORK = 300000; // the most paths the circuit search will explore
+const BOSS_GRIND_CLEAR = 1.5; // metres a planned line keeps clear of any rail, ledge or coping
 
 // The trick catalogue per skill band. Skill runs 1–4: a beginner's legs only
 // reliably produce the pops and the basic flips, a pro can throw the whole
@@ -197,13 +210,281 @@ function patrolRoute(bot) {
   return out;
 }
 
+/** Sample the ground along a straight leg and judge whether a rival can ride it
+ * flat: nothing to slam (a step-up beyond the pop range) and no lip to drop
+ * off into. Probes a band around the line too — a rival does not hold the
+ * centreline while it is popping tricks, so a wall sitting a metre off the
+ * line is a wall it will still find. Rails, ledges and copings do not show up
+ * in the ground field (they hang above it), so every grind line near the band
+ * is a grind the rival would drift into — the band stays clear of those too.
+ * Feeds the boss's flat-loop router. */
+function legProfile(park, ax, az, bx, bz, band) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const len = Math.hypot(dx, dz);
+  if (len < 0.5) return { safe: true, maxUp: 0, maxDown: 0, len };
+  const px = -dz / len;
+  const pz = dx / len;
+  let maxUp = 0;
+  let maxDown = 0;
+  let climb = 0;
+  let drop = 0;
+  // The band is deliberately wider than the board: a rival rides within a
+  // couple of metres of its line (corner cuts, the carve before a trick), so
+  // a leg is only a clear one when that drift can't reach a feature's edge.
+  // The band widens after a loop keeps putting the boss on the ground: a leg
+  // that rides flat but clips a feature two metres off-line is a leg to shed.
+  for (const off of [0, band, -band]) {
+    const ox = px * off;
+    const oz = pz * off;
+    let lastY = park.heightAt(ax + ox, az + oz);
+    const n = Math.max(2, Math.ceil(len / BOSS_LEG_STEP));
+    let lineUp = 0;
+    let lineDown = 0;
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      const x = ax + dx * t + ox;
+      const z = az + dz * t + oz;
+      const y = park.heightAt(x, z);
+      const up = y - lastY;
+      const down = lastY - y;
+      if (up > maxUp) maxUp = up;
+      if (down > maxDown) maxDown = down;
+      if (up > 0) lineUp += up;
+      if (down > 0) lineDown += down;
+      lastY = y;
+      if (grindNear(park, x, z)) return { safe: false, maxUp, maxDown, len };
+    }
+    // A leg that steadily climbs or sheds more than a small step is a bank,
+    // not a pad — each 0.4 m sample is a shallow step a rival would roll over,
+    // but strung across the park it rides the board up a slope it cannot pop
+    // cleanly off of. Only the centreline's total matters; the band offsets
+    // are just clearance.
+    if (off === 0) {
+      climb = lineUp;
+      drop = lineDown;
+    }
+  }
+  return {
+    safe: maxUp <= BOSS_LEG_UP && maxDown <= BOSS_LEG_DOWN && climb <= 0.4 && drop <= 0.4,
+    maxUp,
+    maxDown,
+    len,
+  };
+}
+
+/** Whether a point rides within the grind-clear band of any rail, ledge or
+ * coping. The ground field does not include them — a rail hangs above the pad
+ * a metre away from a line the ground probe calls flat — so the flat router
+ * asks the park's own grind lines whether it would be drifting into one. */
+function grindNear(park, x, z) {
+  for (const g of park.grinds) {
+    const hlen = Math.hypot(g.b.x - g.a.x, g.b.z - g.a.z);
+    if (hlen < 0.01) continue;
+    const hx = (g.b.x - g.a.x) / hlen;
+    const hz = (g.b.z - g.a.z) / hlen;
+    const t = Math.min(hlen, Math.max(0, (x - g.a.x) * hx + (z - g.a.z) * hz));
+    const d = Math.hypot(x - (g.a.x + hx * t), z - (g.a.z + hz * t));
+    if (d < BOSS_GRIND_CLEAR) return true;
+  }
+  return false;
+}
+
+/** Whether the pad around a spot is open flatground: the ground spread across
+ * the probe radius stays under the flat range, so there is no lip, step or
+ * slope for a flatground line to trip over. */
+function flatSpot(park, x, z) {
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = -2; i <= 2; i++) {
+    for (let j = -2; j <= 2; j++) {
+      const y = park.heightAt(x + (i * BOSS_FLAT_PROBE) / 2, z + (j * BOSS_FLAT_PROBE) / 2);
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  return maxY - minY < BOSS_FLAT_RANGE;
+}
+
+/** The longest safe closed circuit through a set of waypoints, each leg probed
+ * by band for a step-up or a drop, ties broken toward a start near the boss so
+ * the first leg is not a detour across the park. Returns the waypoints, or
+ * null when the set has no rideable circuit. */
+function flatLoopFrom(bot, pts, band) {
+  const park = bot.ride.park;
+  const n = pts.length;
+  if (n < BOSS_LOOP_MIN) return null;
+  const safe = Array.from({ length: n }, () => new Array(n).fill(false));
+  const tight = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const p = legProfile(park, pts[i].x, pts[i].z, pts[j].x, pts[j].z, band);
+      safe[i][j] = safe[j][i] = p.safe;
+      tight[i][j] = tight[j][i] = Math.max(p.maxUp, p.maxDown);
+    }
+  }
+  const toRoute = (idx) => idx.map((i) => ({ x: pts[i].x, z: pts[i].z, node: null }));
+  // A cycle is scored by how tight its tightest leg is before its length: two
+  // loops may both be flat enough to ride, but the one whose closest pass to a
+  // feature is the farthest away is the one a rival bails off the least. Node
+  // count still matters once the clearance is comparable. The score has no
+  // dependence on where the rival happens to be standing: a bail replans from
+  // a new spot, and a loop that changes with the spot churns the whole line
+  // mid-duel. One best circuit per park, ridden every time.
+  const cycleWorst = (idx) => {
+    let worst = 0;
+    for (let i = 0; i < idx.length; i++) {
+      const t = tight[idx[i]][idx[(i + 1) % idx.length]];
+      if (t > worst) worst = t;
+    }
+    return worst;
+  };
+  let work = 0;
+  let exhausted = false;
+  let best = null;
+  let bestScore = -1;
+  for (let s = 0; s < n && !exhausted; s++) {
+    const path = [s];
+    const seen = new Set([s]);
+    const walk = () => {
+      if (exhausted) return;
+      const last = path[path.length - 1];
+      for (let k = 0; k < n; k++) {
+        if (k === s) {
+          // The leg that closes the circuit (back to the start) is a leg the
+          // boss rides every lap, so it is held to the same standard as the
+          // rest — an unprobed return leg is a wall the boss slams into on the
+          // last stretch of every loop (nova's loop closed across a raised
+          // box, and the rival bounced off its banks a couple of times a lap).
+          if (path.length >= BOSS_LOOP_MIN && safe[last][s]) {
+            const score = -cycleWorst(path) * 10000 + path.length * 1000;
+            if (score > bestScore) {
+              bestScore = score;
+              best = path.slice();
+            }
+          }
+        } else if (!seen.has(k) && safe[last][k] && path.length < BOSS_LOOP_MAX) {
+          if (++work > BOSS_LOOP_WORK) {
+            exhausted = true;
+            return;
+          }
+          seen.add(k);
+          path.push(k);
+          walk();
+          path.pop();
+          seen.delete(k);
+        }
+      }
+    };
+    walk();
+  }
+  if (best) return toRoute(best);
+  // No closed circuit — take the longest safe line and double it back so the
+  // boss rides it end to end without teleporting.
+  let bestPath = null;
+  let bestPathScore = -1;
+  const path = [];
+  const seen = new Set();
+  const walkPath = () => {
+    if (exhausted) return;
+    const last = path[path.length - 1];
+    for (let k = 0; k < n; k++) {
+      if (path.length < BOSS_LOOP_MAX && !seen.has(k) && (path.length === 0 || safe[last][k])) {
+        if (++work > BOSS_LOOP_WORK) {
+          exhausted = true;
+          return;
+        }
+        seen.add(k);
+        path.push(k);
+        const dx = pts[k].x - bot.ride.pos.x;
+        const dz = pts[k].z - bot.ride.pos.z;
+        const score = path.length * 1000 - Math.hypot(dx, dz);
+        if (score > bestPathScore) {
+          bestPathScore = score;
+          bestPath = path.slice();
+        }
+        walkPath();
+        path.pop();
+        seen.delete(k);
+      }
+    }
+  };
+  walkPath();
+  if (!bestPath || bestPath.length < BOSS_LOOP_MIN) return null;
+  return toRoute(bestPath.concat(bestPath.slice(1, -1).reverse()));
+}
+
+/** The rival's own flatground circuit. A duel is scored on flatground tricks,
+ * so the boss rides open pads and leaves the rails and transitions to the
+ * crowd: the patrol loop's waypoints are pruned of any leg that crosses
+ * something worth slamming — a bowl rim, a vert face, a bank — and joined into
+ * the longest safe closed loop the park allows. When the patrol loop has no
+ * clean circuit, the pad's open flat ground is sampled into the pool so the
+ * boss can still build a loop around the features instead of over them.
+ * Returns the waypoints, or null when the park has no rideable circuit (which
+ * is when the patrol loop is taken). */
+function bossFlatLoop(bot) {
+  const park = bot.ride.park;
+  const pts = (bot.patrol || []).map((p) => projectIn(park, p.x, p.z));
+  // Sample the pad for open flat ground and add it to the pool, kept clear of
+  // the patrol line so the loop does not hug the features that blocked it. The
+  // grid always joins the pool, not just when the patrol loop fails — a park
+  // whose patrol happens to form a circuit might still have a safer line out
+  // on the open pad, and a rival rides the flattest open ground it can find.
+  const pCount = pts.length;
+  for (let z = -park.extentZ + BOSS_GRID_MARGIN; z <= park.extentZ - BOSS_GRID_MARGIN; z += BOSS_GRID_STEP) {
+    for (let x = -park.extentX + BOSS_GRID_MARGIN; x <= park.extentX - BOSS_GRID_MARGIN; x += BOSS_GRID_STEP) {
+      if (!flatSpot(park, x, z)) continue;
+      if (pts.some((q) => (q.x - x) * (q.x - x) + (q.z - z) * (q.z - z) < 64)) continue;
+      pts.push({ x, z });
+    }
+  }
+  // Keep the search small: a rival only needs the park's flattest few cells,
+  // so the grid points that bunch up closest are the first to go.
+  while (pts.length > BOSS_PTS_MAX) {
+    let drop = -1;
+    let dropNear = Infinity;
+    for (let i = pCount; i < pts.length; i++) {
+      let near = Infinity;
+      for (let j = 0; j < pts.length; j++) {
+        if (i === j) continue;
+        const d = (pts[i].x - pts[j].x) * (pts[i].x - pts[j].x) + (pts[i].z - pts[j].z) * (pts[i].z - pts[j].z);
+        if (d < near) near = d;
+      }
+      if (near < dropNear) {
+        dropNear = near;
+        drop = i;
+      }
+    }
+    if (drop < 0) break;
+    pts.splice(drop, 1);
+  }
+  const loop13 = flatLoopFrom(bot, pts, 1.3);
+  if (!loop13) return flatLoopFrom(bot, pts, 2.3) || patrolRoute(bot);
+  // A loop that rides clear of the ground two metres from its line can still
+  // hug a wall it passes a metre off. Most of those walls are pads a rival
+  // rolls by without touching, but a step tall enough that the board would be
+  // climbing onto it (a pool deck, a high pad) is a leg that a wider clear
+  // band would have ruled out — so if any leg of the tight loop runs within
+  // that wider band of one, rebuild the line with the wider clearance.
+  const TALL = 2.0;
+  for (let i = 0; i < loop13.length; i++) {
+    const wp = loop13[i];
+    const next = loop13[(i + 1) % loop13.length];
+    if (legProfile(park, wp.x, wp.z, next.x, next.z, 2.3).maxUp > TALL) {
+      return flatLoopFrom(bot, pts, 2.3) || loop13;
+    }
+  }
+  return loop13;
+}
+
 /**
  * Build a fresh ride for the bot: route from the nearest feature (or a given
  * node id) to a random feature whose difficulty the bot's skill allows, along
  * the graph's flow-friendly lines. Returns null when the graph cannot produce
  * one, which is when the caller falls back to the patrol loop.
  */
-function buildRoute(bot, g, fromId) {
+function buildRoute(bot, g, fromId, prefKinds) {
   if (!g || g.nodes.length < 2) return null;
   const byId = nodeById(g);
   const maxDiff = SKILL_MAX_DIFF[skillIndex(bot.skill)] ?? 5;
@@ -218,14 +499,16 @@ function buildRoute(bot, g, fromId) {
   // for: rails and ledges for the grinders, transitions (quarters, bowls,
   // funboxes) for the airs, flat pads for the flatground and manual heads.
   // It is a bias, not a lock — a random good line is taken over nothing.
-  const prefKinds =
-    bot.focus === 'rail' || bot.focus === 'grind'
-      ? ['rail', 'ledge']
-      : bot.focus === 'air'
-        ? ['transition']
-        : bot.focus === 'flat' || bot.focus === 'manual'
-          ? ['flat']
-          : null;
+  if (!prefKinds) {
+    prefKinds =
+      bot.focus === 'rail' || bot.focus === 'grind'
+        ? ['rail', 'ledge']
+        : bot.focus === 'air'
+          ? ['transition']
+          : bot.focus === 'flat' || bot.focus === 'manual'
+            ? ['flat']
+            : null;
+  }
   for (let attempt = 0; attempt < 8 && pool.length; attempt++) {
     let target;
     if (prefKinds) {
@@ -394,6 +677,125 @@ function pickTrick(bot, charge, extraAir = 0) {
 }
 
 /**
+ * A rival's trick: weighted toward the big-value moves in its own bag, so a
+ * boss on pace for a duel throws the points the player has to beat rather
+ * than rolling the same ten-ounce catalogue as everyone else. The bag stays
+ * the character's identity; the weighting only changes how often each trick
+ * comes out — a tre flip, for example, seven times as often as an ollie.
+ * Same air-fit gate the touring bots use.
+ */
+function bossPickTrick(bot, charge, extraAir = 0) {
+  const pool =
+    (bot.trickBag && bot.trickBag.length ? bot.trickBag : SKILL_TRICKS[skillIndex(bot.skill)]) ||
+    SKILL_TRICKS[0];
+  const air = airTimeFor(charge) + extraAir;
+  const fits = pool.filter((id) => {
+    const def = TRICK_BY_ID[id];
+    return def && trickTimeNeeded(def) < air * 0.7 + 0.06;
+  });
+  const list = fits.length ? fits : pool;
+  let total = 0;
+  const weights = list.map((id) => {
+    const v = Math.max(50, (TRICK_BY_ID[id] && TRICK_BY_ID[id].points) || 0);
+    total += v;
+    return v;
+  });
+  let roll = Math.random() * total;
+  let pick = list[0] || 'ollie';
+  for (let i = 0; i < list.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) {
+      pick = list[i];
+      break;
+    }
+  }
+  return pick;
+}
+
+/**
+ * A rival's own trick decision, consulted by stepPatrol the way a pro's is —
+ * fast cadence, chained off the landing, throwing the bag's biggest moves and
+ * tipping into a manual flourish when the character is known for one. The
+ * pace knob (rival identity) tightens the gap between tricks.
+ */
+export function bossChooseTrick(bot, { ride, speedOk, curbPop, lip, show, stepAhead, dropAhead, nearEdge }) {
+  if (!speedOk) return null;
+  if (curbPop && bot.curbPopCool <= 0) {
+    bot.curbPopCool = 1.4;
+    return { trick: 'ollie', charge: 0.7 + Math.random() * 0.2, manual: false };
+  }
+  if (bot.trickCool > 0 || bot.bailCool > 0) return null;
+  // A combo that is on its way to the bank is not ready for a third trick. The
+  // bank is a calm 1.35 s of rolling with nothing happening, so a trick popped
+  // into a live combo just re-arms the clock and hands the run to the next
+  // bail. Two tricks a combo is the rival's pace — a tight chain that still
+  // banks before a bail can wipe it — so the second trick pops while the
+  // first is fresh, and the third waits for the points to hit the bank. The
+  // cadence paces itself off the landings instead of a fixed timer.
+  if (ride.combo?.live && ride.combo.names.length >= 2) {
+    bot.randomTrickCool = 0.3;
+    return null;
+  }
+  // A board mid-carve is not a board to pop off. The trick lands pointing the
+  // way the board was already pointing, so popping into a turn lands still
+  // facing sideways at speed — a slide-out. Wait for the line to straighten.
+  if (Math.abs(C.angleDelta(ride.yaw, Math.atan2(ride.vel.x, ride.vel.z))) > 0.3) return null;
+  const ch = lip ? 0.7 + Math.random() * 0.3 : 0.55 + Math.random() * 0.35;
+  const extra = lip ? Math.sqrt((2 * Math.min(2.5, dropAhead)) / -C.GRAVITY) : 0;
+  const trick = bossPickTrick(bot, ch, extra);
+  // The gap a rival leaves on the ground between tricks is the combo bank
+  // itself (see the live-combo gate above), so each landed trick banks what it
+  // is worth before the next one arms a fresh combo — a duel is a score to
+  // beat, not a highlight reel, and a dropped combo is a duel lost. The tiny
+  // window here is just so the same frame's pop cannot fire twice.
+  bot.trickCool = 0.3;
+  bot.randomTrickCool = bot.trickCool;
+  // A fresh landing deserves a fresh manual when the character leans that way,
+  // but only after the bank has cleared (the manual gate waits on it).
+  bot.manualCool = 0;
+  const manualChance = bot.manualFocus ? 0.12 : bot.skill >= 3 ? 0.08 : 0.04;
+  return { trick, charge: ch, manual: Math.random() < manualChance };
+}
+
+/**
+ * A rival's route: the park's open flatground circuit, found by probing the
+ * ground between the patrol loop's waypoints and keeping only legs that ride
+ * flat — a bowl rim, vert face or bank would end the duel, so the boss skates
+ * around them. Falls back to the raw patrol loop when the park has no clean
+ * circuit. Sets the boss's own route fields, the way a pro's planRoute does.
+ */
+export function bossPlanRoute(bot, fromId) {
+  bot.route = bossFlatLoop(bot) || patrolRoute(bot);
+  bot.routeIndex = 0;
+  bot.stalled = 0;
+}
+
+/** A clean spawn for a rival: its own patrol loop keeps the clear line, and a
+ * rival that stands on a spot the ride cannot get going from (boxed in by the
+ * curb) starts on the nearest loop point instead — pointed at the next one,
+ * so it is rolling the moment the duel drops. */
+export function bossSpawn(park, x, z, yaw) {
+  const clear = Math.min(park.extentX - Math.abs(x), park.extentZ - Math.abs(z));
+  if (clear > 8 && park.heightAt(x, z) < 0.4) return { x, z, yaw };
+  let best = park.patrol[0];
+  let bestDist = Infinity;
+  for (const p of park.patrol) {
+    const d = (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z);
+    if (d < bestDist) {
+      bestDist = d;
+      best = p;
+    }
+  }
+  const limX = Math.max(0, park.extentX - BOUND_MARGIN);
+  const limZ = Math.max(0, park.extentZ - BOUND_MARGIN);
+  const bx = limX > 0 ? Math.min(limX, Math.max(best.x, -limX)) : best.x;
+  const bz = limZ > 0 ? Math.min(limZ, Math.max(best.z, -limZ)) : best.z;
+  const next = park.patrol[(park.patrol.indexOf(best) + 1) % park.patrol.length];
+  const wantYaw = Math.atan2(next.x - bx, next.z - bz);
+  return { x: bx, z: bz, yaw: wantYaw };
+}
+
+/**
  * The steer that holds a grind or a manual up. The balance meter is an
  * inverted pendulum with a constant bias (see stepBalance in physics.js):
  * leaving the stick alone is never an option, so the bot drives the stick
@@ -405,6 +807,110 @@ function balanceSteer(ride, skill) {
     -(ride.balance * C.BALANCE_FALL + ride.balanceBias * 0.5 - ride.balanceVel * C.BALANCE_DAMP) /
     C.BALANCE_CORRECT;
   return C.clamp(bc * (0.55 + skill * 0.15), -1, 1);
+}
+
+// A rival steers at the route's polyline instead of the waypoint under it: a
+// point a few metres ahead of its own projection. Waypoint-to-waypoint aiming
+// whips the corner — the board swings past the turn's inside and can dip into
+// a feature that sits a couple of metres off the leg (nova's pads sit exactly
+// there), while a lookahead point rounds the corner along the line itself and
+// hauls a drifted board back onto its leg much harder than a far-away
+// waypoint does. The projection also keeps the aim continuous across a
+// waypoint, so there is no steered snap when the index advances. A boss's
+// route is always a closed circuit (a flat loop or a patrol loop), so the
+// polyline wraps: the last point connects back to the first.
+function bossProjection(r, x, z) {
+  const n = r.length;
+  let bestD = Infinity;
+  let seg = 0;
+  let t = 0;
+  for (let i = 0; i < n; i++) {
+    const a = r[i];
+    const b = r[(i + 1) % n];
+    const abx = b.x - a.x;
+    const abz = b.z - a.z;
+    const len2 = abx * abx + abz * abz;
+    if (len2 < 1e-6) continue;
+    let f = ((x - a.x) * abx + (z - a.z) * abz) / len2;
+    f = Math.max(0, Math.min(1, f));
+    const px = a.x + abx * f;
+    const pz = a.z + abz * f;
+    const d = (x - px) ** 2 + (z - pz) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      seg = i;
+      t = f;
+    }
+  }
+  return { seg, t };
+}
+
+/** The rival's continuous progress around its closed loop, in waypoint units:
+ * the route's own indices carry a wrap at both ends of the range, so the
+ * crossing of a waypoint is read off the projection instead of a 2 m arrival
+ * circle — a lookahead-steered board rounds the corner rather than whipping
+ * around it, and passes the waypoint a few metres off without ever "arriving".
+ * Progress is travelled distance along the loop, not a nearest-point sample:
+ * at a corner the nearest leg flips back and forth between the two lines, so a
+ * projection-based count would dither the index at every waypoint. Instead the
+ * board's movement is integrated along the tangent of the leg it is on, and
+ * only ever forwards, so the count crosses each waypoint exactly once a lap.
+ */
+function bossPathProg(bot, ride) {
+  const r = bot.route;
+  const n = r.length;
+  if (bot.routeSig !== r) {
+    bot.routeSig = r;
+    const p = bossProjection(r, ride.pos.x, ride.pos.z);
+    bot.pathProg = p.seg + p.t;
+    bot.lastPosX = ride.pos.x;
+    bot.lastPosZ = ride.pos.z;
+    return bot.pathProg;
+  }
+  const s = Math.floor(bot.pathProg) % n;
+  const a = r[s];
+  const b = r[(s + 1) % n];
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const len = Math.hypot(abx, abz) || 1;
+  const tx = abx / len;
+  const tz = abz / len;
+  const dx = ride.pos.x - (bot.lastPosX ?? ride.pos.x);
+  const dz = ride.pos.z - (bot.lastPosZ ?? ride.pos.z);
+  bot.lastPosX = ride.pos.x;
+  bot.lastPosZ = ride.pos.z;
+  const adv = (dx * tx + dz * tz) / len;
+  if (adv > 0) bot.pathProg += adv;
+  return bot.pathProg;
+}
+
+function bossLookaheadYaw(bot, ride) {
+  const r = bot.route;
+  const n = r.length;
+  const p = bossProjection(r, ride.pos.x, ride.pos.z);
+  let rem = 3.2 + Math.abs(ride.speed) * 0.4;
+  let s = p.seg;
+  let u = p.t;
+  for (let k = 0; k <= n; k++) {
+    const a = r[s];
+    const b = r[(s + 1) % n];
+    const abx = b.x - a.x;
+    const abz = b.z - a.z;
+    const len = Math.hypot(abx, abz);
+    if (len < 1e-6) {
+      return Math.atan2(b.x - ride.pos.x, b.z - ride.pos.z);
+    }
+    const along = (1 - u) * len;
+    if (rem <= along) {
+      const f = u + rem / len;
+      return Math.atan2(a.x + abx * f - ride.pos.x, a.z + abz * f - ride.pos.z);
+    }
+    rem -= along;
+    s = (s + 1) % n;
+    u = 0;
+  }
+  const b = r[(p.seg + 1) % n];
+  return Math.atan2(b.x - ride.pos.x, b.z - ride.pos.z);
 }
 
 // --- the ride controller ---------------------------------------------------
@@ -424,7 +930,7 @@ function stepPatrol(ride, bot, dt, playerPos) {
   // facing the line it is about to ride — "got back up and carried on".
   if (ride.mode === BAIL) {
     bot.bailWait += dt;
-    if (bot.bailWait > BAIL_WAIT) {
+    if (bot.bailWait > (bot.bailDelay ?? BAIL_WAIT)) {
       bot.bailWait = 0;
       bot.route = null;
       bot.wantManual = false;
@@ -434,7 +940,9 @@ function stepPatrol(ride, bot, dt, playerPos) {
       const next = bot.route[1] || bot.route[0];
       const yaw = Math.atan2(next.x - wp.x, next.z - wp.z);
       ride.reset({ x: wp.x, y: 0, z: wp.z, yaw });
-      bot.bailCool = 4 + Math.random() * 3;
+      // A rival in a duel is back on the gas fast — a tourist can take its
+      // time getting up, a boss on the clock cannot.
+      bot.bailCool = (bot.bailLockout ?? 4 + Math.random() * 3);
     }
     return;
   }
@@ -451,7 +959,22 @@ function stepPatrol(ride, bot, dt, playerPos) {
   }
   const wp = bot.route[bot.routeIndex] || bot.route[bot.route.length - 1];
 
-  if (arrivedAt(ride, wp)) {
+  // A rival rounds a corner with a lookahead aim, which passes the waypoint a
+  // few metres off the line — the arrival circle below would never close. Its
+  // progress is the projection's crossing of the waypoint instead, read as a
+  // continuous coordinate around the loop so a lap wraps without replanning.
+  const bossProg =
+    bot.isBoss && bot.route && bot.route.length > 1 ? bossPathProg(bot, ride) : null;
+  if (bossProg !== null) {
+    const ri = Math.floor(bossProg + 1) % bot.route.length;
+    if (ri !== bot.routeIndex) {
+      bot.routeIndex = ri;
+      bot.stalled = 0;
+      bot.wpDist = Infinity;
+    }
+  }
+
+  if (bossProg === null && arrivedAt(ride, wp)) {
     bot.routeIndex++;
     bot.stalled = 0;
     if (bot.routeIndex >= bot.route.length) {
@@ -462,16 +985,71 @@ function stepPatrol(ride, bot, dt, playerPos) {
       giveRoute(bot, last && last.node ? last.node.id : null);
     }
   } else {
-    // A rail a bot cannot line up on, a waypoint behind a wall — give up after
-    // a beat and let the next waypoint (or the next route) sort it out.
-    bot.stalled += dt;
-    if (bot.stalled > STALL_TIME) {
+    // Stuck means no progress, not slow progress: a leg across the park takes
+    // seconds, and a rival has no time to throw it away just because it has
+    // not *arrived* yet. Only count time spent not closing on the waypoint —
+    // measured as a closing speed, so the check holds at any step rate (a
+    // rival closing at full speed clears far more than half a metre a second).
+    // A rival advances its waypoint by projection instead, so "stalled" is a
+    // projection that is not moving: the distance to the waypoint it rides at
+    // closes as the lookahead rounds the corner, and only stops closing when
+    // the board has genuinely stopped. The projection's own advance would have
+    // already moved the waypoint on — a waypoint that stays put while the boss
+    // is near it means it rounded the corner or rode past and keeps going.
+    const ddx = wp.x - ride.pos.x;
+    const ddz = wp.z - ride.pos.z;
+    const d = Math.hypot(ddx, ddz);
+    const closing = (bot.wpDist ?? d) - d;
+    if (closing < dt * 0.6) bot.stalled += dt;
+    else bot.stalled = Math.max(0, bot.stalled - dt);
+    bot.wpDist = d;
+    if (bot.stalled > (bot.stallTime ?? STALL_TIME)) {
       bot.stalled = 0;
-      bot.routeIndex++;
+      bot.wpDist = Infinity;
+      // A rival has no time to orbit a waypoint it cannot reach — drop the
+      // route and replan from where it actually is instead of coasting the
+      // rest of a line it is stuck on. A rival that has stopped entirely
+      // (boxed in, or stood on a spot it cannot push off from) reappears on
+      // the new line the way it does after a bail, so the clock keeps moving.
+      if (bot.isBoss) {
+        giveRoute(bot, null);
+        if (ride.mode === GROUND && bot.route && bot.route.length > 1) {
+          const wp = bot.route[0];
+          const next = bot.route[1];
+          const yaw = Math.atan2(next.x - wp.x, next.z - wp.z);
+          ride.reset({ x: wp.x, y: 0, z: wp.z, yaw });
+          bot.bailCool = 0.5;
+        }
+      } else bot.routeIndex++;
     }
   }
   const cur = bot.route[Math.min(bot.routeIndex, bot.route.length - 1)];
 
+  // A rival that cannot reach the waypoint it is on has no time to orbit it —
+  // steer at the one after instead, so the board keeps rolling through the
+  // line rather than circling a target sat behind a wall.
+  let steerAt = cur;
+  if (bot.isBoss && bot.stalled > 1.2) {
+    steerAt = bot.route[Math.min(bot.routeIndex + 1, bot.route.length - 1)];
+  }
+  const node = steerAt.node;
+  const rail =
+    node && node.kind === 'rail' && node.forward ? lineOf(node) : null;
+  const followRail =
+    !!rail && distanceToLine(ride.pos.x, ride.pos.z, rail) < RAIL_APPROACH;
+  let wantYaw;
+  if (followRail) {
+    const t = (ride.pos.x - rail.x) * rail.vx + (ride.pos.z - rail.z) * rail.vz;
+    const ahead = Math.max(2.5, t + 3.5 + Math.abs(ride.speed) * 0.3);
+    wantYaw = Math.atan2(
+      rail.x + rail.vx * ahead - ride.pos.x,
+      rail.z + rail.vz * ahead - ride.pos.z
+    );
+  } else if (bot.isBoss && bot.route && bot.route.length > 1) {
+    wantYaw = bossLookaheadYaw(bot, ride);
+  } else {
+    wantYaw = Math.atan2(steerAt.x - ride.pos.x, steerAt.z - ride.pos.z);
+  }
   // --- the pad's own boundary ----------------------------------------------
   // The curb around the pad is a boundary, not a wall — a bot that reaches it
   // is pinned there by the physics clamp and bails in place, so turn back to
@@ -485,6 +1063,10 @@ function stepPatrol(ride, bot, dt, playerPos) {
   const clear = Math.min(cx, cz);
   const nearEdge = clear < BOUND_MARGIN;
   const edgeW = nearEdge ? 1 - Math.max(0, clear) / BOUND_MARGIN : 0;
+  // The edge band that actually parks a bot's tricks and manuals. A rival can
+  // keep skating closer to the curb than the crowd — the physical edge-repel
+  // below still uses BOUND_MARGIN, this is only how brave it gets with its feet.
+  const trickEdge = clear < (bot.edgeMargin ?? BOUND_MARGIN);
   // Whether the board is actually carrying the bot towards the curb on the
   // axis that is itself near the curb — the thing the near-edge push gate is
   // really guarding against. A bot standing still, or riding parallel to or
@@ -504,7 +1086,10 @@ function stepPatrol(ride, bot, dt, playerPos) {
   let stepAhead = 0;
   let avoidYaw = null;
   if (ride.mode === GROUND) {
-    const look = 1.1 + Math.abs(ride.speed) * 0.2;
+    // A rival on the clock reads the park further ahead than a tourist — a
+    // wall a tourist might clip is a duel a rival loses, so the probe reaches
+    // out early enough that there is still room to steer around it.
+    const look = (bot.isBoss ? 2.6 : 1.1) + Math.abs(ride.speed) * 0.25;
     const fwdX = Math.sin(ride.yaw);
     const fwdZ = Math.cos(ride.yaw);
     const ax = ride.pos.x + fwdX * look;
@@ -526,28 +1111,6 @@ function stepPatrol(ride, bot, dt, playerPos) {
       const side = lStep <= rStep ? -1 : 1;
       avoidYaw = ride.yaw + side * (Math.PI / 2);
     }
-  }
-
-  // --- the steering target -------------------------------------------------
-  // Head at the next waypoint — unless it is a rail and the bot has reached
-  // its line, in which case steer along the rail a few metres ahead. The
-  // approach brings the wheels to within tryGrind's snap window lined up with
-  // the bar, and the physics locks the grind itself.
-  let wantYaw;
-  const node = cur.node;
-  const rail =
-    node && node.kind === 'rail' && node.forward ? lineOf(node) : null;
-  const followRail =
-    !!rail && distanceToLine(ride.pos.x, ride.pos.z, rail) < RAIL_APPROACH;
-  if (followRail) {
-    const t = (ride.pos.x - rail.x) * rail.vx + (ride.pos.z - rail.z) * rail.vz;
-    const ahead = Math.max(2.5, t + 3.5 + Math.abs(ride.speed) * 0.3);
-    wantYaw = Math.atan2(
-      rail.x + rail.vx * ahead - ride.pos.x,
-      rail.z + rail.vz * ahead - ride.pos.z
-    );
-  } else {
-    wantYaw = Math.atan2(cur.x - ride.pos.x, cur.z - ride.pos.z);
   }
 
   if (nearEdge) {
@@ -595,6 +1158,12 @@ function stepPatrol(ride, bot, dt, playerPos) {
   // update, so the correction has to ride the input the frame the grind
   // holds, not be scribbled onto the pose afterwards.
   if (ride.mode === GRIND) steer = balanceSteer(ride, bot.skill);
+  // A trick popped into a corner lands sideways: the air stick spins the
+  // board toward the next leg while the velocity holds the incoming line, and
+  // a slip past LAND_SLIP_SKETCH is a slide-out. The board keeps the yaw it
+  // popped with for the whole air, landing straight, and the corner is taken
+  // on the wheels after touchdown where the carve is in charge.
+  if (bot.isBoss && ride.mode === AIR) steer = 0;
 
   // --- speed ---------------------------------------------------------------
   // Push toward the skill's own cruise speed on the flat; brake instead into
@@ -607,15 +1176,54 @@ function stepPatrol(ride, bot, dt, playerPos) {
     if (bot.pushCool > 0) bot.pushCool -= dt;
     const turnNeed = Math.abs(C.angleDelta(ride.yaw, wantYaw));
     const cornering = turnNeed > 0.85;
+    // A corner already being swung is braked above; a corner *coming up* is
+    // braked here, but only a near-reversal of it: a waypoint the line doubles
+    // back through past ~143 degrees is one the board cannot take at cruise
+    // speed, so the boss sheds speed before it gets there. Any gentler corner
+    // is left alone — braking the whole line for a corner the board takes fine
+    // just costs the clock.
+    let cornerAhead = false;
+    let toWaypoint = Infinity;
+    if (bot.isBoss && bot.route && bot.routeIndex > 0 && bot.routeIndex < bot.route.length) {
+      const wp = bot.route[bot.routeIndex];
+      const nw = bot.route[bot.routeIndex + 1];
+      const pw = bot.route[bot.routeIndex - 1];
+      if (nw && wp && pw) {
+        const dA = Math.hypot(wp.x - pw.x, wp.z - pw.z);
+        const dB = Math.hypot(nw.x - wp.x, nw.z - wp.z);
+        if (dA > 1e-4 && dB > 1e-4) {
+          const ux = (wp.x - pw.x) / dA;
+          const uz = (wp.z - pw.z) / dA;
+          const vx = (nw.x - wp.x) / dB;
+          const vz = (nw.z - wp.z) / dB;
+          const dot = Math.max(-1, Math.min(1, ux * vx + uz * vz));
+          cornerAhead = Math.acos(dot) > 2.5;
+        }
+        toWaypoint = Math.hypot(wp.x - ride.pos.x, wp.z - ride.pos.z);
+      }
+    }
     if (cornering && Math.abs(ride.speed) > bot.cruise - 0.8) brake = true;
+    else if (cornerAhead && toWaypoint < 6 && Math.abs(ride.speed) > 3.0) brake = true;
     else if (stepAhead > 0.3 && Math.abs(ride.speed) > 3.6) brake = true;
     else if (playerDist < YIELD_R && Math.abs(ride.speed) > 2.5) brake = true;
+    // Rolling backwards is a state the carve cannot steer out of: the physics
+    // inverts the lean against travel, so corrective steering just holds the
+    // board 180° off and a "fakie push" keeps the roll alive. Shed the speed
+    // instead — at a crawl the pivot turns the board round and the run carries
+    // on the right way up.
+    else if (ride.speed < -0.5) brake = true;
     else if (
       bot.manualT <= 0 &&
+      // A push drives the way the board is already rolling — a slightly
+      // backward board pushes backwards, which keeps a slow fakie roll alive
+      // forever (brake to a crawl, push it back under, brake again). Only push
+      // once the roll is actually forward; friction and the brake above handle
+      // the rest, and the pivot at a standstill turns the board the right way.
+      ride.speed >= 0 &&
       Math.abs(ride.speed) < bot.cruise &&
       bot.pushCool <= 0 &&
       !headingIntoBoundary &&
-      (!cornering || Math.abs(ride.speed) < 0.8) &&
+      (!cornering || Math.abs(ride.speed) < 0.8 || (bot.isBoss && Math.abs(ride.speed) < 3)) &&
       dropAhead < 0.25 &&
       stepAhead < 0.12
     ) {
@@ -634,7 +1242,7 @@ function stepPatrol(ride, bot, dt, playerPos) {
     // Conditions that end a manual, now or mid-charge-up: the curb, a wall
     // ahead, a lip, or the run bleeding out from under the board.
     const manualBad =
-      nearEdge || stepAhead > 0.3 || dropAhead > 0.3 || Math.abs(ride.speed) < 1.4;
+      trickEdge || stepAhead > 0.3 || dropAhead > 0.3 || Math.abs(ride.speed) < 1.4;
     if (ride.manual) {
       bot.manualT -= dt;
       if (manualBad || bot.manualT <= 0) {
@@ -652,11 +1260,16 @@ function stepPatrol(ride, bot, dt, playerPos) {
       !manualBad &&
       Math.abs(ride.speed) > 2.4 &&
       stepAhead < 0.2 &&
-      bot.manualCool <= 0
+      bot.manualCool <= 0 &&
+      // A manual resets the combo's bank clock, so it waits until the combo
+      // has banked what it is worth — a manual mid-bank is a dropped run.
+      !ride.combo?.live
     ) {
       // A manual-focused rival (manualFocus) balances far longer and much
       // sooner between attempts than a bot that just happens to manual.
-      bot.manualT = bot.manualFocus ? 2.2 + Math.random() * 2.4 : 1.2 + Math.random() * 1.8;
+      bot.manualT =
+        (bot.manualHold ?? (bot.manualFocus ? 2.2 : 1.2)) +
+        Math.random() * (bot.manualFocus ? 2.4 : 1.8);
       bot.wantManual = false;
       bot.manualCool = bot.manualFocus ? 2 + Math.random() * 2 : 7 + Math.random() * 7;
     }
@@ -681,7 +1294,7 @@ function stepPatrol(ride, bot, dt, playerPos) {
   // low curb ahead is not a trick at all — it is a panic ollie to get over.
   let trick = null;
   let trickCharge = undefined;
-  if (ride.mode === GROUND && !ride.grind && !ride.manual && bot.manualT <= 0 && !nearEdge) {
+  if (ride.mode === GROUND && !ride.grind && !ride.manual && bot.manualT <= 0 && !trickEdge) {
     bot.trickCool -= dt;
     bot.randomTrickCool -= dt;
     const speedOk = Math.abs(ride.speed) > 2.4;
@@ -691,7 +1304,9 @@ function stepPatrol(ride, bot, dt, playerPos) {
     const rand = bot.randomTrickCool <= 0;
     // A pro decides its own trick — feature-targeted, chained onto whatever it
     // just landed, and never repeating a recent one (see ProSkater). Absent a
-    // pro, the touring behaviour below carries the bot.
+    // pro, the touring behaviour below carries the bot. A rival's decision is
+    // its own too (see bossChooseTrick) — the touring fallback never fires for
+    // it, or a show-off pop would leapfrog the rival's banked-combo gating.
     const pro = bot.chooseTrick
       ? bot.chooseTrick({ ride, speedOk, curbPop, lip, show, rand, stepAhead, dropAhead, nearEdge })
       : null;
@@ -699,12 +1314,12 @@ function stepPatrol(ride, bot, dt, playerPos) {
       trick = pro.trick;
       trickCharge = pro.charge;
       bot.wantManual = !!pro.manual;
-    } else if (curbPop && speedOk && bot.curbPopCool <= 0) {
+    } else if (!bot.isBoss && curbPop && speedOk && bot.curbPopCool <= 0) {
       trick = 'ollie';
       trickCharge = 0.7 + Math.random() * 0.25;
       bot.curbPopCool = 1.5;
       bot.wantManual = false;
-    } else if (bot.trickCool <= 0 && speedOk && bot.bailCool <= 0 && (lip || show || rand)) {
+    } else if (!bot.isBoss && bot.trickCool <= 0 && speedOk && bot.bailCool <= 0 && (lip || show || rand)) {
       const ch = 0.5 + Math.random() * 0.4;
       const extra = lip ? Math.sqrt((2 * Math.min(2.5, dropAhead)) / -C.GRAVITY) : 0;
       trick = pickTrick(bot, ch, extra);

@@ -1,0 +1,25 @@
+const pick = (mod) => (mod.chromium ?? mod.default?.chromium);
+const chromium = pick(await import('playwright'));
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'], executablePath: '/usr/bin/chromium' });
+const page = await (await browser.newContext({ viewport: { width: 900, height: 560 } })).newPage();
+page.on('pageerror', (e) => console.log('pageerror:', String(e).slice(0, 300)));
+await page.goto('http://localhost:8081/skate/index.html?debug=1', { waitUntil: 'load' });
+await page.waitForFunction(() => !!window.__skate, null, { timeout: 20000 });
+const out = await page.evaluate(() => {
+  const g = window.__skate;
+  const r = [];
+  r.push(['initial', g.park.id]);
+  r.push(['unlock', g.save.unlockPark('nova')]);
+  g.switchPark('nova');
+  r.push(['after switch', g.park.id, g.ride.park.id]);
+  g.start();
+  r.push(['after start', g.park.id]);
+  g.setRunScore(500000);
+  g.endBossCutscene();
+  g.freeze();
+  g.startChallenge();
+  r.push(['after challenge', g.park.id, g.ride.park.id, g.currentBossDef ? g.currentBossDef.id : 'none']);
+  return r;
+});
+console.log(JSON.stringify(out));
+await browser.close();

@@ -77,7 +77,7 @@ section('Absolute-path audit');
 
 // --------------------------------------------------------------------------
 const chromium = await loadChromium();
-const browser = await chromium.launch({ args: GL_ARGS });
+const browser = await chromium.launch({ args: GL_ARGS, ...(process.env.PLAYWRIGHT_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE } : {}) });
 mkdirSync(SHOTS, { recursive: true });
 const context = await browser.newContext({ viewport: { width: 900, height: 560 }, deviceScaleFactor: 1 });
 const errors = [];
@@ -2132,6 +2132,60 @@ section('The rival duel');
     return { before, after: g.currentBossDef()?.id ?? null };
   });
   ok(plazaOwes.before === null && plazaOwes.after === 'rae', `and the opened park reveals its own rival on its own run (${plazaOwes.after})`);
+}
+
+// --------------------------------------------------------------------------
+section('Every rival rides a full duel without stalling');
+{
+  // A rival that stalls out or slams itself into the scenery starves the duel:
+  // the player's opponent banks no points and the challenge dies in a corner.
+  // Run every park's rival through a full two-minute challenge on a clean
+  // board and check it keeps riding — two windows of banked combos and tricks
+  // at the level the requirement bar asks of the player.
+  const rides = await run(() => {
+    const g = window.__skate;
+    const C = g.config;
+    g.save.reset(); // a blank slate: every park owes its first rival again
+    for (const parkDef of g.parks) g.save.unlockPark(parkDef.id);
+    const far = { x: 99999, y: 0, z: 99999 };
+    const steps = Math.round(120 / C.FIXED_DT);
+    const out = [];
+    for (const parkDef of g.parks) {
+      g.switchPark(parkDef.id);
+      g.start();
+      g.setRunScore(500000); // crosses the milestone and summons the rival
+      const bossId = g.currentBossDef()?.id ?? null;
+      g.endBossCutscene();
+      g.freeze();
+      g.startChallenge();
+      const runs = [];
+      for (let r = 0; r < 2; r++) {
+        let tricks = 0, score = 0, bails = 0;
+        for (let i = 0; i < steps && g.boss; i++) {
+          g.boss.step(C.FIXED_DT, far);
+          for (const e of g.boss.ride.events) {
+            if (e.name === 'trick') tricks++;
+            else if (e.name === 'combo') score += e.total;
+            else if (e.name === 'bail') bails++;
+          }
+          g.boss.ride.events.length = 0;
+        }
+        runs.push({ tricks, score: Math.round(score), bails });
+      }
+      out.push({ parkId: parkDef.id, bossId, runs });
+    }
+    return out;
+  });
+  for (const row of rides) {
+    ok(row.bossId !== null, `${row.parkId} owes a rival who mounts up (${row.bossId})`);
+    row.runs.forEach((r, i) => {
+      const when = i === 0 ? 'first' : 'second';
+      ok(
+        r.tricks >= 50 && r.score >= 20000,
+        `${row.bossId} banks ${r.tricks} tricks and ${r.score.toLocaleString('en-US')} pts through a ${when} full duel (${r.bails} slams)`
+      );
+    });
+  }
 }
 
 // --------------------------------------------------------------------------

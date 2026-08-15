@@ -20,7 +20,7 @@ import { Board } from './board.js';
 import { Skater } from './skater.js';
 import { Ride } from './physics.js';
 import { Walker } from './walk.js';
-import { stepPatrol, poseCarriedBoard, pickHangout } from './ai.js';
+import { stepPatrol, poseCarriedBoard, pickHangout, bossPlanRoute, bossChooseTrick, bossSpawn } from './ai.js';
 import { byId as charById } from './characters.js';
 
 const IDLE_TURN = 1.4; // how sharply a standing rival turns in place
@@ -40,7 +40,7 @@ export const BOSSES = [
     cruise: 5.0,
     pace: 1.0,
     focus: 'flat',
-    tricks: ['ollie', 'kickflip', 'heelflip', 'shuvit', 'fsshuvit', 'shuv360', 'varial'],
+    tricks: ['ollie', 'kickflip', 'heelflip', 'varial', 'varialheel', 'shuv360', 'hardflip', 'inheel', 'treflip'],
   },
   {
     id: 'nova',
@@ -51,9 +51,10 @@ export const BOSSES = [
     tagline: 'Nose up for days. Beat the balance meter, not the board.',
     skill: 2,
     cruise: 5.0,
-    pace: 0.9,
+    pace: 1.0,
     focus: 'manual',
-    tricks: ['ollie', 'shuvit', 'fsshuvit', 'kickflip', 'heelflip'],
+    manualHold: 1.3,
+    tricks: ['ollie', 'kickflip', 'heelflip', 'shuv360', 'varial', 'varialheel', 'hardflip', 'treflip', 'gazelle'],
   },
   {
     id: 'rae',
@@ -66,7 +67,7 @@ export const BOSSES = [
     cruise: 5.6,
     pace: 1.1,
     focus: 'air',
-    tricks: ['ollie', 'kickflip', 'heelflip', 'hardflip', 'inheel', 'impossible'],
+    tricks: ['ollie', 'kickflip', 'heelflip', 'varial', 'hardflip', 'inheel', 'treflip', 'impossible'],
   },
   {
     id: 'bolt',
@@ -93,7 +94,7 @@ export const BOSSES = [
     cruise: 5.6,
     pace: 1.05,
     focus: 'grind',
-    tricks: ['ollie', 'kickflip', 'heelflip', 'shuv360', 'hardflip'],
+    tricks: ['ollie', 'kickflip', 'heelflip', 'shuv360', 'varial', 'varialheel', 'hardflip', 'treflip', 'gazelle'],
     grabs: ['indy', 'method'],
   },
   {
@@ -121,7 +122,7 @@ export const BOSSES = [
     cruise: 6.2,
     pace: 1.15,
     focus: 'rail',
-    tricks: ['ollie', 'kickflip', 'heelflip', 'varial', 'varialheel', 'hardflip', 'inheel'],
+    tricks: ['ollie', 'kickflip', 'heelflip', 'varial', 'varialheel', 'hardflip', 'inheel', 'treflip', 'gazelle'],
   },
   {
     id: 'gnorbert',
@@ -134,7 +135,7 @@ export const BOSSES = [
     cruise: 5.0,
     pace: 0.95,
     focus: 'flat',
-    tricks: ['ollie', 'shuvit', 'fsshuvit', 'shuv360', 'fsshuv360', 'kickflip', 'heelflip'],
+    tricks: ['ollie', 'kickflip', 'heelflip', 'varial', 'varialheel', 'shuv360', 'fsshuv360', 'hardflip', 'inheel', 'treflip'],
   },
   {
     id: 'bananas',
@@ -214,6 +215,22 @@ export class BossSkater {
     this.grabBag = def.grabs || null;
     this.focus = def.focus || null;
     this.manualFocus = def.focus === 'manual';
+    this.manualHold = def.manualHold;
+    // The boss knobs that make a duel worth the two minutes: a rival replans
+    // fast, skates (and tricks) closer to the curb than the crowd dares, and
+    // is back on the board in a beat after a bail — it is on the clock.
+    this.isBoss = true;
+    this.stallTime = 3;
+    // A rival keeps skating closer to the curb than the crowd — the physical
+    // edge-repel still steers it clear of the fence, but it pops tricks within
+    // a couple of metres of the boundary. Several parks run their flat loops
+    // right along the fence (the railway parks especially), and a rival that
+    // won't trick near the curb never has anything to do on those lines.
+    this.edgeMargin = 2.5;
+    this.bailDelay = 1.0;
+    this.bailLockout = 1.0 + Math.random() * 0.8;
+    this.planRoute = bossPlanRoute.bind(null, this);
+    this.chooseTrick = bossChooseTrick.bind(null, this);
     // The pursuit controller's state, seeded the way a riding bot's is.
     this.target = 0;
     this.bailWait = 0;
@@ -261,7 +278,10 @@ export class BossSkater {
     this.mode = 'idle';
   }
 
-  /** Mount up wherever it stands and start driving its own lines. */
+  /** Mount up wherever it stands and start driving its own lines. A spot the
+   * ride cannot get going from — boxed in by the curb, or standing on a
+   * feature — swaps to the nearest clear patrol point so the boss opens the
+   * duel rolling instead of stalling into the first second. */
   toRide() {
     this.scene.remove(this.board.group);
     this.scene.remove(this.skater.group);
@@ -270,10 +290,21 @@ export class BossSkater {
     this.board.group.position.set(0, 0, 0);
     this.board.group.quaternion.identity();
     this.skater.settle();
-    this.ride.reset({ x: this.walker.pos.x, y: 0, z: this.walker.pos.z, yaw: this.walker.yaw });
+    const start = bossSpawn(this.ride.park, this.walker.pos.x, this.walker.pos.z, this.walker.yaw);
+    this.ride.reset({ x: start.x, y: 0, z: start.z, yaw: start.yaw });
     this.bailWait = 0;
     this.trickCool = 2 + Math.random() * 2;
     this.route = null;
+    // Plan the flatground circuit now and drop the boss onto its start point,
+    // facing down the first leg — it opens the duel rolling down its own line
+    // instead of fumbling for the loop's nearest corner across the park.
+    this.planRoute(null);
+    if (this.route && this.route.length > 1) {
+      const wp = this.route[0];
+      const next = this.route[1];
+      const yaw = Math.atan2(next.x - wp.x, next.z - wp.z);
+      this.ride.reset({ x: wp.x, y: 0, z: wp.z, yaw });
+    }
     this.mode = 'riding';
   }
 
