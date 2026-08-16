@@ -11,12 +11,13 @@
 
 import { def } from './parkLayouts.js';
 
-export const CITY_HALF = 200; // 400 x 400 m world
+export const CITY_HALF = 500; // 1000 x 1000 m world
 
-const CELL = 50;    // street centre to street centre
-const STREET = 12;  // street width
+const GRID = 20;     // 20 x 20 blocks
+const CELL = 50;     // street centre to street centre
+const STREET = 12;   // street width
 const BLOCK = CELL - STREET; // 38 m block face
-const SW = 2.2;     // sidewalk width
+const SW = 2.2;      // sidewalk width
 
 const SIDEWALK = '#8f939c';
 const CURB = '#7d828c';
@@ -75,22 +76,37 @@ const spectator = (x, z, color) => ({ type: 'spectator', x, z, color });
 // all line up with the features the generator builds there. `target` is the
 // combo that finishes the spot's challenge.
 export const CITY_SPOTS = [
-  { id: 'plaza', name: 'Market Plaza', district: 'Downtown', i: 4, j: 4, r: 16, target: 3000 },
-  { id: 'garage', name: 'Garage Rooftop', district: 'Downtown', i: 5, j: 5, r: 14, target: 5000 },
-  { id: 'towers', name: 'Tower Steps', district: 'Downtown', i: 3, j: 4, r: 12, target: 4500 },
-  { id: 'quad', name: 'Campus Quad', district: 'University', i: 6, j: 2, r: 14, target: 4000 },
-  { id: 'libsteps', name: 'Library Steps', district: 'University', i: 6, j: 3, r: 12, target: 4500 },
-  { id: 'dock', name: 'Loading Dock', district: 'Industrial', i: 1, j: 4, r: 13, target: 5000 },
-  { id: 'roof', name: 'Warehouse Roof', district: 'Industrial', i: 1, j: 3, r: 12, target: 5500 },
-  { id: 'yard', name: 'The Yard', district: 'Industrial', i: 0, j: 3, r: 12, target: 3500 },
-  { id: 'walk', name: 'Beach Boardwalk', district: 'Beach', i: 6, j: 6, r: 16, target: 4000 },
-  { id: 'bowl', name: 'Beach Bowl', district: 'Beach', i: 5, j: 6, r: 13, target: 5000 },
-  { id: 'alley', name: 'The Alley', district: 'Old Town', i: 1, j: 6, r: 10, target: 6000 },
-  { id: 'square', name: 'Old Square', district: 'Old Town', i: 2, j: 6, r: 14, target: 4000 },
-  { id: 'crest', name: 'Hillcrest', district: 'Hills', i: 3, j: 1, r: 14, target: 5500 },
-  { id: 'ridge', name: 'Ridge Run', district: 'Hills', i: 4, j: 1, r: 13, target: 4500 },
-  { id: 'drive', name: 'Driveway Rail', district: 'Suburbs', i: 1, j: 1, r: 12, target: 3000 },
-  { id: 'deadend', name: 'Dead End Ledge', district: 'Suburbs', i: 2, j: 1, r: 12, target: 3500 },
+  // Downtown (centre 6-13, 6-13)
+  { id: 'plaza', name: 'Market Plaza', district: 'Downtown', i: 9, j: 9, r: 16, target: 3000 },
+  { id: 'garage', name: 'Garage Rooftop', district: 'Downtown', i: 10, j: 10, r: 14, target: 5000 },
+  { id: 'towers', name: 'Tower Steps', district: 'Downtown', i: 8, j: 9, r: 12, target: 4500 },
+  { id: 'mega', name: 'Megaramp Park', district: 'Downtown', i: 11, j: 8, r: 16, target: 7000 },
+  // University (i>=14, j<=5)
+  { id: 'quad', name: 'Campus Quad', district: 'University', i: 16, j: 3, r: 14, target: 4000 },
+  { id: 'libsteps', name: 'Library Steps', district: 'University', i: 16, j: 4, r: 12, target: 4500 },
+  { id: 'campus', name: 'Campus Rail Garden', district: 'University', i: 17, j: 2, r: 13, target: 5000 },
+  // Industrial (i<=5)
+  { id: 'dock', name: 'Loading Dock', district: 'Industrial', i: 3, j: 9, r: 13, target: 5000 },
+  { id: 'roof', name: 'Warehouse Roof', district: 'Industrial', i: 3, j: 8, r: 12, target: 5500 },
+  { id: 'yard', name: 'The Yard', district: 'Industrial', i: 2, j: 8, r: 12, target: 3500 },
+  { id: 'factory', name: 'Factory Lines', district: 'Industrial', i: 1, j: 2, r: 14, target: 6000 },
+  // Beach (i>=14)
+  { id: 'walk', name: 'Beach Boardwalk', district: 'Beach', i: 16, j: 10, r: 16, target: 4000 },
+  { id: 'bowl', name: 'Beach Bowl', district: 'Beach', i: 15, j: 10, r: 13, target: 5000 },
+  { id: 'pier', name: 'Sunset Pier', district: 'Beach', i: 18, j: 14, r: 15, target: 6500 },
+  { id: 'prom', name: 'Promenade Rails', district: 'Beach', i: 18, j: 8, r: 14, target: 5500 },
+  // Old Town (i<=5, j>=14)
+  { id: 'alley', name: 'The Alley', district: 'Old Town', i: 3, j: 16, r: 10, target: 6000 },
+  { id: 'square', name: 'Old Square', district: 'Old Town', i: 4, j: 16, r: 14, target: 4000 },
+  { id: 'gate', name: 'City Gate', district: 'Old Town', i: 1, j: 17, r: 13, target: 5000 },
+  // Hills (i=6-13, j>=14)
+  { id: 'crest', name: 'Hillcrest', district: 'Hills', i: 9, j: 16, r: 14, target: 5500 },
+  { id: 'ridge', name: 'Ridge Run', district: 'Hills', i: 10, j: 16, r: 13, target: 4500 },
+  { id: 'park', name: 'Hilltop Park', district: 'Hills', i: 8, j: 17, r: 15, target: 5000 },
+  // Suburbs (i=6-13, j<=5)
+  { id: 'drive', name: 'Driveway Rail', district: 'Suburbs', i: 9, j: 3, r: 12, target: 3000 },
+  { id: 'deadend', name: 'Dead End Ledge', district: 'Suburbs', i: 10, j: 3, r: 12, target: 3500 },
+  { id: 'court', name: 'Court Rails', district: 'Suburbs', i: 12, j: 2, r: 13, target: 4000 },
 ];
 
 const SPOT_BY_BLOCK = new Map(CITY_SPOTS.map((s) => [`${s.i},${s.j}`, s]));
@@ -124,16 +140,20 @@ function ring(o, r) {
 
 // --- district layout ------------------------------------------------------
 export function districtOf(i, j) {
-  if (i >= 2 && i <= 5 && j >= 2 && j <= 5) return 'Downtown';
-  if (j >= 5) return i >= 5 ? 'Beach' : 'Old Town';
-  if (j <= 2) {
-    if (i >= 5) return 'University';
-    if (i >= 2) return 'Hills';
-    return 'Suburbs';
-  }
-  if (i <= 2) return 'Industrial';
-  if (i >= 5) return 'University';
-  return 'Downtown';
+  // Downtown: centre 8×8
+  if (i >= 6 && i <= 13 && j >= 6 && j <= 13) return 'Downtown';
+  // University: far north-east
+  if (i >= 14 && j <= 5) return 'University';
+  // Beach: east side
+  if (i >= 14) return 'Beach';
+  // Old Town: far north-west
+  if (j >= 14 && i <= 5) return 'Old Town';
+  // Hills: north-centre
+  if (j >= 14) return 'Hills';
+  // Industrial: west side
+  if (i <= 5) return 'Industrial';
+  // Suburbs: south-centre
+  return 'Suburbs';
 }
 
 // Downtown: tall towers and street-level curbs between them.
@@ -144,6 +164,9 @@ function dtTowers(o, r) {
   o.push(slab(b.x, b.z, b.w, b.d, b.h, b.c));
   o.push(slab(r.cx, r.cz + 1, 6, 4, 0.45, CURB));
   o.push(ledge(b.x + b.w / 2 + 1.5, b.z - b.d / 2 - 1.4, 7, 0.9, 0.55, CONC, 0));
+  o.push(rail(a.x - a.w / 2 - 2, a.z + 3, 10, 0.8, STEEL, 90));
+  o.push(rail(r.cx + 2, r.cz - 2, 8, 0.75, STEEL, 0));
+  o.push(bank(r.x0 + SW + 3, r.cz, 8, 5, 0.5, CONC, 90));
   o.push(lamp(r.x0 + SW + 2.2, r.z0 + SW + 2.2));
   if (rand() < 0.5) o.push(tree(r.x1 - SW - 2.4, r.z1 - SW - 2.4));
   if (rand() < 0.7) o.push(trashcan(r.x1 - SW - 2, r.z0 + SW + 2));
@@ -253,7 +276,9 @@ function indWarehouse(o, r, roofSpot) {
   }
   o.push(rollin(r.x0 + SW + 2, r.cz - 6, 8, 2.6, 1.4, 3, CONC, 180));
   o.push(bank(r.x0 + SW + 3, r.cz + 9, 10, 5, 0.7, CONC, 90));
-  o.push(rail(r.cx - 8, r.cz + 9, 9, 0.85, STEEL, 90));
+  o.push(rail(r.cx - 8, r.cz + 9, 14, 0.85, STEEL, 90));
+  o.push(rail(r.cx + 4, r.cz - 10, 12, 0.8, STEEL, 90));
+  o.push(ledge(I.x0 + 3, r.cz - 5, 8, 0.9, 0.5, CONC, 90));
   o.push(car(r.x1 - SW - 2.5, r.cz - 8, 0, 5.2, 2, INDY[2]));
   o.push(car(r.x1 - SW - 3, r.cz + 8, 0, 5.2, 2, INDY[0]));
   if (rand() < 0.7) o.push(trashcan(r.x0 + SW + 2, I.z1 - 2));
@@ -294,7 +319,9 @@ function beachWalk(o, r, withBowl) {
   o.push(bank(r.cx, I.z0 - 5.7, I.x1 - I.x0 - 4, 7, 1.1, WOOD, 0));
   o.push(bank(r.cx, I.z1 - 12.3, I.x1 - I.x0 - 4, 7, 1.1, WOOD, 180));
   o.push(ledge(r.cx - 4, r.cz - 9 + 9, 8, 0.9, 0.5, CONC, 90));
-  o.push(rail(r.cx + 3, r.cz - 9 + 9, 8, 0.75, STEEL, 90));
+  o.push(rail(r.cx + 3, r.cz - 9 + 9, 14, 0.75, STEEL, 90));
+  o.push(rail(r.cx - 8, r.cz, 12, 0.7, STEEL, 90));
+  o.push(rail(r.cx + 10, r.cz - 5, 10, 0.7, STEEL, 90));
   o.push(planter(r.cx - 11, r.cz + 6));
   o.push(planter(r.cx + 11, r.cz - 2));
   o.push(bench(r.cx - 10, r.cz - 9 - 10, 0));
@@ -333,13 +360,15 @@ function oldTown(o, r, alleySpot) {
   o.push(slab(r.x0 + SW + 6, I.z1 - 6, 10, 8, 5, c2));
   if (alleySpot) {
     // the alley runs down the middle of the block — ride it, grind it.
-    o.push(ledge(r.cx + 1, r.cz + 5, 11, 0.9, 0.6, CONC, 0));
-    o.push(rail(r.cx - 1, r.cz - 5, 11, 0.9, STEEL, 90));
+    o.push(ledge(r.cx + 1, r.cz + 5, 14, 0.9, 0.6, CONC, 0));
+    o.push(rail(r.cx - 1, r.cz - 5, 14, 0.9, STEEL, 90));
+    o.push(rail(r.cx + 5, r.cz + 2, 10, 0.75, STEEL, 0));
     o.push(trashcan(r.cx - 4, r.cz - 8));
     o.push(trashcan(r.cx + 4, r.cz + 8));
   } else {
     o.push(planter(r.cx, r.cz + 3));
     o.push(planter(r.cx, r.cz - 4));
+    o.push(rail(r.cx + 2, r.cz, 10, 0.7, STEEL, 90));
   }
   o.push(lamp(r.x0 + SW + 2, r.z0 + SW + 2));
   o.push(lamp(r.x1 - SW - 2, r.z1 - SW - 2));
@@ -371,8 +400,11 @@ function hillCrest(o, r, big) {
   o.push(bank(r.cx - 4, I.z0 + 2, 20, 12, h, c, 90));
   o.push(slab(r.cx - 4, r.cz, 20, 14, h, c));
   o.push(bank(r.cx - 4, I.z1 - 2, 20, 12, h, c, 270));
-  o.push(rail(r.cx + 2, r.cz - 2, 12, 0.8, STEEL, 90));
+  o.push(rail(r.cx + 2, r.cz - 2, 16, 0.8, STEEL, 90));
+  o.push(rail(r.cx - 10, r.cz + 4, 14, 0.75, STEEL, 90));
   o.push(ledge(r.cx - 6, r.cz + 2, 10, 0.9, 0.55, CONC, 90));
+  o.push(bank(I.x0 + 3, r.cz, 8, 6, h, c, 90));
+  o.push(quarter(I.x1 - 3, r.cz - 6, 6, 1.8, 1.4, 0, CONC, 270));
   o.push(tree(r.x0 + SW + 3, I.z0 + 3, 1.3, 3.6));
   o.push(tree(r.x1 - SW - 3, I.z1 - 3, 1.3, 3.6));
   o.push(bush(r.x1 - SW - 2, I.z0 + 3));
@@ -388,9 +420,10 @@ function suburbs(o, r, withDrive) {
   o.push(slab(r.cx - 5, I.z1 - 4, 15, 8, 2.5, pick(HOUSE)));
   if (withDrive) {
     o.push(bank(I.x1 - 8, r.cz, 7, 5, 0.35, CONC, 90));
-    o.push(rail(r.cx, r.cz, 10, 0.75, STEEL, 90));
+    o.push(rail(r.cx, r.cz, 14, 0.75, STEEL, 90));
   }
   o.push(ledge(r.cx + 4, r.cz - 6, 8, 0.9, 0.5, CONC, 0));
+  o.push(rail(I.x0 + 4, r.cz + 3, 10, 0.7, STEEL, 0));
   o.push(tree(r.x0 + SW + 3, r.cz - 4, 1.4, 3.8));
   o.push(tree(r.x1 - SW - 3, r.cz + 5, 1.2, 3.2));
   o.push(bush(r.x1 - SW - 2, I.z0 + 3));
@@ -414,6 +447,221 @@ function subDead(o, r) {
   o.push(car(r.x1 - SW - 3, r.cz + 2, 0, 4.2, 1.8, CAR_COLORS[2]));
 }
 
+// Downtown spot "mega": a dedicated megaramp park — big rollins, funboxes and
+// long rails across the whole block.
+function dtMega(o, r) {
+  ring(o, r);
+  const I = inr(r);
+  o.push(slab(r.cx, r.cz, I.x1 - I.x0, I.z1 - I.z0, 0.6, CONC));
+  // high rollins from both ends
+  o.push(rollin(I.x0 + 4, r.cz, 10, 1.2, 2.8, 4, CONC, 180));
+  o.push(rollin(I.x1 - 4, r.cz, 10, 1.2, 2.8, 4, CONC, 0));
+  // centre funbox with extended hips
+  o.push(funbox(r.cx, r.cz, 8, 6, 1.1, 1.8, WOOD));
+  // long down-rails
+  o.push(rail(r.cx - 6, r.cz - 2, 22, 0.9, STEEL, 90));
+  o.push(rail(r.cx + 6, r.cz + 2, 22, 0.9, STEEL, 90));
+  // high banks on the sides
+  o.push(bank(I.x0 + 3, r.cz, 8, 7, 2.2, CONC, 90));
+  o.push(bank(I.x1 - 3, r.cz, 8, 7, 2.2, CONC, 270));
+  // quarter pipes at corners
+  o.push(quarter(I.x0 + 2, I.z0 + 2, 6, 2.2, 2.0, 0, CONC, 0));
+  o.push(quarter(I.x1 - 2, I.z1 - 2, 6, 2.2, 2.0, 0, CONC, 180));
+  // ledges
+  o.push(ledge(r.cx - 10, I.z0 + 2, 10, 0.9, 0.55, CONC, 0));
+  o.push(ledge(r.cx + 10, I.z1 - 2, 10, 0.9, 0.55, CONC, 180));
+  // pyramid
+  o.push(pyramid(r.cx, r.cz + 10, 6, 6, 3, 1.0, CONC));
+  o.push(tree(r.x0 + SW + 2.5, r.z0 + SW + 2.5));
+  o.push(tree(r.x1 - SW - 2.5, r.z1 - SW - 2.5));
+  o.push(spectator(r.cx + 8, I.z0 + 3, CROWD_COLORS[0]));
+  o.push(spectator(r.cx - 8, I.z1 - 3, CROWD_COLORS[1]));
+  o.push(lamp(r.x0 + SW + 2, r.cz));
+}
+
+// University spot "campus": a rail garden — many rails and ledges among trees.
+function uniCampus(o, r) {
+  ring(o, r);
+  const I = inr(r);
+  o.push(slab(r.cx, r.cz, I.x1 - I.x0 - 4, I.z1 - I.z0 - 4, 0.5, CONC));
+  // grid of rails
+  o.push(rail(r.cx - 8, r.cz - 6, 12, 0.8, STEEL, 90));
+  o.push(rail(r.cx, r.cz - 6, 12, 0.8, STEEL, 90));
+  o.push(rail(r.cx + 8, r.cz - 6, 12, 0.8, STEEL, 90));
+  o.push(rail(r.cx - 8, r.cz + 6, 12, 0.8, STEEL, 270));
+  o.push(rail(r.cx + 8, r.cz + 6, 12, 0.8, STEEL, 270));
+  // ledges between rails
+  o.push(ledge(r.cx - 4, r.cz, 10, 0.9, 0.5, CONC, 90));
+  o.push(ledge(r.cx + 4, r.cz, 10, 0.9, 0.5, CONC, 90));
+  // small funbox
+  o.push(funbox(r.cx, r.cz - 14, 6, 4, 0.7, 1.2, UNI_BRICK[0]));
+  // high bank at far end
+  o.push(bank(r.cx, I.z1 - 3, 14, 7, 1.8, CONC, 180));
+  // planters and trees
+  o.push(planter(r.cx - 12, r.cz - 2, 0, 3, 3));
+  o.push(planter(r.cx + 12, r.cz + 2, 0, 3, 3));
+  o.push(tree(r.x0 + SW + 3, I.z0 + 3, 1.3, 3.5));
+  o.push(tree(r.x1 - SW - 3, I.z1 - 3, 1.3, 3.5));
+  o.push(bench(r.cx - 10, I.z1 - 3, 180));
+  o.push(lamp(r.x1 - SW - 2, r.z0 + SW + 2));
+}
+
+// Industrial spot "factory": a factory yard with long flat rails and banks.
+function indFactory(o, r) {
+  ring(o, r);
+  const I = inr(r);
+  o.push(slab(r.cx, r.cz, I.x1 - I.x0 - 4, I.z1 - I.z0 - 4, 1.0, pick(INDY)));
+  // long warehouse building
+  o.push(slab(r.cx, I.z1 - 7, I.x1 - I.x0 - 8, 10, 4.5, INDY[0]));
+  // high rollin from warehouse roof
+  o.push(rollin(r.cx, I.z1 - 12, 10, 2.8, 2.0, 3.5, CONC, 180));
+  // long rails across the yard — some of the longest in the city
+  o.push(rail(I.x0 + 4, r.cz - 4, 26, 0.85, STEEL, 0));
+  o.push(rail(I.x0 + 4, r.cz + 4, 26, 0.85, STEEL, 0));
+  o.push(rail(I.x0 + 4, r.cz, 30, 0.9, STEEL, 0));
+  // loading-dock banks
+  o.push(bank(r.cx - 6, I.z0 + 3, 10, 6, 1.0, CONC, 90));
+  o.push(bank(r.cx + 6, I.z0 + 3, 10, 6, 1.0, CONC, 270));
+  // big pyramid
+  o.push(pyramid(r.cx, I.z0 + 8, 7, 7, 4, 1.3, CONC));
+  // parked trucks
+  o.push(car(r.x0 + SW + 3, I.z0 + 3, 0, 5.2, 2, INDY[1]));
+  o.push(car(r.x1 - SW - 3, I.z0 + 3, 0, 5.2, 2, INDY[2]));
+  o.push(lamp(r.x0 + SW + 2, r.z0 + SW + 2));
+  if (rand() < 0.7) o.push(trashcan(r.x1 - SW - 2, I.z1 - 2));
+}
+
+// Beach spot "pier": a raised wooden pier with big banks and long rails.
+function beachPier(o, r) {
+  ring(o, r);
+  const I = inr(r);
+  // raised pier platform
+  o.push(slab(r.cx, r.cz, I.x1 - I.x0, I.z1 - I.z0, 1.6, WOOD));
+  // big banks up to pier from both street sides
+  o.push(bank(r.cx, I.z0 - 2, I.x1 - I.x0 - 4, 8, 1.6, WOOD, 0));
+  o.push(bank(r.cx, I.z1 + 2, I.x1 - I.x0 - 4, 8, 1.6, WOOD, 180));
+  // long grind rails down the pier
+  o.push(rail(r.cx - 6, r.cz, 28, 0.85, STEEL, 90));
+  o.push(rail(r.cx + 6, r.cz, 28, 0.85, STEEL, 90));
+  // centre rail
+  o.push(rail(r.cx, r.cz - 4, 20, 0.8, WOOD, 90));
+  // quarter pipes at ends
+  o.push(quarter(r.cx - 8, r.cz, 6, 2.5, 2.0, 0, WOOD, 0));
+  o.push(quarter(r.cx + 8, r.cz, 6, 2.5, 2.0, 0, WOOD, 180));
+  // funbox
+  o.push(funbox(r.cx, r.cz - 10, 6, 5, 0.9, 1.3, WOOD));
+  // benches and planters
+  o.push(bench(r.cx - 10, I.z0 + 4, 0));
+  o.push(bench(r.cx + 10, I.z1 - 4, 180));
+  o.push(planter(r.cx - 12, r.cz));
+  o.push(spectator(r.cx - 4, I.z0 + 5, CROWD_COLORS[5]));
+  o.push(spectator(r.cx + 4, I.z1 - 5, CROWD_COLORS[6]));
+  o.push(tree(r.x0 + SW + 2, I.z0 + 2, 1.5, 4.4));
+  o.push(tree(r.x1 - SW - 2, I.z1 - 2, 1.5, 4.4));
+  o.push(lamp(r.x0 + SW + 2, r.cz));
+}
+
+// Beach spot "prom": the promenade — long parallel rails, banks and a pyramid.
+function beachProm(o, r) {
+  ring(o, r);
+  const I = inr(r);
+  o.push(slab(r.cx, r.cz, I.x1 - I.x0, I.z1 - I.z0, 0.55, CONC));
+  // long parallel grind rails — the longest street rails in the city
+  o.push(rail(I.x0 + 4, r.cz - 8, 30, 0.8, STEEL, 0));
+  o.push(rail(I.x0 + 4, r.cz, 30, 0.85, STEEL, 0));
+  o.push(rail(I.x0 + 4, r.cz + 8, 30, 0.8, STEEL, 0));
+  // banks from edges
+  o.push(bank(r.cx, I.z0 + 2, I.x1 - I.x0 - 6, 6, 1.2, CONC, 0));
+  o.push(bank(r.cx, I.z1 - 2, I.x1 - I.x0 - 6, 6, 1.2, CONC, 180));
+  // pyramid in centre
+  o.push(pyramid(r.cx, r.cz, 7, 6, 4, 1.0, CONC));
+  // ledges
+  o.push(ledge(r.cx - 12, r.cz - 3, 8, 0.9, 0.5, CONC, 90));
+  o.push(ledge(r.cx + 12, r.cz + 3, 8, 0.9, 0.5, CONC, 90));
+  o.push(foodtruck(r.x1 - SW - 2, I.z0 + 3, 180));
+  o.push(bench(r.x0 + SW + 4, I.z1 - 3, 180));
+  o.push(spectator(r.cx, I.z0 + 4, CROWD_COLORS[3]));
+  o.push(spectator(r.cx + 6, I.z1 - 4, CROWD_COLORS[4]));
+  o.push(tree(r.x0 + SW + 2, r.cz, 1.4, 4.0));
+  o.push(lamp(r.x1 - SW - 2, r.cz));
+}
+
+// Old Town spot "gate": a grand old city gate with high walls, ledges and
+// a steep bank.
+function oldGate(o, r) {
+  ring(o, r);
+  const I = inr(r);
+  const c = pick(OLD_BRICK);
+  // gateway walls
+  o.push(slab(r.cx - 10, r.cz, 8, I.z1 - I.z0 - 4, 6, c));
+  o.push(slab(r.cx + 10, r.cz, 8, I.z1 - I.z0 - 4, 6, c));
+  o.push(slab(r.cx, I.z0 + 5, 12, 8, 5, c));
+  // high bank through the gate
+  o.push(bank(r.cx, I.z1 - 4, 10, 8, 1.6, CONC, 180));
+  // ledges along walls
+  o.push(ledge(r.cx - 5.5, r.cz, 6, 0.9, 0.55, CONC, 90));
+  o.push(ledge(r.cx + 5.5, r.cz, 6, 0.9, 0.55, CONC, 270));
+  // long rail
+  o.push(rail(r.cx, r.cz - 8, 14, 0.85, STEEL, 90));
+  // quarter pipes at base of walls
+  o.push(quarter(I.x0 + 2, r.cz - 4, 6, 2.0, 1.6, 0, CONC, 0));
+  o.push(quarter(I.x1 - 2, r.cz + 4, 6, 2.0, 1.6, 0, CONC, 180));
+  o.push(tree(r.cx - 10, I.z0 + 2, 1.2, 3.4));
+  o.push(tree(r.cx + 10, I.z1 - 2, 1.2, 3.4));
+  o.push(lamp(r.x0 + SW + 2, r.z0 + SW + 2));
+  o.push(spectator(r.cx, I.z1 - 6, CROWD_COLORS[1]));
+}
+
+// Hills spot "park": hilltop park with big natural banks and a long rail line.
+function hillPark(o, r) {
+  const I = inr(r);
+  const c = pick(HILL_EARTH);
+  // wide raised pad with banks on all sides
+  o.push(slab(r.cx, r.cz, 24, 16, 2.8, c));
+  o.push(bank(r.cx - 12, r.cz, 10, 10, 2.8, c, 90));
+  o.push(bank(r.cx + 12, r.cz, 10, 10, 2.8, c, 270));
+  o.push(bank(r.cx, I.z0 + 3, 24, 8, 2.8, c, 0));
+  o.push(bank(r.cx, I.z1 - 3, 24, 8, 2.8, c, 180));
+  // long down-rail from the crest
+  o.push(rail(r.cx, r.cz - 4, 20, 0.9, STEEL, 90));
+  o.push(rail(r.cx - 8, r.cz + 2, 16, 0.8, STEEL, 90));
+  // funbox on top
+  o.push(funbox(r.cx, r.cz + 8, 6, 5, 0.8, 1.3, WOOD));
+  // ledges
+  o.push(ledge(r.cx + 6, r.cz - 8, 10, 0.9, 0.55, CONC, 90));
+  // trees and bushes
+  o.push(tree(r.x0 + SW + 3, I.z0 + 3, 1.3, 3.6));
+  o.push(tree(r.x1 - SW - 3, I.z1 - 3, 1.3, 3.6));
+  o.push(bush(r.cx - 14, I.z0 + 4));
+  o.push(bush(r.cx + 14, I.z1 - 4));
+  o.push(bench(r.cx + 12, r.cz - 4, 90));
+  o.push(lamp(r.x0 + SW + 2, r.z0 + SW + 2));
+}
+
+// Suburbs spot "court": a raised court area with rails and ledges.
+function subCourt(o, r) {
+  ring(o, r);
+  const I = inr(r);
+  o.push(slab(r.cx, r.cz, I.x1 - I.x0 - 4, I.z1 - I.z0 - 4, 0.5, CONC));
+  // houses around the edge
+  o.push(slab(r.x0 + SW + 5, I.z0 + 6, 14, 10, 2.8, pick(HOUSE)));
+  o.push(slab(r.x1 - SW - 5, I.z1 - 6, 12, 10, 2.6, pick(HOUSE)));
+  // rail grid in the open area
+  o.push(rail(r.cx - 6, r.cz, 14, 0.8, STEEL, 90));
+  o.push(rail(r.cx + 6, r.cz, 14, 0.8, STEEL, 90));
+  o.push(rail(r.cx, r.cz - 6, 14, 0.8, STEEL, 0));
+  // ledges
+  o.push(ledge(r.cx - 4, r.cz + 8, 10, 0.9, 0.5, CONC, 0));
+  o.push(ledge(r.cx + 4, r.cz - 8, 10, 0.9, 0.5, CONC, 180));
+  // bank
+  o.push(bank(r.cx, I.z0 + 3, 10, 5, 0.4, CONC, 0));
+  o.push(tree(r.x0 + SW + 3, I.z1 - 3, 1.3, 3.6));
+  o.push(tree(r.x1 - SW - 3, I.z0 + 3, 1.2, 3.2));
+  o.push(bush(r.x0 + SW + 3, I.z0 + 3));
+  o.push(car(r.cx - 8, I.z1 - 2, 90, 4.2, 1.8, CAR_COLORS[3]));
+  o.push(lamp(r.x1 - SW - 2, r.cz));
+}
+
 /** Build one block's worth of objects into `out`. */
 function buildBlock(out, i, j) {
   const r = blockRect(i, j);
@@ -425,19 +673,27 @@ function buildBlock(out, i, j) {
       case 'plaza': dtPlaza(out, r); return;
       case 'garage': dtGarage(out, r); return;
       case 'towers': dtTowerSteps(out, r); return;
+      case 'mega': dtMega(out, r); return;
       case 'quad': uniQuad(out, r, true); return;
       case 'libsteps': uniLibrary(out, r); return;
+      case 'campus': uniCampus(out, r); return;
       case 'dock': indDock(out, r); return;
       case 'roof': indWarehouse(out, r, true); return;
       case 'yard': indYard(out, r); return;
+      case 'factory': indFactory(out, r); return;
       case 'walk': beachWalk(out, r, false); return;
       case 'bowl': beachBowl(out, r); return;
+      case 'pier': beachPier(out, r); return;
+      case 'prom': beachProm(out, r); return;
       case 'alley': oldTown(out, r, true); return;
       case 'square': oldSquare(out, r); return;
+      case 'gate': oldGate(out, r); return;
       case 'crest': hillCrest(out, r, true); return;
       case 'ridge': hillCrest(out, r, false); return;
+      case 'park': hillPark(out, r); return;
       case 'drive': suburbs(out, r, true); return;
       case 'deadend': subDead(out, r); return;
+      case 'court': subCourt(out, r); return;
     }
   }
 
@@ -455,8 +711,8 @@ function buildBlock(out, i, j) {
 // --- assembling the map ----------------------------------------------------
 function buildCity() {
   const objects = [];
-  for (let j = 0; j < 8; j++) {
-    for (let i = 0; i < 8; i++) buildBlock(objects, i, j);
+  for (let j = 0; j < GRID; j++) {
+    for (let i = 0; i < GRID; i++) buildBlock(objects, i, j);
   }
   return objects;
 }
@@ -475,16 +731,16 @@ export const CITY = def(
     zoneSize: 25,
     spawn: { x: 0, z: 0, yaw: 0 },
     patrol: [
-      { x: -150, z: -150 },
-      { x: -150, z: -50 },
-      { x: 150, z: -50 },
-      { x: 150, z: -150 },
-      { x: -150, z: -150 },
-      { x: -150, z: 150 },
-      { x: 150, z: 150 },
-      { x: 150, z: 50 },
-      { x: -150, z: 50 },
-      { x: -150, z: 150 },
+      { x: -400, z: -400 },
+      { x: -400, z: -100 },
+      { x: 400, z: -100 },
+      { x: 400, z: -400 },
+      { x: -400, z: -400 },
+      { x: -400, z: 400 },
+      { x: 400, z: 400 },
+      { x: 400, z: 100 },
+      { x: -400, z: 100 },
+      { x: -400, z: 400 },
     ],
     logos: CITY_SPOTS.map((s) => ({ x: s.x, z: s.z })),
     objectCount: objects.length,
@@ -495,13 +751,27 @@ export const CITY = def(
 // Street-centerline loops the traffic drives. Each leg runs along a gridline
 // (the asphalt streets), so a car never clips a building or a curb.
 export const CITY_ROUTES = [
+  // outer ring
+  [
+    { x: -450, z: -450 }, { x: -250, z: -450 }, { x: 0, z: -450 },
+    { x: 250, z: -450 }, { x: 450, z: -450 },
+    { x: 450, z: -250 }, { x: 450, z: 0 },
+    { x: 450, z: 250 }, { x: 450, z: 450 },
+    { x: 250, z: 450 }, { x: 0, z: 450 },
+    { x: -250, z: 450 }, { x: -450, z: 450 },
+    { x: -450, z: 250 }, { x: -450, z: 0 },
+    { x: -450, z: -250 },
+  ],
+  // inner ring
   [
     { x: -150, z: -150 }, { x: -50, z: -150 }, { x: 50, z: -150 }, { x: 150, z: -150 },
     { x: 150, z: -50 }, { x: 150, z: 50 }, { x: 150, z: 150 },
     { x: 50, z: 150 }, { x: -50, z: 150 }, { x: -150, z: 150 },
     { x: -150, z: 50 }, { x: -150, z: -50 },
   ],
+  // cross-town east–west
   [
-    { x: -50, z: -50 }, { x: 50, z: -50 }, { x: 50, z: 50 }, { x: -50, z: 50 },
+    { x: -450, z: 0 }, { x: -250, z: 0 }, { x: 0, z: 0 },
+    { x: 250, z: 0 }, { x: 450, z: 0 },
   ],
 ];

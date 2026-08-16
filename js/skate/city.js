@@ -207,8 +207,8 @@ export class CityManager {
     g.fillRect(0, 0, MAP_CSS, MAP_CSS);
     // District tints: one tint per city block, read from the layout so the map
     // can never drift out of sync with the actual streets.
-    for (let j = 0; j < 8; j++) {
-      for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 20; j++) {
+      for (let i = 0; i < 20; i++) {
         const r = blockRect(i, j);
         g.fillStyle = DISTRICT_TINTS[districtOf(i, j)] || 'rgba(255,255,255,0.12)';
         g.fillRect((r.x0 + CITY_HALF) * S, (r.z0 + CITY_HALF) * S, (r.x1 - r.x0) * S, (r.z1 - r.z0) * S);
@@ -218,7 +218,7 @@ export class CityManager {
     g.strokeStyle = 'rgba(200, 205, 215, 0.85)';
     g.lineWidth = 2;
     g.beginPath();
-    for (let k = 0; k <= 8; k++) {
+    for (let k = 0; k <= 20; k++) {
       const p = k * 50 * S;
       g.moveTo(p, 0);
       g.lineTo(p, MAP_CSS);

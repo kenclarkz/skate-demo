@@ -239,9 +239,9 @@ export const CAM_FIRST_DOWN = 0.74;
 export const SKY_TOP = 0x2f6ba8;
 export const SKY_HORIZON = 0xd8d3c4;
 export const FOG_NEAR = 60;
-export const FOG_FAR = 280;
+export const FOG_FAR = 600;
 export const CAMERA_NEAR = 0.08;
-export const CAMERA_FAR = 320;
+export const CAMERA_FAR = 700;
 
 // --- loop -----------------------------------------------------------------
 // 120 Hz, not 60. Every hard case in here — the tail snapping in an ollie, a
