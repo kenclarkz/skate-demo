@@ -56,6 +56,8 @@ const ASSETS = [
   'js/skate/parkObjects.js',
   'js/skate/parkGraph.js',
   'js/skate/parkLayouts.js',
+  'js/skate/cityLayout.js',
+  'js/skate/city.js',
   'js/skate/parkFile.js',
   'js/skate/parkStorage.js',
   'js/skate/parkDesigner.js',

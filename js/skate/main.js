@@ -5,6 +5,8 @@ import * as THREE from '../game/three.js';
 import * as C from './config.js';
 import { Park, ROUGH } from './park.js';
 import { PARKS } from './parkLayouts.js';
+import { CITY, CITY_SPOTS } from './cityLayout.js';
+import { CityManager, CITY_CHALLENGE_COINS } from './city.js';
 import { ParkDesigner } from './parkDesigner.js';
 import { newFile, buildDef } from './parkFile.js';
 import { listFiles, removeFile } from './parkStorage.js';
@@ -94,7 +96,7 @@ lighting.setMode([DAY, NIGHT, SUNSET].includes(save.lighting) ? save.lighting : 
 // lookup (selecting one, resuming the saved one).
 let userParks = listFiles();
 function allParks() {
-  return [...PARKS, ...userParks.map((f) => buildDef(f))];
+  return [...PARKS, CITY, ...userParks.map((f) => buildDef(f))];
 }
 
 /**
@@ -238,6 +240,11 @@ for (const b of birds) scene.add(b.group);
 
 let logos = makeLogos(park);
 let logosCollected = 0;
+
+// Open World runtime: spot discovery, minimap + fast travel, traffic. Built
+// and torn down with every park swap — it is a no-op on every park but the
+// city, but it is cheaper to just own one instance than to special-case it.
+let cityManager = null;
 
 /** Release every geometry a group owns. Only ever called on a group that is
  * about to be dropped for good — the park being replaced by another one. */
@@ -509,6 +516,40 @@ function loadPark(def) {
   setupBosses();
   save.setPark(def.id);
   hud.setCurrentPark(def.name);
+  // The city runtime (spots, minimap, traffic) is rebuilt with the park. The
+  // map button and canvas only exist for the city; leaving it closes the map
+  // so the button cannot dangle open over another park.
+  rebuildCityRuntime();
+}
+
+/**
+ * Build (or rebuild) the Open World runtime for the park currently loaded. The
+ * manager is a cheap no-op on every park but the city, but it is cheaper to
+ * just own one instance than to special-case it — and it is rebuilt with every
+ * park swap so its traffic and spots can never outlive the park they sit on.
+ */
+function rebuildCityRuntime() {
+  cityManager = new CityManager(park, scene, save, {
+    mapCanvas: document.getElementById('citymap'),
+    onDiscover: (spot) => {
+      hud.say(`NEW SPOT DISCOVERED!  ${spot.name.toUpperCase()}`, 'unlock');
+      if (cityManager.isMapVisible()) {
+        cityManager.toggleMap();
+        hud.setCityMapOpen(false);
+      }
+    },
+    onChallenge: (spot, res) => {
+      if (res.done) {
+        save.addCoins(CITY_CHALLENGE_COINS);
+        hud.setCoins(save.coins);
+        hud.say(`SPOT COMPLETE  ${spot.name.toUpperCase()}  +${CITY_CHALLENGE_COINS}c`, 'unlock');
+      } else if (res.newBest) {
+        hud.say(`NEW SPOT BEST  ${spot.name.toUpperCase()}`, 'banked');
+      }
+    },
+  });
+  hud.setCityMapVisible(cityManager.active);
+  if (!cityManager.active) hud.setCityMapOpen(false);
 }
 
 /**
@@ -1088,6 +1129,32 @@ hud.on.selectPark = (id) => {
   }
   showStart();
 };
+// Open World: the start menu's own button loads the city, then hands the run
+// over the same way hitting Skate does.
+hud.on.openWorld = () => {
+  if (park.id !== CITY.id) {
+    loadPark(CITY);
+    respawn();
+  }
+  startGame();
+};
+// The minimap's toggle button. Opening it pauses nothing — it is an overlay —
+// and discovering a new spot flips it shut so the reveal can be seen.
+hud.on.cityMap = () => {
+  if (!cityManager.active) return;
+  const open = cityManager.toggleMap();
+  hud.setCityMapOpen(open);
+};
+// A tap on the minimap: canvas px → world coords → the nearest discovered spot.
+hud.on.cityTravel = (x, y, scale) => {
+  if (!cityManager.active) return;
+  const at = cityManager.worldFromMap(x * scale, y * scale);
+  const spot = cityManager.spotAtWorld(at.x, at.z, 45);
+  if (spot && cityManager.travelTo(spot.id, ride)) {
+    chase.snap(ride); // land the camera on the new spot, no drift-in
+    input.clear();
+  }
+};
 hud.on.newPark = () => openDesigner(newFile());
 hud.on.editPark = (id) => {
   const file = userParks.find((f) => f.id === id);
@@ -1239,6 +1306,10 @@ if (radio) hud.on.screenChanged = (name) => radio.onScreen(name);
 document.addEventListener('radio:open-settings', () => {
   showSettings();
 });
+
+// The boot park is built directly (not through loadPark), so give it its own
+// city runtime — a boot straight into the city still gets spots and a map.
+rebuildCityRuntime();
 
 /** Buy the board if it is not owned yet, then equip it either way. */
 function selectBoard(id) {
@@ -1504,6 +1575,9 @@ function handleEvents(events) {
         }
         // Park progression: the combo counts towards the park's own best.
         save.recordParkScore(park.id, e.total);
+        // Open World: a combo landed inside a spot ring feeds that spot's
+        // local best and challenge (the manager toasts what changed).
+        if (cityManager) cityManager.noteCombo(e.total, ride.pos);
         // Crossing the reveal milestone mid-run is when the park's own boss
         // steps out. With the roster beaten and the run past the unlock
         // score, the same banked combo can open the next park.
@@ -1770,6 +1844,11 @@ function step(dt, frameInput) {
     // Nothing moves, but the camera still eases into place behind a fresh spawn.
   }
 
+  // Open World runtime, every frame: spot discovery, ghost traffic and the
+  // minimap. It is a cheap no-op on every park but the city, and runs even at
+  // the menus so the city keeps breathing behind the overlay.
+  cityManager?.step(dt, ride);
+
   if (state !== BAILED) bailWait = 0;
 }
 
@@ -1826,6 +1905,9 @@ function updateHud(dt) {
   // bail is still mid-run — the rider gets straight back up and carries on, so
   // the HUD stays off through a crash rather than flashing back on screen.
   hud.setHideUiVisible(inRun || state === WALKING || state === BAILED);
+  // The city map button rides with the same in-run rhythm, but only where the
+  // city is loaded — nowhere else is there anything worth a map.
+  hud.setCityMapVisible(cityManager?.active && (inRun || state === WALKING));
 
   if (state === PLAYING) {
     hud.setSpeed(ride.groundSpeed);
@@ -2114,6 +2196,11 @@ window.__skate = {
   },
   parks: PARKS,
   config: C,
+  city: CITY,
+  citySpots: CITY_SPOTS,
+  get cityManager() {
+    return cityManager;
+  },
   bots,
   socialGroup,
   birds,
@@ -2202,7 +2289,7 @@ window.__skate = {
   },
   /** Load a different map by id, the way the park picker does. */
   switchPark(id) {
-    const def = PARKS.find((p) => p.id === id);
+    const def = allParks().find((p) => p.id === id);
     if (def) {
       loadPark(def);
       respawn();

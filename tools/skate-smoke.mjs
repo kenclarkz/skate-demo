@@ -4203,6 +4203,123 @@ section('Start menu: every button opens what it says');
 }
 
 // --------------------------------------------------------------------------
+section('Open world: the city loads, spots are found, the map travels');
+{
+  // The Open World button is a real Playwright click on the start menu — the
+  // only way a player can reach the city.
+  await run(() => window.__skate.hud.show('start'));
+  await page.click('#btn-openworld', { timeout: 8000 });
+
+  const boot = await run(() => {
+    const g = window.__skate;
+    return {
+      id: g.park.id,
+      state: g.state,
+      active: g.cityManager?.active,
+      spots: g.citySpots.length,
+      logos: g.park.logos.length,
+      patrol: g.park.patrol.length,
+      grinds: g.park.grinds.length,
+      spawnOn: Math.abs(g.park.heightAt(g.park.spawn.x, g.park.spawn.z)) < 5,
+      mapBtn: !document.getElementById('btn-citymap').hidden,
+    };
+  });
+  ok(boot.id === 'city' && boot.state === 'playing', `the Open world button loads the city and starts the run (state ${boot.state})`);
+  ok(boot.active === true, 'and the city runtime is live');
+  ok(boot.spots === 16, `with all sixteen discoverable spots (${boot.spots})`);
+  ok(boot.logos === 16, `one logo on every spot (${boot.logos})`);
+  ok(boot.patrol >= 4, `a patrol loop the AI can ride (${boot.patrol} waypoints)`);
+  ok(boot.grinds >= 1, `and plenty of grindable line (${boot.grinds} ledges/rails)`);
+  ok(boot.spawnOn, 'with the spawn on a real surface');
+  ok(boot.mapBtn, 'and the minimap button is visible mid-run');
+
+  // Riding into a spot's ring discovers it. Waited for through the game's own
+  // loop, so the discovery is the real per-frame step's work, not a call into
+  // the manager by hand.
+  const plaza = await run(() => window.__skate.citySpots.find((s) => s.id === 'plaza'));
+  await run((p) => window.__skate.place(p.x, p.z, 0, 0), plaza);
+  const found = await page
+    .waitForFunction(() => window.__skate.save.isCitySpotFound('plaza'), { timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  ok(found, 'rolling into Market Plaza discovers the spot');
+
+  // A real banked combo inside the ring feeds the spot's own best through the
+  // live combo event — land a trick at the plaza centre, then roll quietly
+  // past the combo window so the combo banks where the rider is standing.
+  const banked = await run((p) => {
+    const g = window.__skate;
+    g.place(p.x, p.z, 0, 0);
+    const before = g.save.citySpotBest('plaza');
+    g.drive(1 / 120, { trick: 'kickflip', trickCharge: 1 });
+    for (let i = 0; i < 400 && g.ride.mode === 1; i++) g.drive(1 / 120, {});
+    for (let i = 0; i < 200; i++) g.drive(1 / 120, {}); // 1.7 s of quiet ground → bank
+    return { before, best: g.save.citySpotBest('plaza') };
+  }, plaza);
+  ok(banked.best > banked.before, `a combo banked inside the ring feeds the spot best (${banked.best} > ${banked.before})`);
+
+  // A combo past the spot's target completes its challenge, and the reward
+  // lands through the same hook a live banked combo uses.
+  const done = await run((p) => {
+    const g = window.__skate;
+    const coinsBefore = g.save.coins;
+    const res = g.cityManager.noteCombo(p.target + 100, { x: p.x, z: p.z });
+    return { res, done: g.save.isCitySpotDone('plaza'), coins: g.save.coins - coinsBefore };
+  }, plaza);
+  ok(done.res.done && done.done, 'a combo past the spot target completes its challenge');
+  ok(done.coins === 500, `and pays the challenge reward (${done.coins} coins)`);
+
+  // The minimap opens, and a real mouse tap on a discovered spot's dot
+  // fast-travels the rider to it.
+  await page.click('#btn-citymap', { timeout: 4000 });
+  const mapOpen = await run(() => !document.getElementById('citymap').hidden);
+  ok(mapOpen, 'the minimap button opens the map overlay');
+  const tap = await run((p) => {
+    const map = document.getElementById('citymap');
+    const rect = map.getBoundingClientRect();
+    const px = ((p.x + 200) / 400) * map.width;
+    const py = ((p.z + 200) / 400) * map.height;
+    return { x: rect.left + px * (rect.width / map.width), y: rect.top + py * (rect.height / map.height) };
+  }, plaza);
+  await page.mouse.click(tap.x, tap.y);
+  await sleep(100);
+  const teleported = await run((p) => {
+    const g = window.__skate;
+    return { x: g.ride.pos.x, z: g.ride.pos.z, y: g.ride.pos.y, surface: g.park.heightAt(p.x, p.z) };
+  }, plaza);
+  ok(
+    Math.abs(teleported.x - plaza.x) < 0.5 && Math.abs(teleported.z - plaza.z) < 0.5,
+    `a tap on a discovered spot fast-travels to it (${teleported.x.toFixed(1)}, ${teleported.z.toFixed(1)})`
+  );
+  ok(Math.abs(teleported.y - teleported.surface) < 0.05, 'and the rider lands on the spot surface');
+  await page.click('#btn-citymap', { timeout: 4000 });
+
+  // The city is the saved park, so the game boots back into it.
+  const persisted = await run(() => window.__skate.save.park);
+  ok(persisted === 'city', 'and the city is the saved park, so the game boots back into it');
+
+  // Leaving for another park takes the map button with it, and ending the run
+  // puts the game back on the start screen for the sections that follow.
+  await run(() => {
+    const g = window.__skate;
+    g.switchPark('home');
+    g.showStart();
+    return true;
+  });
+  // The loop only ticks at ~2fps here, so updateHud() has not run yet to hide
+  // the in-run buttons. Let a real frame land so the next section starts from
+  // the menu state it asserts on.
+  await page
+    .waitForFunction(() => document.getElementById('btn-pause').hidden, null, { timeout: 6000 })
+    .catch(() => {});
+  const left = await run(() => ({
+    id: window.__skate.park.id,
+    mapBtn: document.getElementById('btn-citymap').hidden,
+  }));
+  ok(left.id === 'home' && left.mapBtn, 'switching to another park hides the city map button');
+}
+
+// --------------------------------------------------------------------------
 section('Settings screen: every control moved in together');
 {
   // The four settings that used to sit loose on the start screen, plus the

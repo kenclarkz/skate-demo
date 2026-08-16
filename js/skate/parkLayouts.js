@@ -23,7 +23,7 @@
 import { buildObjects } from './parkObjects.js';
 import { buildParkGraph } from './parkGraph.js';
 
-function def(id, name, blurb, opts, objects) {
+export function def(id, name, blurb, opts, objects) {
   return {
     id,
     name,
