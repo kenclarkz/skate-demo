@@ -479,6 +479,8 @@ export class Hud {
     this.cameraModeBtn = document.getElementById('opt-cameramode');
     this.pauseBtn = document.getElementById('btn-pause');
     this.camcycleBtn = document.getElementById('btn-camcycle');
+    this.cityMapBtn = document.getElementById('btn-citymap');
+    this.cityMapCanvas = document.getElementById('citymap');
     this.hideUiBtn = document.getElementById('btn-hideui');
     this.statLines = document.getElementById('stat-lines');
     this.parkNow = document.getElementById('park-now');
@@ -617,6 +619,12 @@ export class Hud {
       reset: null,
       parks: null,
       selectPark: null,
+      // Open World: the start menu's button (jump straight into the city) and
+      // the minimap's toggle + fast-travel tap. cityTravel gets canvas-space
+      // pixels plus the CSS-px-to-canvas-px scale.
+      openWorld: null,
+      cityMap: null,
+      cityTravel: null,
       newPark: null,
       playPark: null,
       editPark: null,
@@ -711,6 +719,13 @@ export class Hud {
     click('btn-guide-back', () => this.on.back?.());
     click('btn-parks', () => this.on.parks?.());
     click('btn-parks-back', () => this.on.back?.());
+    click('btn-openworld', () => this.on.openWorld?.());
+    click('btn-citymap', () => this.on.cityMap?.());
+    const citymap = document.getElementById('citymap');
+    citymap?.addEventListener('click', (e) => {
+      const r = citymap.getBoundingClientRect();
+      this.on.cityTravel?.(e.clientX - r.left, e.clientY - r.top, citymap.width / (r.width || citymap.width));
+    });
     click('btn-mypark-new', () => this.on.newPark?.());
     click('btn-store', () => this.on.store?.());
     click('btn-store-back', () => this.on.back?.());
@@ -1395,6 +1410,20 @@ export class Hud {
    * with the pause button's visibility. */
   setCamcycleVisible(visible) {
     if (this.camcycleBtn) this.camcycleBtn.hidden = !visible;
+  }
+
+  /** The city map button rides with the pause button's rhythm, but only shows
+   * when the city is actually loaded — setCityMapVisible(false) also closes an
+   * open map so it cannot dangle over another park. */
+  setCityMapVisible(visible) {
+    if (this.cityMapBtn) this.cityMapBtn.hidden = !visible;
+    if (!visible) this.setCityMapOpen(false);
+  }
+
+  /** Open or close the minimap overlay (leaving a city-run closes it too). */
+  setCityMapOpen(on) {
+    if (this.cityMapCanvas) this.cityMapCanvas.hidden = !on;
+    if (this.cityMapBtn) this.cityMapBtn.classList.toggle('active', on);
   }
 
   /**

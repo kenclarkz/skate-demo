@@ -29,6 +29,7 @@ import {
 } from './board-design.js';
 import { TYPES, typeById } from './boards.js';
 import { PARKS } from './parkLayouts.js';
+import { CITY_SPOTS } from './cityLayout.js';
 import { BOSSES, FINALE_PARK_ID } from './boss.js';
 
 const KEY = 'skate.save';
@@ -84,6 +85,12 @@ const DEFAULTS = {
   // live run's score (see BOSS_REVEAL_SCORE), so nothing about who is standing
   // around is saved — only who has been put away.
   bossesDefeated: [],
+  // The Open World's discovered spots and local bests: id → { found, best,
+  // done }. `found` is a spot whose ring the player has ridden into, `best`
+  // the highest combo banked inside it, and `done` whether the spot's combo
+  // challenge (see CITY_SPOTS' target) has ever been finished.
+  citySpots: {},
+  cityLogos: 0, // collectibles bagged in the city — separate from `logos`
   lighting: 'day', // 'day', 'sunset' or 'night' — see js/skate/lighting.js
   speed: 16, // top speed, in m/s — see config.js's TOP_SPEED
   camZoom: 1, // chase camera distance, 0.5 (close) .. 1 (default) — see CAM_ZOOM
@@ -329,6 +336,7 @@ function read() {
         parkBest: freshParkBest(),
         parksUnlocked: freshParksUnlocked(),
         bossesDefeated: freshBossesDefeated(),
+        citySpots: {},
       };
     const parsed = JSON.parse(raw);
     const s = {
@@ -379,6 +387,24 @@ function read() {
       s.bossesDefeated = [...new Set(parsed.bossesDefeated.filter((id) => knownBossIds.has(id)))];
     }
     s.lighting = s.lighting === 'night' || s.lighting === 'sunset' ? s.lighting : 'day';
+    // City spots get the same treatment as parkBest: known ids kept, junk
+    // dropped, numbers floored. `done` may only be true for a spot that is
+    // also found, so a hand-edited save cannot credit a challenge it never
+    // reached.
+    s.citySpots = {};
+    if (parsed.citySpots && typeof parsed.citySpots === 'object') {
+      const knownSpotIds = new Set(CITY_SPOTS.map((sp) => sp.id));
+      for (const [id, v] of Object.entries(parsed.citySpots)) {
+        if (!knownSpotIds.has(id) || !v || typeof v !== 'object') continue;
+        const best = Math.max(0, Math.floor(Number(v.best) || 0));
+        s.citySpots[id] = {
+          found: v.found === true,
+          best,
+          done: v.done === true && v.found === true,
+        };
+      }
+    }
+    s.cityLogos = Math.max(0, Math.floor(Number(s.cityLogos) || 0));
     s.speed = Math.min(50, Math.max(8, Number(s.speed) || DEFAULTS.speed));
     s.camZoom = Math.min(1, Math.max(0.5, Number(s.camZoom) || DEFAULTS.camZoom));
     // Not the `|| DEFAULTS` shorthand the others use: 0 is a real, meaningful
@@ -732,6 +758,56 @@ export const save = {
     state.bestAir = Math.round(metres * 100) / 100;
     flush();
     return true;
+  },
+
+  // --- Open World ---------------------------------------------------------
+
+  /** The best combo banked inside a city spot (0 if never scored there). */
+  citySpotBest(id) {
+    return Math.max(0, Math.floor(Number(state.citySpots[id]?.best) || 0));
+  },
+
+  /** Whether a spot's ring has ever been ridden into. */
+  isCitySpotFound(id) {
+    return state.citySpots[id]?.found === true;
+  },
+
+  /** Whether a spot's combo challenge has ever been finished. */
+  isCitySpotDone(id) {
+    return state.citySpots[id]?.done === true;
+  },
+
+  /** Mark a spot discovered. Returns true the first time. */
+  recordCitySpotFound(id) {
+    const s = (state.citySpots[id] ||= { found: false, best: 0, done: false });
+    if (s.found) return false;
+    s.found = true;
+    flush();
+    return true;
+  },
+
+  /**
+   * Bank a combo inside a city spot. Discovery happens implicitly — a score
+   * implies the player reached the spot. Returns what changed so the caller
+   * can toast "new best", "challenge complete", or both.
+   * @returns {{ newBest: boolean, done: boolean }}
+   */
+  recordCitySpotScore(id, points) {
+    const spot = CITY_SPOTS.find((s) => s.id === id);
+    const s = (state.citySpots[id] ||= { found: false, best: 0, done: false });
+    s.found = true;
+    const n = Math.floor(points);
+    const newBest = n > this.citySpotBest(id);
+    if (newBest) s.best = n;
+    const done = !s.done && !!spot && n >= spot.target;
+    if (done) s.done = true;
+    flush();
+    return { newBest, done };
+  },
+
+  recordCityLogo() {
+    state.cityLogos++;
+    flush();
   },
 
   recordLogo() {
@@ -1182,6 +1258,8 @@ export const save = {
       parkBest: freshParkBest(),
       parksUnlocked: freshParksUnlocked(),
       bossesDefeated: freshBossesDefeated(),
+      citySpots: {},
+      cityLogos: 0,
     });
     flush();
   },

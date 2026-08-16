@@ -53,6 +53,13 @@
              labels it with whichever mode it is about to show. -->
         <button id="btn-camcycle" type="button" hidden>Cam: Chase</button>
 
+        <!-- Open World only: the minimap. The button toggles the map and the
+             canvas draws the district grid, spots and the rider's arrow.
+             main.js shows/hides both, and only while the city is loaded. Tap a
+             discovered spot on the map to fast travel to it. -->
+        <button id="btn-citymap" type="button" hidden aria-label="Toggle city map">Map</button>
+        <canvas id="citymap" width="200" height="200" hidden></canvas>
+
         <!-- On the board: step off and go explore on foot. On foot, near the
              board: get back on. Both are one tap, never both at once. -->
         <div id="action-buttons">
@@ -196,6 +203,7 @@
           <nav class="menu">
             <button id="btn-play" class="primary" type="button">Skate</button>
             <button id="btn-parks" type="button">Parks</button>
+            <button id="btn-openworld" type="button">Open world</button>
             <button id="btn-riders" type="button">Riders</button>
             <button id="btn-store" type="button">Shop</button>
             <button id="btn-boardmaker" type="button">Board maker</button>

@@ -490,6 +490,41 @@ body {
   border-radius: 999px;
 }
 
+/* The city map toggle: same right-hand pill stack as the camera button, and
+   it lights up while the map is open. City runs only. */
+#btn-citymap {
+  position: absolute;
+  top: calc(154px + var(--pad-t));
+  right: calc(14px + var(--pad-r));
+  pointer-events: auto;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+#btn-citymap.active {
+  color: var(--ink-bright);
+  border-color: var(--ink);
+}
+
+/* The minimap itself: a square overlay tucked under the right-hand pill stack,
+   drawn on a canvas each frame by the city runtime. */
+#citymap {
+  position: absolute;
+  top: calc(206px + var(--pad-t));
+  right: calc(14px + var(--pad-r));
+  pointer-events: auto;
+  width: 200px;
+  height: 200px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+  background: #20222a;
+}
+
 #debug {
   position: absolute;
   left: calc(14px + var(--pad-l));
