@@ -308,7 +308,7 @@ function stepCrowdSkaters(dt, worldTime) {
     routeLens.set(route, len);
     return len;
   };
-  for (const bucket of crowdSkaters.meshes) {
+  for (const bucket of crowdSkaters.meshPairs) {
     let idx = 0;
     for (const pos of bucket.items) {
       const len = getRouteLen(pos.route);
@@ -590,10 +590,11 @@ function maybeUnlockNextPark() {
  * rather than left for the GC to eventually notice.
  */
 function loadPark(def) {
-  disposeGroup(park.group);
-  scene.remove(park.group);
+  const oldPark = park;
   park = new Park(def);
   scene.add(park.group);
+  scene.remove(oldPark.group);
+  disposeGroup(oldPark.group);
   park.mesh.receiveShadow = true;
   ride.park = park;
   chase.park = park;
@@ -638,7 +639,7 @@ function loadPark(def) {
 function rebuildCityRuntime() {
   // Tear down old crowd skaters before rebuilding.
   if (crowdSkaters) {
-    for (const { body, head } of crowdSkaters.meshes) {
+    for (const { body, head } of crowdSkaters.meshPairs) {
       scene.remove(body);
       scene.remove(head);
       body.geometry.dispose();
