@@ -16,8 +16,9 @@ import {
 // reward is handed out by main.js — the manager only reports the result.
 export const CITY_CHALLENGE_COINS = 500;
 
-// How many ghost cars share the two traffic loops (outer ring vs downtown).
-const TRAFFIC_CARS = 6;
+// How many ghost cars share the traffic loops. Increased to 1000 for the
+// open-world update, using InstancedMesh for performance.
+const TRAFFIC_CARS = 1000;
 const TRAFFIC_SPEED = 7; // m/s
 const MAP_CSS = 200; // minimap canvas, CSS px (square)
 const MAP_WORLD = CITY_HALF * 2; // world metres the map covers
@@ -94,32 +95,65 @@ export class CityManager {
 
   _buildTraffic() {
     const geo = new THREE.BoxGeometry(1.8, 0.62, 4.2);
-    let colorIdx = 0;
-    for (let r = 0; r < CITY_ROUTES.length; r++) {
-      const route = CITY_ROUTES[r];
+    // Use InstancedMesh for all cars — 1000 individual meshes would be far too
+    // many draw calls. One material per colour keeps the look varied while the
+    // GPU batches everything into a single instanced draw per colour.
+    const colourBuckets = new Map();
+    // Distribute cars evenly across routes, collecting per-colour buckets.
+    const routeCount = CITY_ROUTES.length;
+    for (let i = 0; i < TRAFFIC_CARS; i++) {
+      const route = CITY_ROUTES[i % routeCount];
       const len = this._routeLen(route);
-      const count = r === 0 ? 4 : 2; // the ring road is busier than downtown
-      for (let c = 0; c < count; c++) {
-        const mat = new THREE.MeshLambertMaterial({
-          color: CAR_COLORS[colorIdx++ % CAR_COLORS.length],
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.castShadow = true;
-        this.park.group.add(mesh);
-        this._cars.push({ mesh, route, dist: ((colorIdx * len) / 6) % len });
-      }
+      const col = CAR_COLORS[i % CAR_COLORS.length];
+      if (!colourBuckets.has(col)) colourBuckets.set(col, []);
+      colourBuckets.get(col).push({ route, dist: ((i * len) / TRAFFIC_CARS) % len });
     }
+    this._instancedMeshes = [];
+    const dummy = new THREE.Object3D();
+    for (const [col, cars] of colourBuckets) {
+      const mat = new THREE.MeshLambertMaterial({ color: col });
+      const mesh = new THREE.InstancedMesh(geo, mat, cars.length);
+      mesh.castShadow = true;
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      for (let j = 0; j < cars.length; j++) {
+        dummy.position.set(0, -100, 0);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(j, dummy.matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      this.park.group.add(mesh);
+      this._instancedMeshes.push(mesh);
+      // Tag each car with a reference to its InstancedMesh so _stepTraffic
+      // can write transforms in bulk using a simple per-bucket counter.
+      for (const car of cars) car._mesh = mesh;
+      this._cars.push(...cars);
+    }
+    this._dummy = dummy;
   }
 
   _stepTraffic(dt) {
     const park = this.park;
+    const dummy = this._dummy;
+    // Reset per-bucket counters so we know which instance index to write.
+    const bucketCounters = new Map();
     for (const car of this._cars) {
       const len = this._routeLen(car.route);
       car.dist = (car.dist + TRAFFIC_SPEED * dt) % len;
       const at = this._pointAt(car.route, car.dist);
       const y = park.heightAt(at.x, at.z);
-      car.mesh.position.set(at.x, y + 0.32, at.z);
-      car.mesh.rotation.y = at.a;
+      dummy.position.set(at.x, y + 0.32, at.z);
+      dummy.rotation.set(0, at.a, 0);
+      dummy.updateMatrix();
+      const mesh = car._mesh;
+      if (mesh) {
+        const j = bucketCounters.get(mesh) || 0;
+        mesh.setMatrixAt(j, dummy.matrix);
+        bucketCounters.set(mesh, j + 1);
+      }
+    }
+    for (const [mesh, _] of bucketCounters) {
+      mesh.instanceMatrix.needsUpdate = true;
     }
   }
 
