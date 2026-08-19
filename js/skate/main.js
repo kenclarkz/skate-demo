@@ -5,7 +5,7 @@ import * as THREE from '../game/three.js';
 import * as C from './config.js';
 import { Park, ROUGH } from './park.js';
 import { PARKS } from './parkLayouts.js';
-import { CITY, CITY_SPOTS } from './cityLayout.js';
+import { CITY, CITY_SPOTS, CITY_ROUTES } from './cityLayout.js';
 import { CityManager, CITY_CHALLENGE_COINS } from './city.js';
 import { ParkDesigner } from './parkDesigner.js';
 import { newFile, buildDef } from './parkFile.js';
@@ -58,6 +58,7 @@ const CHALLENGE = 'challenge';
 const BOSSRESULT = 'bossresult';
 
 const AI_COUNT = 20;
+const CROWD_SKATER_COUNT = 980; // simplified skaters positioned along routes for the 1000 total
 const BIRD_COUNT = 3;
 
 const params = new URLSearchParams(location.search);
@@ -237,6 +238,112 @@ park.mesh.receiveShadow = true;
 
 const birds = makeBirds(BIRD_COUNT);
 for (const b of birds) scene.add(b.group);
+
+// --- crowd skaters -----------------------------------------------------------
+// Simplified skaters (no full physics rig) positioned along city routes to
+// create the 1000-skater open-world feel. Uses InstancedMesh for performance:
+// each skater is a simple cylinder "body" with a sphere "head", animated along
+// the same street routes the traffic uses, bobbing gently to suggest pushing.
+let crowdSkaters = null;
+const CROWD_COLORS = [
+  0xc65b4a, 0x3f7fb0, 0x5aa15c, 0xcf9c3e, 0x8a5ac6, 0x3fb8b0, 0xd65a9a,
+  0xe76f51, 0x457b9d, 0x6a4c93, 0xf77f00, 0x2a9d8f, 0xe63946, 0xf4a261,
+];
+function buildCrowdSkaters() {
+  if (park.id !== 'city') return;
+  const geoBody = new THREE.CylinderGeometry(0.25, 0.25, 1.4, 6);
+  const geoHead = new THREE.SphereGeometry(0.18, 6, 4);
+  const routeCount = CITY_ROUTES.length;
+  const positions = [];
+  for (let i = 0; i < CROWD_SKATER_COUNT; i++) {
+    const route = CITY_ROUTES[i % routeCount];
+    let routeLen = 0;
+    for (let k = 0; k < route.length - 1; k++) {
+      routeLen += Math.hypot(route[k + 1].x - route[k].x, route[k + 1].z - route[k].z);
+    }
+    positions.push({ route, dist: (i / CROWD_SKATER_COUNT) * routeLen, speed: 1.8 + Math.random() * 1.4 });
+  }
+  // One InstancedMesh body+head pair per colour keeps draw calls low.
+  const buckets = [];
+  for (let i = 0; i < CROWD_COLORS.length; i++) buckets.push({ col: CROWD_COLORS[i], items: [] });
+  for (let i = 0; i < positions.length; i++) {
+    buckets[i % buckets.length].items.push(positions[i]);
+  }
+  const meshPairs = [];
+  const dummy = new THREE.Object3D();
+  for (const b of buckets) {
+    if (!b.items.length) continue;
+    const bodyMat = new THREE.MeshLambertMaterial({ color: b.col });
+    const headMat = new THREE.MeshLambertMaterial({ color: 0xf5cba7 });
+    const bodyMesh = new THREE.InstancedMesh(geoBody, bodyMat, b.items.length);
+    const headMesh = new THREE.InstancedMesh(geoHead, headMat, b.items.length);
+    bodyMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    headMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    bodyMesh.frustumCulled = false;
+    headMesh.frustumCulled = false;
+    for (let j = 0; j < b.items.length; j++) {
+      dummy.position.set(0, -100, 0);
+      dummy.updateMatrix();
+      bodyMesh.setMatrixAt(j, dummy.matrix);
+      headMesh.setMatrixAt(j, dummy.matrix);
+    }
+    bodyMesh.instanceMatrix.needsUpdate = true;
+    headMesh.instanceMatrix.needsUpdate = true;
+    scene.add(bodyMesh);
+    scene.add(headMesh);
+    meshPairs.push({ body: bodyMesh, head: headMesh, items: b.items });
+  }
+  crowdSkaters = { meshPairs, positions };
+}
+function stepCrowdSkaters(dt, worldTime) {
+  if (!crowdSkaters || park.id !== 'city') return;
+  const dummy = new THREE.Object3D();
+  const routeLens = new Map();
+  const getRouteLen = (route) => {
+    if (routeLens.has(route)) return routeLens.get(route);
+    let len = 0;
+    for (let k = 0; k < route.length - 1; k++) {
+      len += Math.hypot(route[k + 1].x - route[k].x, route[k + 1].z - route[k].z);
+    }
+    routeLens.set(route, len);
+    return len;
+  };
+  for (const bucket of crowdSkaters.meshes) {
+    let idx = 0;
+    for (const pos of bucket.items) {
+      const len = getRouteLen(pos.route);
+      pos.dist = (pos.dist + pos.speed * dt) % len;
+      let rem = pos.dist;
+      let x = pos.route[0].x, z = pos.route[0].z, a = 0;
+      for (let k = 0; k < pos.route.length - 1; k++) {
+        const dx = pos.route[k + 1].x - pos.route[k].x;
+        const dz = pos.route[k + 1].z - pos.route[k].z;
+        const seg = Math.hypot(dx, dz);
+        if (rem <= seg) {
+          const t = rem / seg;
+          x = pos.route[k].x + dx * t;
+          z = pos.route[k].z + dz * t;
+          a = Math.atan2(dx, dz);
+          break;
+        }
+        rem -= seg;
+      }
+      const y = park.heightAt(x, z);
+      const bob = Math.sin(worldTime * 3 + pos.dist * 0.7) * 0.04;
+      dummy.position.set(x, y + 0.7 + bob, z);
+      dummy.rotation.set(0, a, 0);
+      dummy.updateMatrix();
+      bucket.body.setMatrixAt(idx, dummy.matrix);
+      dummy.position.set(x, y + 1.55 + bob, z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      bucket.head.setMatrixAt(idx, dummy.matrix);
+      idx++;
+    }
+    bucket.body.instanceMatrix.needsUpdate = true;
+    bucket.head.instanceMatrix.needsUpdate = true;
+  }
+}
 
 let logos = makeLogos(park);
 let logosCollected = 0;
@@ -529,6 +636,18 @@ function loadPark(def) {
  * park swap so its traffic and spots can never outlive the park they sit on.
  */
 function rebuildCityRuntime() {
+  // Tear down old crowd skaters before rebuilding.
+  if (crowdSkaters) {
+    for (const { body, head } of crowdSkaters.meshes) {
+      scene.remove(body);
+      scene.remove(head);
+      body.geometry.dispose();
+      body.material.dispose();
+      head.geometry.dispose();
+      head.material.dispose();
+    }
+    crowdSkaters = null;
+  }
   cityManager = new CityManager(park, scene, save, {
     mapCanvas: document.getElementById('citymap'),
     onDiscover: (spot) => {
@@ -550,6 +669,7 @@ function rebuildCityRuntime() {
   });
   hud.setCityMapVisible(cityManager.active);
   if (!cityManager.active) hud.setCityMapOpen(false);
+  buildCrowdSkaters();
 }
 
 /**
@@ -1860,6 +1980,7 @@ function render(dt) {
   worldTime += dt;
   for (const b of birds) b.update(worldTime);
   for (const l of logos) l.update(dt, worldTime);
+  stepCrowdSkaters(dt, worldTime);
   if (!cameraLocked) {
     if (state === WALKING) {
       // A stand-in shaped like `ride`, so the chase camera needs no walking
@@ -2149,6 +2270,7 @@ chase.snap(ride);
 setupBosses();
 if (save.seenGuide) showStart();
 else showGuide();
+lighting.startCycle();
 requestAnimationFrame(loop);
 
 registerServiceWorker();

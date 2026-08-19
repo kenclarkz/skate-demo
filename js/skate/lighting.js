@@ -23,6 +23,10 @@ export const SUNSET = 'sunset';
 // middle of that and reads as deliberate rather than either snappy or slow.
 const FADE_SECONDS = 2.4;
 
+// Automatic day/night cycle: DAY → SUNSET → NIGHT → DAY over 600s (10 min).
+const CYCLE_SECONDS = 600;
+const CYCLE_SEQUENCE = [DAY, SUNSET, NIGHT, DAY];
+
 // The player's personal fill light hangs behind and above the rider, on the
 // side the chase camera sits, rather than directly overhead — see update().
 // BACK is how far behind the rider, UP is how far above the ground it rides.
@@ -257,6 +261,9 @@ export class LightingManager {
     this._to = { ...PRESETS[DAY] };
     this._cur = { ...PRESETS[DAY] };
     this._t = 1; // fade progress, 1 = settled on `_to`
+    // Automatic day/night cycle state.
+    this._cycleActive = false;
+    this._cycleElapsed = 0;
 
     // --- sky --------------------------------------------------------------
     this._skyCanvas = document.createElement('canvas');
@@ -568,7 +575,32 @@ export class LightingManager {
     this._applyAll(this._cur);
   }
 
+  /** Start the automatic day/night cycle. DAY→SUNSET→NIGHT→DAY over
+   *  CYCLE_SECONDS (10 min), repeating forever. */
+  startCycle() {
+    this._cycleActive = true;
+    this._cycleElapsed = 0;
+    this.setMode(DAY, true);
+  }
+
+  /** Stop the cycle, freezing at whatever preset is current. */
+  stopCycle() {
+    this._cycleActive = false;
+  }
+
   update(dt, followPos, cameraPos) {
+    // Automatic cycle: advance the timer and switch presets at boundaries.
+    if (this._cycleActive) {
+      this._cycleElapsed += dt;
+      const t = (this._cycleElapsed % CYCLE_SECONDS) / CYCLE_SECONDS;
+      // 0–0.33 → DAY, 0.33–0.66 → SUNSET, 0.66–1.0 → NIGHT
+      let next;
+      if (t < 1 / 3) next = DAY;
+      else if (t < 2 / 3) next = SUNSET;
+      else next = NIGHT;
+      if (next !== this.mode) this.setMode(next);
+    }
+
     if (this._t < 1) {
       this._t = Math.min(1, this._t + dt / FADE_SECONDS);
       const k = smoothstep(this._t);
