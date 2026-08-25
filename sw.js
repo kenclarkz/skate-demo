@@ -74,7 +74,12 @@ const ASSETS = [
 // this is by far the biggest thing here — a flaky connection failing just one
 // of these fetches must not take the entire precache, and offline play, down
 // with it. They still end up cached, just through their own best-effort adds.
+//
+// Station folders: audio/hip-hop/, audio/pop/, audio/indie/
+// Drop MP3 files into the folders and add their paths here + in audio.js's
+// BUILTIN_STATIONS table to wire them into the radio.
 const MUSIC = [
+  // Skate FM
   'audio/theme.mp3',
   'audio/kickflip-kids.mp3',
   'audio/nollie-nights.mp3',

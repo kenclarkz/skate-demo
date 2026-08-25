@@ -35,22 +35,41 @@
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
-// The built-in Skate FM playlist. Track objects double as "now playing" data
-// (id/name/artists), so radio.js can announce them without knowing a thing
-// about the files behind them. The order here is the order they play in, and
-// the loop wraps around the list.
-const MUSIC = [
-  { url: 'audio/theme.mp3', id: 'theme', name: 'First Push', artists: ['Skate FM'] },
-  { url: 'audio/kickflip-kids.mp3', id: 'kickflip-kids', name: 'Kickflip Kids', artists: ['Skate FM'] },
-  { url: 'audio/nollie-nights.mp3', id: 'nollie-nights', name: 'Nollie Nights', artists: ['Skate FM'] },
-  { url: 'audio/curb-ritual.mp3', id: 'curb-ritual', name: 'Curb Ritual', artists: ['Skate FM'] },
-  { url: 'audio/powerslide.mp3', id: 'powerslide', name: 'Powerslide', artists: ['Skate FM'] },
-  { url: 'audio/manual-over.mp3', id: 'manual-over', name: 'Manual Over', artists: ['Skate FM'] },
-  { url: 'audio/dogtown.mp3', id: 'dogtown', name: 'Dogtown', artists: ['Skate FM'] },
-  { url: 'audio/wallride.mp3', id: 'wallride', name: 'Wallride', artists: ['Skate FM'] },
-  { url: 'audio/dark-slide.mp3', id: 'dark-slide', name: 'Dark Slide', artists: ['Skate FM'] },
-  { url: 'audio/bowl-season.mp3', id: 'bowl-season', name: 'Bowl Season', artists: ['Skate FM'] },
-];
+// Built-in radio stations. Each station is a playlist of track objects that
+// double as "now playing" data (id/name/artists), so radio.js can announce
+// them without knowing a thing about the files behind them. The order in
+// each list is the order they play in, and the loop wraps around.
+//
+// To add music to a station: drop MP3 files into the station's folder
+// (audio/hip-hop/, audio/pop/, audio/indie/) and add track entries here.
+const BUILTIN_STATIONS = {
+  'skate-fm': [
+    { url: 'audio/theme.mp3', id: 'theme', name: 'First Push', artists: ['Skate FM'] },
+    { url: 'audio/kickflip-kids.mp3', id: 'kickflip-kids', name: 'Kickflip Kids', artists: ['Skate FM'] },
+    { url: 'audio/nollie-nights.mp3', id: 'nollie-nights', name: 'Nollie Nights', artists: ['Skate FM'] },
+    { url: 'audio/curb-ritual.mp3', id: 'curb-ritual', name: 'Curb Ritual', artists: ['Skate FM'] },
+    { url: 'audio/powerslide.mp3', id: 'powerslide', name: 'Powerslide', artists: ['Skate FM'] },
+    { url: 'audio/manual-over.mp3', id: 'manual-over', name: 'Manual Over', artists: ['Skate FM'] },
+    { url: 'audio/dogtown.mp3', id: 'dogtown', name: 'Dogtown', artists: ['Skate FM'] },
+    { url: 'audio/wallride.mp3', id: 'wallride', name: 'Wallride', artists: ['Skate FM'] },
+    { url: 'audio/dark-slide.mp3', id: 'dark-slide', name: 'Dark Slide', artists: ['Skate FM'] },
+    { url: 'audio/bowl-season.mp3', id: 'bowl-season', name: 'Bowl Season', artists: ['Skate FM'] },
+  ],
+  'hip-hop': [],
+  'pop': [],
+  'indie': [],
+};
+
+/** All built-in station ids in display order. */
+export const BUILTIN_STATION_IDS = ['skate-fm', 'hip-hop', 'pop', 'indie'];
+
+/** Station display names. */
+export const STATION_NAMES = {
+  'skate-fm': 'Skate FM',
+  'hip-hop': 'Hip Hop',
+  'pop': 'Pop',
+  'indie': 'Indie',
+};
 
 export class Audio {
   constructor(on = true) {
@@ -75,6 +94,8 @@ export class Audio {
     this.musicTracks = null;  // the track objects those buffers came from
     this.musicIndex = 0;      // where the playlist is right now
     this.currentTrack = null; // the last track that actually started playing
+    this.currentStationId = 'skate-fm'; // which built-in station is loaded
+    this.initialStationId = 'skate-fm'; // station to start with on first unlock
     this.onTrack = null;      // (track) => void, fired as each playlist track starts
     this.musicStartTime = 0;  // ctx.currentTime when the current track began
     this.musicPaused = false; // local playlist held by the in-game play button
@@ -227,14 +248,17 @@ export class Audio {
    * it fails quiet rather than fails loud: no music, not a thrown error
    * breaking the rest of unlock().
    */
-  async startMusic() {
+  async startMusic(stationId) {
+    const id = stationId || this.initialStationId || 'skate-fm';
+    const tracks = BUILTIN_STATIONS[id];
+    if (!tracks || tracks.length === 0) return;
     const ctx = this.ctx;
     this.musicGain = ctx.createGain();
     this.musicGain.gain.value = this.ducked ? 0 : this.musicVolume;
     this.musicGain.connect(this.master);
     const buffers = [];
-    const tracks = [];
-    for (const track of MUSIC) {
+    const decoded = [];
+    for (const track of tracks) {
       try {
         const res = await fetch(track.url);
         const buf = await res.arrayBuffer();
@@ -242,15 +266,16 @@ export class Audio {
         // and end up decoding — and playing — the tracks twice.
         if (this.musicSource) return;
         buffers.push(await ctx.decodeAudioData(buf));
-        tracks.push(track);
+        decoded.push(track);
       } catch {
         // One bad track skips; the rest of the playlist still plays.
       }
     }
     if (buffers.length === 0 || this.musicSource) return;
     this.musicBuffers = buffers;
-    this.musicTracks = tracks;
+    this.musicTracks = decoded;
     this.musicIndex = 0;
+    this.currentStationId = id;
     this.playMusicTrack(0);
   }
 
@@ -354,6 +379,53 @@ export class Audio {
     if (!this.ready || !this.musicBuffers?.length) return;
     if (this.musicPaused) this.resumeMusic();
     else this.pauseMusic();
+  }
+
+  /**
+   * Switch to a different built-in station. Stops the current playlist,
+   * fetches and decodes the new station's tracks, and starts playing from
+   * the beginning. If the station has no tracks yet, the playlist is cleared
+   * silently.
+   */
+  async switchStation(stationId) {
+    if (stationId === this.currentStationId && this.musicBuffers?.length) return;
+    // Stop current playback
+    const prev = this.musicSource;
+    if (prev) {
+      prev.onended = null;
+      try { prev.stop(); } catch {}
+      this.musicSource = null;
+    }
+    this.musicPaused = false;
+    this.musicPausedAt = 0;
+    this.musicBuffers = null;
+    this.musicTracks = null;
+    this.musicIndex = 0;
+    this.currentTrack = null;
+    this.currentStationId = stationId;
+    const tracks = BUILTIN_STATIONS[stationId];
+    if (!tracks || tracks.length === 0) return;
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const buffers = [];
+    const decoded = [];
+    for (const track of tracks) {
+      try {
+        const res = await fetch(track.url);
+        const buf = await res.arrayBuffer();
+        if (this.currentStationId !== stationId) return; // switched again mid-load
+        buffers.push(await ctx.decodeAudioData(buf));
+        decoded.push(track);
+      } catch {
+        // One bad track skips.
+      }
+    }
+    if (this.currentStationId !== stationId) return; // switched again mid-load
+    if (buffers.length === 0) return;
+    this.musicBuffers = buffers;
+    this.musicTracks = decoded;
+    this.musicIndex = 0;
+    this.playMusicTrack(0);
   }
 
   /**
