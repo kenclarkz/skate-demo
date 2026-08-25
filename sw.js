@@ -61,6 +61,8 @@ const ASSETS = [
   'js/skate/parkFile.js',
   'js/skate/parkStorage.js',
   'js/skate/parkDesigner.js',
+  'js/skate/multiplayer.js',
+  'js/skate/multiplayer-ui.js',
   'js/skate/main.js',
   'icons/icon-192.png',
   'icons/icon-512.png',

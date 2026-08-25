@@ -44,7 +44,7 @@ import {
   colorHex,
 } from './board-design.js';
 
-const SCREENS = ['start', 'paused', 'guide', 'parks', 'store', 'charselect', 'maker', 'boardmaker', 'settings'];
+const SCREENS = ['start', 'paused', 'guide', 'parks', 'store', 'charselect', 'maker', 'boardmaker', 'settings', 'multiplayer'];
 
 /** A two-colour hint of each style, drawn in CSS for its chip. */
 const STYLE_SWATCH = {
@@ -699,6 +699,7 @@ export class Hud {
       bossChallenge: null,
       bossResultRematch: null,
       bossResultDone: null,
+      multiplayer: null,
       // Fired on every menu transition: the menu name on show(), null on hide().
       // The radio uses it to know when a run is on screen — see main.js.
       screenChanged: null,
@@ -715,6 +716,7 @@ export class Hud {
   bind() {
     const click = (id, fn) => document.getElementById(id)?.addEventListener('click', fn);
     click('btn-play', () => this.on.play?.());
+    click('btn-multiplayer', () => this.on.multiplayer?.());
     click('btn-guide', () => this.on.guide?.());
     click('btn-guide-back', () => this.on.back?.());
     click('btn-parks', () => this.on.parks?.());

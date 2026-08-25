@@ -202,6 +202,7 @@
           <div id="stat-lines" class="stat-lines"></div>
           <nav class="menu">
             <button id="btn-play" class="primary" type="button">Skate</button>
+            <button id="btn-multiplayer" type="button">Multiplayer</button>
             <button id="btn-parks" type="button">Parks</button>
             <button id="btn-openworld" type="button">Open world</button>
             <button id="btn-riders" type="button">Riders</button>
@@ -282,6 +283,56 @@
           </nav>
           <button id="btn-settings-back" class="primary" type="button">Back</button>
         </section>
+
+        <section id="screen-multiplayer" class="screen wide" hidden>
+          <h1>Multiplayer</h1>
+          <p class="tag">Skate with friends or find a random match.</p>
+          <div id="mp-status" class="mp-status">Disconnected</div>
+
+          <!-- Pre-session: create, match, or join by code -->
+          <div id="mp-lobby" class="mp-lobby">
+            <nav class="menu">
+              <button id="btn-mp-create" class="primary" type="button">Create Session</button>
+              <button id="btn-mp-match" type="button">Find Random Match</button>
+              <div class="mp-join-row">
+                <input type="text" id="mp-code-input" class="mp-code-input" placeholder="Friend code" maxlength="6" autocomplete="off" aria-label="Friend code">
+                <button id="btn-mp-join-code" type="button">Join</button>
+              </div>
+            </nav>
+            <h2 class="store-section-title">Open Sessions</h2>
+            <div id="mp-session-list" class="mp-session-list">
+              <p class="mp-empty">No open sessions</p>
+            </div>
+          </div>
+
+          <!-- In-session: friend code display, peer list, chat -->
+          <div id="mp-friend-code" class="mp-friend-code" hidden>
+            <p class="tag">Share this code with friends:</p>
+            <div class="mp-code-display" id="mp-code-display">------</div>
+          </div>
+          <div id="mp-ingame-panel" class="mp-ingame-panel" hidden>
+            <div class="mp-peers">
+              <h2 class="store-section-title">Players</h2>
+              <ul id="mp-peer-list" class="mp-peer-list"></ul>
+            </div>
+            <div class="mp-chat">
+              <div id="mp-chat-log" class="mp-chat-log"></div>
+              <div class="mp-chat-row">
+                <input type="text" id="mp-chat-input" class="mp-chat-input" placeholder="Type a message…" maxlength="200" autocomplete="off" aria-label="Chat message">
+                <button id="btn-mp-send" type="button">Send</button>
+              </div>
+            </div>
+            <button id="btn-mp-leave" class="mp-leave-btn" type="button">Leave Session</button>
+          </div>
+
+          <button id="btn-mp-back" class="primary" type="button">Back</button>
+        </section>
+
+        <!-- In-game mini overlay for multiplayer player list -->
+        <div id="mp-ingame-overlay" class="mp-ingame-overlay" hidden>
+          <span class="mp-dot mp-dot-red" id="mp-ingame-dot"></span>
+          <div id="mp-ingame-list" class="mp-ingame-list"></div>
+        </div>
 
         <section id="screen-parks" class="screen wide" hidden>
           <h1>Parks</h1>

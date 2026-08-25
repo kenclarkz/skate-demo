@@ -36,6 +36,8 @@ import { makeLogos, checkPickup } from './collectible.js';
 import { registerServiceWorker, setupInstall } from '../game/pwa.js';
 import { LightingManager, DAY, NIGHT, SUNSET } from './lighting.js';
 import { boot as bootRadio } from './radio.js';
+import { multiplayer, encodeState, decodeState, lerpState } from './multiplayer.js';
+import { MultiplayerUI } from './multiplayer-ui.js';
 
 const START = 'start';
 const PLAYING = 'playing';
@@ -56,6 +58,7 @@ const BAILED = 'bail';
 const BOSSCUT = 'bosscut';
 const CHALLENGE = 'challenge';
 const BOSSRESULT = 'bossresult';
+const MULTIPLAYER = 'multiplayer';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.get('debug') === '1';
@@ -756,6 +759,112 @@ const radio = bootRadio(save, audio);
 const input = new Input(document.getElementById('app'));
 const gestureTrail = new GestureTrail(document.getElementById('gesture-trail'));
 
+// --- multiplayer -----------------------------------------------------------
+const mpUI = new MultiplayerUI();
+
+/** @type {Map<string, { ride: Ride, board: Board, skater: Skater, group: THREE.Group, state: object, ts: number }>} */
+const remotePlayers = new Map();
+
+function addRemotePeer(peerId, name, look) {
+  if (remotePlayers.has(peerId)) return;
+  const rBoard = new Board();
+  const rSkater = new Skater(look?.palette, { style: look?.style, scale: look?.scale });
+  const rRide = new Ride(park, rBoard, rSkater);
+  const group = rRide.frame;
+  scene.add(group);
+  remotePlayers.set(peerId, {
+    ride: rRide,
+    board: rBoard,
+    skater: rSkater,
+    group,
+    state: null,
+    ts: 0,
+    name: name || 'Skater',
+  });
+}
+
+function removeRemotePeer(peerId) {
+  const rp = remotePlayers.get(peerId);
+  if (rp) {
+    scene.remove(rp.group);
+    remotePlayers.delete(peerId);
+  }
+}
+
+function updateRemotePlayers(dt) {
+  const now = performance.now();
+  for (const [peerId, rp] of remotePlayers) {
+    const peer = multiplayer.peers.get(peerId);
+    if (!peer || !peer.state) {
+      // No state yet — hide the model.
+      rp.group.visible = false;
+      continue;
+    }
+    // Interpolation window: 2 sync intervals (100ms at 20 Hz).
+    const age = now - peer.ts;
+    if (age > 5000) {
+      rp.group.visible = false;
+      continue;
+    }
+    rp.group.visible = true;
+    const s = peer.state;
+    // Apply position directly with slight smoothing.
+    const smooth = Math.min(1, dt * 12);
+    rp.ride.pos.x += (s.x - rp.ride.pos.x) * smooth;
+    rp.ride.pos.y += (s.y - rp.ride.pos.y) * smooth;
+    rp.ride.pos.z += (s.z - rp.ride.pos.z) * smooth;
+    // Yaw with shortest-path lerp.
+    let dy = s.yaw - rp.ride.yaw;
+    if (dy > Math.PI) dy -= Math.PI * 2;
+    if (dy < -Math.PI) dy += Math.PI * 2;
+    rp.ride.yaw += dy * smooth;
+    rp.ride.lean = rp.ride.lean + (s.lean - rp.ride.lean) * smooth;
+    rp.ride.speed = s.speed;
+    rp.ride.mode = s.mode;
+    rp.ride.sliding = !!(s.flags & 2);
+    rp.ride.manual = !!(s.flags & 4);
+    rp.ride.push = (s.flags & 1) ? 0.5 : -1;
+    rp.ride.charge = s.crouch;
+    rp.ride.airHeight = s.airHeight;
+    rp.ride.balance = s.balance;
+    // Position the frame.
+    rp.group.position.set(rp.ride.pos.x, rp.ride.pos.y, rp.ride.pos.z);
+    rp.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rp.ride.yaw);
+    // Pose the rider from the received state.
+    rp.skater.pose({
+      crouch: s.crouch,
+      lean: s.lean,
+      speed: s.speed,
+      push: (s.flags & 1) ? 0.5 : -1,
+      mode: s.mode,
+      flip: s.flip,
+      shuv: s.shuv,
+      pitch: s.pitch,
+      balance: s.balance,
+      manual: !!(s.flags & 4),
+      sliding: !!(s.flags & 2),
+    });
+  }
+}
+
+// Listen for peer join/leave events from the networking layer.
+multiplayer.onPeersChange = (peers) => {
+  // Update the multiplayer UI.
+  mpUI._updatePeerList(peers);
+  // Add any new peers.
+  for (const p of peers) {
+    if (!remotePlayers.has(p.id)) {
+      addRemotePeer(p.id, p.name, p.look);
+    }
+  }
+  // Remove peers that left.
+  for (const [id] of remotePlayers) {
+    if (!peers.find((p) => p.id === id)) {
+      removeRemotePeer(id);
+    }
+  }
+};
+
 let state = START;
 let score = 0;           // banked this session — the current run's score
 let runTricks = 0;       // tricks landed this session — the current run's count
@@ -1232,6 +1341,16 @@ function showSettings() {
   hud.show('settings');
 }
 
+function showMultiplayer() {
+  state = MULTIPLAYER;
+  input.enabled = false;
+  hud.show('multiplayer');
+  // Connect to signaling server if not already connected.
+  if (multiplayer.status === 'disconnected') {
+    multiplayer.connect();
+  }
+}
+
 // Which on-foot-or-riding state to fall back into when a pause is lifted —
 // pausing must not itself decide whether the player was walking or rolling.
 let prePauseState = PLAYING;
@@ -1255,6 +1374,8 @@ hud.on.resume = () => togglePause();
 hud.on.guide = () => showGuide();
 hud.on.back = () => showStart();
 hud.on.parks = () => showParks();
+// Multiplayer: show the lobby screen and connect to the signaling server.
+hud.on.multiplayer = () => showMultiplayer();
 hud.on.selectPark = (id) => {
   const def = allParks().find((p) => p.id === id);
   // A locked park is not selectable from the grid; the guard is belt-and-
@@ -1648,6 +1769,53 @@ hud.on.reset = () => {
 };
 input.onPause = () => {
   if (state === PLAYING || state === WALKING || state === CHALLENGE || state === PAUSED) togglePause();
+  else if (state === MULTIPLAYER) showStart();
+};
+
+// --- multiplayer callbacks -------------------------------------------------
+mpUI.onBack = () => showStart();
+mpUI.onCreateSession = () => {
+  multiplayer.createSession(park.id);
+  mpUI.setFriendCode(multiplayer.friendCode || '......');
+  mpUI.addSystemLine('Session created! Share the code with friends.');
+};
+mpUI.onFindMatch = () => {
+  multiplayer.findRandomMatch(park.id);
+  mpUI.addSystemLine('Looking for a match...');
+};
+mpUI.onJoinCode = (code) => {
+  multiplayer.joinByFriendCode(code);
+  mpUI.addSystemLine(`Joining session with code ${code}...`);
+};
+mpUI.onJoinSession = (sessionId) => {
+  multiplayer.joinSession(sessionId);
+  mpUI.addSystemLine('Joining session...');
+};
+mpUI.onLeaveSession = () => {
+  multiplayer.leaveSession();
+  // Remove all remote players.
+  for (const [id] of remotePlayers) removeRemotePeer(id);
+  mpUI.addSystemLine('Left session.');
+};
+mpUI.onSendChat = (text) => {
+  multiplayer.sendChat(text);
+  mpUI.addSystemLine(`You: ${text}`);
+};
+// When the multiplayer status changes and we're in-session, update the friend code display.
+multiplayer.onStatusChange = (status) => {
+  mpUI._updateStatus(status);
+  if (status === 'in-session' && multiplayer.friendCode) {
+    mpUI.setFriendCode(multiplayer.friendCode);
+  }
+};
+multiplayer.onPeerChat = (peerId, text) => {
+  mpUI._addChatLine(peerId, text);
+};
+multiplayer.onSessionList = (sessions) => {
+  mpUI._renderSessionList(sessions);
+};
+multiplayer.onParkChange = (parkId) => {
+  mpUI._updateStatus(`Park: ${parkId}`);
 };
 
 // --- events from the ride model -------------------------------------------
@@ -1975,7 +2143,8 @@ function step(dt, frameInput) {
     state === PARKMENU ||
     state === STOREMENU ||
     state === SETTINGSMENU ||
-    state === DESIGNER
+    state === DESIGNER ||
+    state === MULTIPLAYER
   ) {
     // Nothing moves, but the camera still eases into place behind a fresh spawn.
   }
@@ -1997,6 +2166,8 @@ function render(dt) {
   for (const b of birds) b.update(worldTime);
   for (const l of logos) l.update(dt, worldTime);
   stepCrowdSkaters(dt, worldTime);
+  // Interpolate remote players from their latest network state.
+  updateRemotePlayers(dt);
   if (!cameraLocked) {
     if (state === WALKING) {
       // A stand-in shaped like `ride`, so the chase camera needs no walking
@@ -2045,6 +2216,8 @@ function updateHud(dt) {
   // The city map button rides with the same in-run rhythm, but only where the
   // city is loaded — nowhere else is there anything worth a map.
   hud.setCityMapVisible(cityManager?.active && (inRun || state === WALKING));
+  // The multiplayer player list overlay: visible during gameplay when in a session.
+  mpUI.setInGameVisible(inRun || state === WALKING);
 
   if (state === PLAYING) {
     hud.setSpeed(ride.groundSpeed);
@@ -2253,6 +2426,12 @@ function loop(now) {
     steps++;
   }
   if (steps === maxSteps) acc = 0; // give up rather than fall further behind
+
+  // Multiplayer: sync local state to peers and prune stale connections.
+  if (multiplayer.inSession && (state === PLAYING || state === CHALLENGE)) {
+    multiplayer.sync(encodeState(ride), dt);
+  }
+  multiplayer.pruneStale(dt);
 
   updateHud(dt);
   // While the editor is open it owns the whole canvas — the play scene is
