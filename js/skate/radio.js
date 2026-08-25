@@ -64,15 +64,37 @@ const DEV_REDIRECT = 'http://127.0.0.1:8080/';
 export const BUILTIN_STATION = {
   id: 'builtin',
   name: 'Skate FM',
-  detail: 'The park’s own speakers',
+  detail: 'The park\u2019s own speakers',
   builtin: true,
 };
 
-// What the toast claims while Skate FM is on but the playlist has not started
-// yet (no user gesture). A track datum like any other, so the announce() path
-// stays a single one — the moment music actually begins, audio.js announces
-// the real track through this.ctx.audio.onTrack instead.
-const THEME_TRACK = { id: 'theme', name: 'First Push', artists: ['Skate FM'] };
+// All built-in stations as radio.js station objects. Built from audio.js's
+// BUILTIN_STATION_IDS and STATION_NAMES so the two files never duplicate
+// station metadata.
+import { BUILTIN_STATION_IDS, STATION_NAMES } from './audio.js';
+
+const BUILTIN_DETAILS = {
+  'skate-fm': "The park\u2019s own speakers",
+  'hip-hop': 'Beats to grind to',
+  'pop': 'Feel-good vibes',
+  'indie': 'Underground sounds',
+};
+
+const BUILTIN_ICONS = {
+  'skate-fm': '\u266A',
+  'hip-hop': '\uD83C\uDFB5',
+  'pop': '\uD83C\uDFB6',
+  'indie': '\uD83C\uDFB8',
+};
+
+const ALL_BUILTIN_STATIONS = BUILTIN_STATION_IDS.map((id) => ({
+  id: `builtin:${id}`,
+  name: STATION_NAMES[id] || id,
+  detail: BUILTIN_DETAILS[id] || '',
+  builtin: true,
+  builtinKey: id,
+  icon: BUILTIN_ICONS[id] || '\u266A',
+}));
 
 // --- Spotify plumbing -----------------------------------------------------
 // The app is a static site, so there is nowhere safe to hide a secret; the
@@ -1159,19 +1181,24 @@ export class Radio {
     } catch {
       this.connected = false;
     }
-    this.stations = [BUILTIN_STATION];
-    if (this.connected && saved && saved !== BUILTIN_STATION.id) {
+    this.stations = [...ALL_BUILTIN_STATIONS];
+    if (this.connected && saved && !saved.startsWith('builtin:')) {
       // Best effort: name the saved station from the playlists if we can,
       // otherwise the park's speakers are the honest stand-in.
       try {
         const list = await this.provider.getStations();
-        this.stations = [BUILTIN_STATION, ...list];
-        this.station = list.find((s) => s.id === saved) || BUILTIN_STATION;
+        this.stations = [...ALL_BUILTIN_STATIONS, ...list];
+        this.station = list.find((s) => s.id === saved) || ALL_BUILTIN_STATIONS[0];
       } catch {
-        this.station = BUILTIN_STATION;
+        this.station = ALL_BUILTIN_STATIONS[0];
       }
     } else {
-      this.station = BUILTIN_STATION;
+      this.station = ALL_BUILTIN_STATIONS.find((s) => s.id === saved) || ALL_BUILTIN_STATIONS[0];
+    }
+    // Tell the audio engine which station to start with on the first unlock().
+    // The station's builtinKey maps to audio.js's BUILTIN_STATIONS table.
+    if (this.ctx.audio && this.station?.builtinKey) {
+      this.ctx.audio.initialStationId = this.station.builtinKey;
     }
     this.renderPlayback();
     this.syncPanel();
@@ -1293,19 +1320,20 @@ export class Radio {
     this.renderDebug();
     if (!signedIn) {
       this.el.status.textContent =
-        'Connect Spotify and your playlists appear here — pick one and it plays over the park.';
-      this.renderStations([BUILTIN_STATION]);
+        'Connect Spotify and your playlists appear here \u2014 pick one and it plays over the park.';
+      this.renderStations(ALL_BUILTIN_STATIONS);
       return;
     }
-    this.el.status.textContent = this.stations?.length > 1 ? '' : 'Loading your playlists…';
+    this.el.status.textContent = this.stations?.length > ALL_BUILTIN_STATIONS.length ? '' : 'Loading your playlists\u2026';
     try {
       const list = await this.provider.getStations();
-      this.stations = [BUILTIN_STATION, ...list];
+      this.stations = [...ALL_BUILTIN_STATIONS, ...list];
       this.renderStations(this.stations);
       if (this.screen === 'settings' && list.length) this.el.status.textContent = '';
     } catch (e) {
       this.el.status.textContent =
-        'Couldn’t load your playlists — check the connection and try again.';
+        'Couldn\u2019t load your playlists \u2014 check the connection and try again.';
+      this.renderStations(ALL_BUILTIN_STATIONS);
     }
   }
 
@@ -1337,8 +1365,10 @@ export class Radio {
     if (station.image) {
       art.style.backgroundImage = `url('${station.image}')`;
       art.classList.add('photo');
+    } else if (station.icon) {
+      art.textContent = station.icon;
     } else if (station.builtin) {
-      art.textContent = '♪';
+      art.textContent = '\u266A';
     } else {
       art.textContent = station.name.slice(0, 1).toUpperCase();
     }
@@ -1396,7 +1426,7 @@ export class Radio {
       this.el.results.hidden = true;
       this.el.results.replaceChildren();
       this.el.list.hidden = false;
-      this.renderStations(this.stations || [BUILTIN_STATION]);
+      this.renderStations(this.stations || ALL_BUILTIN_STATIONS);
       return;
     }
     this.el.list.hidden = true;
@@ -1466,12 +1496,20 @@ export class Radio {
     if (station.builtin) {
       this.playing = true;
       this.provider.stopPolling();
+      // Switch the audio engine to this station's playlist. audio.js owns
+      // the actual track list; radio.js just tells it which one.
+      const key = station.builtinKey || 'skate-fm';
+      this.ctx.audio?.switchStation(key);
       this.emit();
       this.renderPlayback();
-      // Name whatever the park's speakers are actually on right now — audio.js
-      // keeps currentTrack updated as its playlist advances, so picking Skate
-      // FM mid-song announces the real track, not the default.
-      this.announce(this.ctx.audio?.currentTrack || THEME_TRACK);
+      // Announce the current track if the station has one playing, otherwise
+      // show the station name as the now-playing placeholder.
+      const track = this.ctx.audio?.currentTrack;
+      if (track) {
+        this.announce(track);
+      } else {
+        this.announce({ id: key, name: station.name, artists: [station.name] });
+      }
       this.syncPanel();
       return;
     }
@@ -1683,7 +1721,7 @@ export class Radio {
     this.enabled = true;
     this.renderEnabledBtn();
     this.setVolume(1);
-    this.station = BUILTIN_STATION;
+    this.station = ALL_BUILTIN_STATIONS[0];
     this.playing = false;
     this.now = null;
     this.provider.stopPolling();
@@ -1717,7 +1755,7 @@ export function boot(save, audio) {
     // A broken radio must never break the game: log and carry on with the
     // built-in station.
     console.error('radio:', e);
-    radio.station = BUILTIN_STATION;
+    radio.station = ALL_BUILTIN_STATIONS[0];
     radio.renderPlayback();
     radio.syncPanel();
   });
