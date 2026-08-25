@@ -19,7 +19,11 @@ import * as C from './config.js';
 const DAMP = 0.994;        // air drag on the whole body, per step
 const BOUNCE = 0.14;       // how much of a landing a limb gives back
 const GROUND_FRICTION = 0.42;
-const ITERATIONS = 7;      // constraint passes per step; below five it stretches
+let ITERATIONS = 7;        // constraint passes per step; below five it stretches
+
+export function setRagdollIterations(n) {
+  ITERATIONS = n;
+}
 
 const _v = new THREE.Vector3();
 const _t = new THREE.Vector3();

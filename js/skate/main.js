@@ -13,7 +13,7 @@ import { listFiles, removeFile } from './parkStorage.js';
 import { Board } from './board.js';
 import { Skater } from './skater.js';
 import { Ride, GROUND, GRIND, AIR } from './physics.js';
-import { Ragdoll } from './ragdoll.js';
+import { Ragdoll, setRagdollIterations } from './ragdoll.js';
 import { Walker } from './walk.js';
 import { ChaseCamera } from './camera.js';
 import { Input } from './input.js';
@@ -57,13 +57,27 @@ const BOSSCUT = 'bosscut';
 const CHALLENGE = 'challenge';
 const BOSSRESULT = 'bossresult';
 
-const AI_COUNT = 20;
-const CROWD_SKATER_COUNT = 980; // simplified skaters positioned along routes for the 1000 total
-const BIRD_COUNT = 3;
+const AI_COUNT = _isLowEnd ? 10 : 20;
+const CROWD_SKATER_COUNT = _isLowEnd ? 300 : 980; // simplified skaters positioned along routes for the 1000 total
+const BIRD_COUNT = _isLowEnd ? 1 : 3;
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.get('debug') === '1';
 
+// --- device capability detection -------------------------------------------
+// iPad 7th gen (A10 Fusion, 3 GB RAM, DPR 2) and similar low-end tablets/
+// phones get a lighter render path: smaller shadow maps, fewer AI skaters,
+// lower physics rate and a lower starting DPR so the frame budget has room.
+const _isLowEnd = (() => {
+  const dpr = window.devicePixelRatio || 1;
+  const ua = navigator.userAgent || '';
+  const cores = navigator.hardwareConcurrency || 8;
+  // Heuristic: old iPad/iPhone (A10 or earlier), low-DPR screens, or very few
+  // cores.  iPad 7th gen is DPR 2 + 4 cores + iPad UA string.
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return (isIOS && cores <= 4) || (dpr <= 2 && cores <= 4);
+})();
+if (_isLowEnd) C.setFixedDt(1 / 60);
 // --- renderer -------------------------------------------------------------
 const canvas = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({
@@ -75,8 +89,8 @@ const renderer = new THREE.WebGLRenderer({
 });
 // The concrete is a big flat mid-grey under a bright sky, which is exactly the
 // case that clips to white without a filmic curve on the highlights.
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.shadowMap.enabled = true;
+renderer.toneMapping = _isLowEnd ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = !_isLowEnd;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
@@ -87,7 +101,7 @@ const camera = new THREE.PerspectiveCamera(C.CAM_FOV, 1, C.CAMERA_NEAR, C.CAMERA
 // Sky, fog, sun/moon, floodlights, street-lamp glow, signage and the distant
 // skyline all live in one place — see lighting.js for why, and for how a
 // future weather or sunset preset would slot in beside DAY and NIGHT.
-const lighting = new LightingManager(scene, renderer);
+const lighting = new LightingManager(scene, renderer, _isLowEnd);
 lighting.setMode([DAY, NIGHT, SUNSET].includes(save.lighting) ? save.lighting : DAY, true);
 
 // --- world ----------------------------------------------------------------
@@ -197,6 +211,7 @@ const ride = new Ride(park, board, skater);
 scene.add(ride.frame);
 
 const ragdoll = new Ragdoll(park);
+if (_isLowEnd) setRagdollIterations(4);
 const chase = new ChaseCamera(camera, park);
 
 // On foot: its own tiny model, and a stand-in shaped like `ride` so the same
@@ -667,7 +682,7 @@ function rebuildCityRuntime() {
         hud.say(`NEW SPOT BEST  ${spot.name.toUpperCase()}`, 'banked');
       }
     },
-  });
+  }, _isLowEnd);
   hud.setCityMapVisible(cityManager.active);
   if (!cityManager.active) hud.setCityMapOpen(false);
   buildCrowdSkaters();
@@ -2152,7 +2167,7 @@ function progressionGate() {
 // --- adaptive resolution --------------------------------------------------
 // devicePixelRatio is 3 on a phone, and 3× is nine times the fragment work of 1×.
 // Start capped and step down, never up, so it cannot oscillate.
-const DPR_STEPS = [1.75, 1.5, 1.25, 1];
+const DPR_STEPS = _isLowEnd ? [1.25, 1] : [1.75, 1.5, 1.25, 1];
 let dprIdx = 0;
 let frameAccum = 0;
 let frameCount = 0;
@@ -2231,12 +2246,13 @@ function loop(now) {
   // simulation steps this frame turns into. A duel reads the same as a run.
   const frameInput = state === PLAYING || state === CHALLENGE ? input.read() : null;
   let steps = 0;
-  while (acc >= C.FIXED_DT && steps < 8) {
+  const maxSteps = _isLowEnd ? 4 : 8;
+  while (acc >= C.FIXED_DT && steps < maxSteps) {
     step(C.FIXED_DT, frameInput);
     acc -= C.FIXED_DT;
     steps++;
   }
-  if (steps === 8) acc = 0; // give up rather than fall further behind
+  if (steps === maxSteps) acc = 0; // give up rather than fall further behind
 
   updateHud(dt);
   // While the editor is open it owns the whole canvas — the play scene is
