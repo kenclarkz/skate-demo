@@ -57,10 +57,6 @@ const BOSSCUT = 'bosscut';
 const CHALLENGE = 'challenge';
 const BOSSRESULT = 'bossresult';
 
-const AI_COUNT = _isLowEnd ? 10 : 20;
-const CROWD_SKATER_COUNT = _isLowEnd ? 300 : 980; // simplified skaters positioned along routes for the 1000 total
-const BIRD_COUNT = _isLowEnd ? 1 : 3;
-
 const params = new URLSearchParams(location.search);
 const DEBUG = params.get('debug') === '1';
 
@@ -77,6 +73,10 @@ const _isLowEnd = (() => {
   const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   return (isIOS && cores <= 4) || (dpr <= 2 && cores <= 4);
 })();
+
+const AI_COUNT = _isLowEnd ? 10 : 20;
+const CROWD_SKATER_COUNT = _isLowEnd ? 300 : 980; // simplified skaters positioned along routes for the 1000 total
+const BIRD_COUNT = _isLowEnd ? 1 : 3;
 if (_isLowEnd) C.setFixedDt(1 / 60);
 // --- renderer -------------------------------------------------------------
 const canvas = document.getElementById('view');
