@@ -253,9 +253,10 @@ function windowTexture() {
 }
 
 export class LightingManager {
-  constructor(scene, renderer) {
+  constructor(scene, renderer, lowEnd = false) {
     this.scene = scene;
     this.renderer = renderer;
+    this.lowEnd = lowEnd;
     this.mode = DAY;
     this._from = { ...PRESETS[DAY] };
     this._to = { ...PRESETS[DAY] };
@@ -273,7 +274,7 @@ export class LightingManager {
     this._skyTex.colorSpace = THREE.SRGBColorSpace;
     this._skyDirty = true;
     this.sky = new THREE.Mesh(
-      new THREE.SphereGeometry(400, 16, 12),
+      new THREE.SphereGeometry(400, lowEnd ? 8 : 16, lowEnd ? 6 : 12),
       new THREE.MeshBasicMaterial({ map: this._skyTex, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false })
     );
     this.sky.renderOrder = -1;
@@ -283,7 +284,7 @@ export class LightingManager {
     // --- stars --------------------------------------------------------------
     // A shell of points well outside the fog and the treeline. Fixed once —
     // stars do not move relative to the sky dome — and faded by opacity only.
-    const STAR_COUNT = 700;
+    const STAR_COUNT = lowEnd ? 300 : 700;
     const starPos = new Float32Array(STAR_COUNT * 3);
     let s = 0x9e3779b9 >>> 0;
     const srng = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
@@ -337,7 +338,7 @@ export class LightingManager {
     const cloudTex = cloudTexture();
     let ca = 0x27182818 >>> 0;
     const crng = () => ((ca = (ca * 1664525 + 1013904223) >>> 0) / 4294967296);
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < (lowEnd ? 6 : 12); i++) {
       const spr = new THREE.Sprite(
         new THREE.SpriteMaterial({
           map: cloudTex,
@@ -377,13 +378,14 @@ export class LightingManager {
     // castShadow itself only turns on once the night fade has actually begun
     // (see update()), so daytime pays nothing extra at all.
     this.key.castShadow = false;
-    this.key.shadow.mapSize.set(1024, 1024);
+    this.key.shadow.mapSize.set(lowEnd ? 512 : 1024, lowEnd ? 512 : 1024);
     this.key.shadow.camera.near = 1;
-    this.key.shadow.camera.far = 60;
-    this.key.shadow.camera.left = -18;
-    this.key.shadow.camera.right = 18;
-    this.key.shadow.camera.top = 18;
-    this.key.shadow.camera.bottom = -18;
+    this.key.shadow.camera.far = lowEnd ? 40 : 60;
+    const shadowExtent = lowEnd ? 12 : 18;
+    this.key.shadow.camera.left = -shadowExtent;
+    this.key.shadow.camera.right = shadowExtent;
+    this.key.shadow.camera.top = shadowExtent;
+    this.key.shadow.camera.bottom = -shadowExtent;
     this.key.shadow.camera.updateProjectionMatrix();
     this.key.shadow.bias = -0.0025;
     this.key.target.position.set(0, 0, 0);
@@ -479,7 +481,7 @@ export class LightingManager {
     let a = (park.def.seed || 0x51ed) ^ 0xb17e;
     const rng = () => ((a = (a * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
     const ring = Math.max(ex, ez) + 46;
-    const count = 8;
+    const count = this.lowEnd ? 4 : 8;
     for (let i = 0; i < count; i++) {
       const ang = (i / count) * Math.PI * 2 + rng() * 0.4;
       const rad = ring + rng() * 40;
@@ -535,7 +537,7 @@ export class LightingManager {
       this.scene.add(spr);
       return spr;
     });
-    const LAMP_LIGHT_CAP = 8;
+    const LAMP_LIGHT_CAP = this.lowEnd ? 3 : 8;
     this._lampLights = lampSpots.slice(0, LAMP_LIGHT_CAP).map(([x, y, z]) => {
       const light = new THREE.SpotLight(0xffdfa0, 0, 11, Math.PI / 3.4, 0.65, 1.6);
       light.position.set(x, y, z);
@@ -708,7 +710,8 @@ export class LightingManager {
     for (const c of this.clouds) c.spr.material.opacity = cur.cloudOpacity * c.alpha;
 
     this.floodlights.forEach(({ light, head }) => {
-      light.intensity = cur.floodIntensity * 55;
+      const intensityMul = this.lowEnd ? 0.6 : 1;
+      light.intensity = cur.floodIntensity * 55 * intensityMul;
       head.material.opacity = cur.floodIntensity * 0.9;
     });
 

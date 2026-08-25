@@ -18,7 +18,8 @@ export const CITY_CHALLENGE_COINS = 500;
 
 // How many ghost cars share the traffic loops. Increased to 1000 for the
 // open-world update, using InstancedMesh for performance.
-const TRAFFIC_CARS = 1000;
+const TRAFFIC_CARS_DEFAULT = 1000;
+const TRAFFIC_CARS_LOW = 300;
 const TRAFFIC_SPEED = 7; // m/s
 const MAP_CSS = 200; // minimap canvas, CSS px (square)
 const MAP_WORLD = CITY_HALF * 2; // world metres the map covers
@@ -44,7 +45,7 @@ export class CityManager {
    * @param {{ mapCanvas?: HTMLCanvasElement, onDiscover?: (spot) => void,
    *   onChallenge?: (spot, {newBest, done}) => void }} refs optional wiring
    */
-  constructor(park, scene, save, refs = {}) {
+  constructor(park, scene, save, refs = {}, lowEnd = false) {
     this.park = park;
     this.scene = scene;
     this.save = save;
@@ -53,6 +54,7 @@ export class CityManager {
     this.mapVisible = false;
     this.spots = CITY_SPOTS;
     this._cars = [];
+    this._trafficCars = lowEnd ? TRAFFIC_CARS_LOW : TRAFFIC_CARS_DEFAULT;
     this._mapCtx = refs.mapCanvas ? refs.mapCanvas.getContext('2d') : null;
     this._mapBase = null;
     if (this.active) {
@@ -101,12 +103,13 @@ export class CityManager {
     const colourBuckets = new Map();
     // Distribute cars evenly across routes, collecting per-colour buckets.
     const routeCount = CITY_ROUTES.length;
-    for (let i = 0; i < TRAFFIC_CARS; i++) {
+    const count = this._trafficCars;
+    for (let i = 0; i < count; i++) {
       const route = CITY_ROUTES[i % routeCount];
       const len = this._routeLen(route);
       const col = CAR_COLORS[i % CAR_COLORS.length];
       if (!colourBuckets.has(col)) colourBuckets.set(col, []);
-      colourBuckets.get(col).push({ route, dist: ((i * len) / TRAFFIC_CARS) % len });
+      colourBuckets.get(col).push({ route, dist: ((i * len) / count) % len });
     }
     this._instancedMeshes = [];
     const dummy = new THREE.Object3D();

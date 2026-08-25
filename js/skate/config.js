@@ -248,8 +248,13 @@ export const CAMERA_FAR = 700;
 // wheel catching a rail edge, a flip landing — resolves inside a couple of
 // hundredths of a second, and at 60 Hz those land on the wrong side of a step
 // often enough to be visible as luck.
-export const FIXED_DT = 1 / 120;
+export let FIXED_DT = 1 / 120;
 export const MAX_FRAME_DT = 0.05;
+
+/** Reduce the physics rate for low-end devices — halves the per-frame work. */
+export function setFixedDt(v) {
+  FIXED_DT = v;
+}
 
 
 /** Frame-rate independent exponential approach: how far to move this step. */
