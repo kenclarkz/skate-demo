@@ -3562,3 +3562,191 @@ button:disabled.primary {
   cursor: pointer;
   border: 0;
 }
+
+/* --- multiplayer ---------------------------------------------------------- */
+.mp-status {
+  font-size: 13px;
+  color: var(--dim);
+  text-align: center;
+  margin: 0;
+}
+
+.mp-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: 0 auto;
+}
+.mp-dot-red { background: var(--bad); }
+.mp-dot-yellow { background: var(--hot); }
+.mp-dot-green { background: var(--good); }
+.mp-dot-orange { background: #e67e22; }
+
+.mp-join-row {
+  display: flex;
+  gap: 8px;
+}
+.mp-code-input {
+  flex: 1;
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 8px 12px;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.mp-code-input::placeholder {
+  color: var(--dim);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.mp-session-list {
+  max-height: 200px;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+.mp-session-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+.mp-session-park {
+  font-weight: 700;
+  flex: 1;
+  text-transform: capitalize;
+}
+.mp-session-players {
+  color: var(--dim);
+  font-size: 12px;
+}
+.mp-session-join {
+  background: var(--hot);
+  color: #12141a;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.mp-empty {
+  color: var(--dim);
+  font-size: 13px;
+  text-align: center;
+  padding: 12px;
+}
+
+.mp-friend-code {
+  text-align: center;
+}
+.mp-code-display {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  color: var(--hot);
+  padding: 10px;
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 6px 0;
+}
+
+.mp-peer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mp-peer {
+  padding: 4px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mp-chat {
+  margin-top: 8px;
+}
+.mp-chat-log {
+  max-height: 120px;
+  overflow-y: auto;
+  touch-action: pan-y;
+  padding: 6px 0;
+  font-size: 12px;
+}
+.mp-chat-line {
+  padding: 2px 0;
+}
+.mp-chat-system {
+  color: var(--dim);
+  font-style: italic;
+}
+.mp-chat-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.mp-chat-input {
+  flex: 1;
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.mp-chat-input::placeholder {
+  color: var(--dim);
+}
+
+.mp-leave-btn {
+  margin-top: 8px;
+  background: rgba(255, 106, 94, 0.2);
+  color: var(--bad);
+  border: 1px solid rgba(255, 106, 94, 0.3);
+  border-radius: 8px;
+  padding: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* In-game overlay: small player list in the corner of a run. */
+.mp-ingame-overlay {
+  position: absolute;
+  top: calc(10px + var(--pad-t));
+  right: calc(14px + var(--pad-r));
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--dim);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+.mp-ingame-list {
+  display: flex;
+  gap: 6px;
+}
+.mp-ingame-name {
+  padding: 2px 6px;
+  background: rgba(20, 24, 30, 0.6);
+  border-radius: 4px;
+}
+.mp-lobby {
+  /* Wrapper around the pre-session controls. */
+}
+.mp-peers {
+  margin-bottom: 4px;
+}
+.mp-ingame-panel {
+  /* In-lobby session controls wrapper. */
+}

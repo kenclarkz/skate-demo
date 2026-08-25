@@ -2,7 +2,12 @@
   "private": true,
   "type": "module",
   "description": "Marks js/ as ES modules so the Node-based tools in tools/ can import the game's pure-math modules directly. The site itself has no build step.",
+  "scripts": {
+    "server": "node server.js",
+    "multiplayer": "node server.js"
+  },
   "dependencies": {
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "ws": "^8.18.0"
   }
 }
