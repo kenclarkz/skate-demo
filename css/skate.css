@@ -277,6 +277,40 @@ body {
 #combo-mult {
   font-size: 19px;
   font-variant-numeric: tabular-nums;
+  transition: color 0.15s;
+}
+
+#combo-mult.hot {
+  color: #35ffe0;
+}
+
+#combo-mult.blazing {
+  color: #ffc93f;
+  text-shadow: 0 0 6px rgba(255, 201, 63, 0.5);
+}
+
+/* --- landing quality ------------------------------------------------------ */
+#callout.perfect {
+  color: #35ffe0;
+  text-shadow: 0 0 8px rgba(53, 255, 224, 0.4);
+}
+
+#callout.clean {
+  color: #9bde5b;
+}
+
+#callout.sketchy {
+  color: #ffc93f;
+}
+
+/* --- wallride / pole jam ------------------------------------------------- */
+#callout.wallride {
+  color: #e0552f;
+  text-shadow: 0 0 8px rgba(224, 85, 47, 0.4);
+}
+
+#callout.polejam {
+  color: #9fa5ad;
 }
 
 /* --- balance ------------------------------------------------------------- */

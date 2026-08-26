@@ -101,6 +101,41 @@ export function trickScore(def, { spin = 0, fakie = false } = {}) {
  * end is pressed. These are the real names for those geometries — the point of
  * getting them right is that a player who skates recognises what they just did.
  */
+// --- technical weight for the combo multiplier ---------------------------
+// Harder tricks earn multiplier faster: the weight is how many "tiers" of
+// multiplier a trick contributes. A 100pt ollie is 1 tier; a 700pt tre flip
+// is 4 tiers. This is computed from points so it stays in sync with balance
+// changes — no separate list to keep tidy.
+import * as C from './config.js';
+
+/** How many multiplier tiers a trick's base points contribute. */
+export function techWeight(def) {
+  return Math.max(1, Math.floor(def.points / C.COMBO_TECH_WEIGHT));
+}
+
+/** Weight for a landed trick given its spin and fakie status. */
+export function landedWeight(def, { spin = 0, fakie = false } = {}) {
+  const base = techWeight(def);
+  const half = Math.round(Math.abs(spin) / Math.PI);
+  return base + half; // a body spin adds a tier per 180°
+}
+
+// --- landing quality -----------------------------------------------------
+/** Classify a landing into perfect/clean/sketchy from raw numbers. */
+export function landingQuality(rotErr, slipErr, impact) {
+  if (
+    rotErr <= C.LAND_PERFECT_ROT &&
+    slipErr <= C.LAND_PERFECT_SLIP &&
+    impact <= C.LAND_PERFECT_IMPACT
+  ) return 'perfect';
+  if (
+    rotErr <= C.LAND_CLEAN_ROT &&
+    slipErr <= C.LAND_CLEAN_SLIP &&
+    impact <= C.LAND_CLEAN_IMPACT
+  ) return 'clean';
+  return 'sketchy';
+}
+
 export function grindName(across, tailPress, nosePress, kind) {
   const a = Math.abs(across);
   if (a > Math.PI * 0.35) {

@@ -12,7 +12,7 @@ import { newFile, buildDef } from './parkFile.js';
 import { listFiles, removeFile } from './parkStorage.js';
 import { Board } from './board.js';
 import { Skater } from './skater.js';
-import { Ride, GROUND, GRIND, AIR } from './physics.js';
+import { Ride, GROUND, GRIND, AIR, WALLRIDE, POLEJAM } from './physics.js';
 import { Ragdoll, setRagdollIterations } from './ragdoll.js';
 import { Walker } from './walk.js';
 import { ChaseCamera } from './camera.js';
@@ -1840,6 +1840,22 @@ function handleEvents(events) {
       case 'land':
         audio.land(e.impact);
         if (e.height > 0.4 && save.recordAir(e.height)) hud.say(`${e.height.toFixed(2)} m air`, 'small');
+        if (e.quality) hud.showLandingQuality(e.quality);
+        break;
+      case 'wallrideStart':
+        audio.lock();
+        hud.say('Wallride!', 'wallride');
+        break;
+      case 'wallrideEnd':
+        if (e.points > 10) {
+          const coinBonus = Math.max(1, Math.round(e.points / 25));
+          save.addCoins(coinBonus);
+          hud.setCoins(save.coins);
+        }
+        break;
+      case 'polejamStart':
+        audio.lock();
+        hud.say('Pole Jam!', 'polejam');
         break;
       case 'grindStart':
         audio.lock();
@@ -2222,7 +2238,7 @@ function updateHud(dt) {
   if (state === PLAYING) {
     hud.setSpeed(ride.groundSpeed);
     hud.setAir(ride.airHeight);
-    hud.setCombo(liveCombo.names, liveCombo.points, Math.max(1, 1 + Math.floor((liveCombo.names.length - 1) / 3) * 0.1));
+    hud.setCombo(liveCombo.names, liveCombo.points, ride.line.live ? ride.line.multiplier() : Math.max(1, 1 + Math.floor((liveCombo.names.length - 1) / 3) * 0.1));
     const balancing = !!ride.grind || ride.manual;
     hud.setBalance(balancing, ride.balance, C.BALANCE_LIMIT);
     hud.setCharge(input.flickActive || input.charging() ? ride.charge : 0);
@@ -2252,7 +2268,7 @@ function updateHud(dt) {
   } else if (state === CHALLENGE) {
     hud.setSpeed(ride.groundSpeed);
     hud.setAir(ride.airHeight);
-    hud.setCombo(liveCombo.names, liveCombo.points, Math.max(1, liveCombo.names.length));
+    hud.setCombo(liveCombo.names, liveCombo.points, ride.line.live ? ride.line.multiplier() : Math.max(1, liveCombo.names.length));
     const balancing = !!ride.grind || ride.manual;
     hud.setBalance(balancing, ride.balance, C.BALANCE_LIMIT);
     hud.setCharge(input.flickActive || input.charging() ? ride.charge : 0);
