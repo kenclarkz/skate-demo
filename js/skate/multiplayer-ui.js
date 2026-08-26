@@ -1,7 +1,7 @@
 // Multiplayer UI: lobby, session management, friend code entry, and the
 // in-game player list. Pure DOM, following the same pattern as hud.js.
 
-import { multiplayer } from './multiplayer.js';
+import { multiplayer, Multiplayer } from './multiplayer.js';
 
 export class MultiplayerUI {
   constructor() {
@@ -17,6 +17,7 @@ export class MultiplayerUI {
     this.inGameListEl = document.getElementById('mp-ingame-list');
     this.inGameOverlayEl = document.getElementById('mp-ingame-overlay');
     this.connectionDotEl = document.getElementById('mp-ingame-dot');
+    this.serverUrlEl = document.getElementById('mp-server-url');
 
     /** @type {function|null} */
     this.onBack = null;
@@ -57,6 +58,15 @@ export class MultiplayerUI {
 
     // Prevent game input while typing in the code input.
     this.codeInputEl?.addEventListener('keydown', (e) => e.stopPropagation());
+
+    // Server URL input: save on change.
+    if (this.serverUrlEl) {
+      this.serverUrlEl.value = Multiplayer.getSignalUrl();
+      this.serverUrlEl.addEventListener('change', () => {
+        Multiplayer.setSignalUrl(this.serverUrlEl.value.trim());
+      });
+      this.serverUrlEl.addEventListener('keydown', (e) => e.stopPropagation());
+    }
   }
 
   _sendChat() {
