@@ -898,9 +898,19 @@ body {
   gap: 8px;
   max-width: min(44vw, 230px);
   padding: 7px 12px;
+  font: inherit;
+  color: inherit;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 999px;
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.radio-mini:active {
+  transform: scale(0.97);
+  opacity: 0.85;
 }
 
 .radio-dot {
