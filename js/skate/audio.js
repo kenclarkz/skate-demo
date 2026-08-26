@@ -55,9 +55,22 @@ const BUILTIN_STATIONS = {
     { url: 'audio/dark-slide.mp3', id: 'dark-slide', name: 'Dark Slide', artists: ['Skate FM'] },
     { url: 'audio/bowl-season.mp3', id: 'bowl-season', name: 'Bowl Season', artists: ['Skate FM'] },
   ],
-  'hip-hop': [],
+  'hip-hop': [
+    { url: 'audio/hip-hop/BumRush.mp3', id: 'bum-rush', name: 'Bum Rush', artists: ['Hip Hop'] },
+    { url: 'audio/hip-hop/Rollout.mp3', id: 'rollout', name: 'Rollout', artists: ['Hip Hop'] },
+    { url: 'audio/hip-hop/Silent Choir.mp3', id: 'silent-choir', name: 'Silent Choir', artists: ['Hip Hop'] },
+    { url: 'audio/hip-hop/Silver Back.mp3', id: 'silver-back', name: 'Silver Back', artists: ['Hip Hop'] },
+    { url: 'audio/hip-hop/Static in the Attic.mp3', id: 'static-in-the-attic', name: 'Static in the Attic', artists: ['Hip Hop'] },
+    { url: 'audio/hip-hop/Sunshine on the Water.mp3', id: 'sunshine-on-the-water', name: 'Sunshine on the Water', artists: ['Hip Hop'] },
+  ],
   'pop': [],
-  'indie': [],
+  'indie': [
+    { url: 'audio/indie/Magic.m4a', id: 'magic', name: 'Magic', artists: ['Indie'] },
+    { url: 'audio/indie/Passionate.m4a', id: 'passionate', name: 'Passionate', artists: ['Indie'] },
+    { url: 'audio/indie/RAIN FLP RIO X KEN FR FR.m4a', id: 'rain-flp-rio-x-ken', name: 'RAIN FLP RIO X KEN FR FR', artists: ['Indie'] },
+    { url: 'audio/indie/That\'s a bet.m4a', id: 'thats-a-bet', name: "That's a Bet", artists: ['Indie'] },
+    { url: 'audio/indie/rio ken handlin biz.m4a', id: 'rio-ken-handlin-biz', name: 'Rio Ken Handlin Biz', artists: ['Indie'] },
+  ],
 };
 
 /** All built-in station ids in display order. */

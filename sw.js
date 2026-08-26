@@ -92,6 +92,19 @@ const MUSIC = [
   'audio/wallride.mp3',
   'audio/dark-slide.mp3',
   'audio/bowl-season.mp3',
+  // Hip Hop
+  'audio/hip-hop/BumRush.mp3',
+  'audio/hip-hop/Rollout.mp3',
+  'audio/hip-hop/Silent Choir.mp3',
+  'audio/hip-hop/Silver Back.mp3',
+  'audio/hip-hop/Static in the Attic.mp3',
+  'audio/hip-hop/Sunshine on the Water.mp3',
+  // Indie
+  'audio/indie/Magic.m4a',
+  'audio/indie/Passionate.m4a',
+  'audio/indie/RAIN FLP RIO X KEN FR FR.m4a',
+  "audio/indie/That's a bet.m4a",
+  'audio/indie/rio ken handlin biz.m4a',
 ];
 
 // Resolved once so the fetch handler can compare pathnames cheaply.
