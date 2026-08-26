@@ -33,6 +33,8 @@ export class MultiplayerUI {
     this.onSendChat = null;
     /** @type {function|null} */
     this.onJoinSession = null;
+    /** @type {function|null} */
+    this.onStartGame = null;
 
     this._refreshTimer = null;
     this._bind();
@@ -49,6 +51,7 @@ export class MultiplayerUI {
       if (code) this.onJoinCode?.(code);
     });
     click('btn-mp-leave', () => this.onLeaveSession?.());
+    click('btn-mp-start', () => this.onStartGame?.());
     click('btn-mp-send', () => this._sendChat());
 
     this.chatInputEl?.addEventListener('keydown', (e) => {

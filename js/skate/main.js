@@ -1797,6 +1797,16 @@ mpUI.onLeaveSession = () => {
   // Remove all remote players.
   for (const [id] of remotePlayers) removeRemotePeer(id);
 };
+mpUI.onStartGame = () => {
+  // Load the session's park if it differs from the current one.
+  const sessionPark = allParks().find((p) => p.id === multiplayer.parkId);
+  if (sessionPark && sessionPark.id !== park.id) {
+    loadPark(sessionPark);
+    respawn();
+  }
+  mpUI.hide();
+  startGame();
+};
 mpUI.onSendChat = (text) => {
   multiplayer.sendChat(text);
   mpUI.addSystemLine(`You: ${text}`);
