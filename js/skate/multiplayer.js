@@ -171,7 +171,7 @@ export class Multiplayer {
     this.ws = ws;
 
     ws.onopen = () => {
-      // wait for create/join/match command
+      this._setStatus('connected');
     };
 
     ws.onmessage = (e) => {
