@@ -1,9 +1,9 @@
 // WebSocket signaling server for Skate multiplayer.
 //
-// Handles session creation/joining, friend codes, random matchmaking, and
-// WebRTC signaling (SDP offers/answers and ICE candidates). The server never
-// sees game traffic — once a WebRTC data channel is open, all gameplay state
-// flows peer-to-peer.
+// Handles session creation/joining, friend codes, random matchmaking,
+// WebRTC signaling (SDP offers/answers and ICE candidates), and identity
+// relay. The server never sees game traffic — once a WebRTC data channel
+// is open, all gameplay state flows peer-to-peer.
 //
 // Usage:
 //   node server.js                  # default port 8081
@@ -43,6 +43,7 @@ function makeSessionId() {
  * @property {string} friendCode
  * @property {string} hostId
  * @property {Map<string, import('ws').WebSocket>} peers
+ * @property {Map<string, object>} identities  peerId → { name, look }
  * @property {string} parkId
  * @property {number} maxPeers
  */
@@ -56,6 +57,7 @@ function createSession(hostWs, hostId, parkId = 'home') {
     friendCode,
     hostId,
     peers: new Map([[hostId, hostWs]]),
+    identities: new Map(),
     parkId,
     maxPeers: 8,
   };
@@ -66,6 +68,7 @@ function createSession(hostWs, hostId, parkId = 'home') {
 
 function removePeer(session, peerId) {
   session.peers.delete(peerId);
+  session.identities.delete(peerId);
   if (session.peers.size === 0) {
     sessions.delete(session.id);
     friendCodes.delete(session.friendCode);
@@ -124,6 +127,11 @@ wss.on('connection', (ws) => {
         // Tell existing peers about the newcomer.
         broadcast(session, { type: 'peer-joined', peerId, parkId: session.parkId });
         session.peers.set(peerId, ws);
+        // Send existing peers' identities to the newcomer.
+        const existingIdentities = [];
+        for (const [pid, ident] of session.identities) {
+          existingIdentities.push({ peerId: pid, ...ident });
+        }
         ws.send(JSON.stringify({
           type: 'joined',
           sessionId: session.id,
@@ -131,6 +139,7 @@ wss.on('connection', (ws) => {
           peerId,
           parkId: session.parkId,
           peers: [...session.peers.keys()].filter((id) => id !== peerId),
+          identities: existingIdentities,
         }));
         break;
       }
@@ -147,6 +156,10 @@ wss.on('connection', (ws) => {
             session = s;
             broadcast(session, { type: 'peer-joined', peerId, parkId: session.parkId });
             session.peers.set(peerId, ws);
+            const matchIdentities = [];
+            for (const [pid, ident] of session.identities) {
+              matchIdentities.push({ peerId: pid, ...ident });
+            }
             ws.send(JSON.stringify({
               type: 'matched',
               sessionId: session.id,
@@ -154,6 +167,7 @@ wss.on('connection', (ws) => {
               peerId,
               parkId: session.parkId,
               peers: [...session.peers.keys()].filter((id) => id !== peerId),
+              identities: matchIdentities,
             }));
             return;
           }
@@ -178,6 +192,14 @@ wss.on('connection', (ws) => {
         if (target && target.readyState === 1) {
           target.send(JSON.stringify({ type: 'signal', from: peerId, sdp: msg.sdp, candidate: msg.candidate }));
         }
+        break;
+      }
+
+      case 'set-identity': {
+        // Store peer identity and relay to all other peers in the session.
+        if (!session || !peerId) return;
+        session.identities.set(peerId, { name: msg.name, look: msg.look });
+        broadcast(session, { type: 'peer-identity', peerId, name: msg.name, look: msg.look }, peerId);
         break;
       }
 

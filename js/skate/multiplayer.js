@@ -5,11 +5,14 @@
 // gameplay state flows peer-to-peer. State is sent at a fixed rate (20 Hz)
 // and the renderer interpolates between snapshots on the receiving end.
 
+const SIGNAL_URL_KEY = 'skate-mp-server';
 const DEFAULT_SIGNAL_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:8081`;
 const SYNC_RATE = 20;           // state updates per second
 const SYNC_INTERVAL = 1000 / SYNC_RATE;
 const MAX_PEERS = 7;            // max remote players per session
 const STALE_TIMEOUT = 5000;     // ms before a silent peer is considered gone
+const RECONNECT_BASE = 1000;    // ms
+const RECONNECT_MAX = 10000;    // ms
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -152,6 +155,16 @@ export class Multiplayer {
     this.onSessionList = null;
     /** @type {function|null} called on signaling errors */
     this.onError = null;
+    /** @type {boolean} whether we are trying to reconnect */
+    this._reconnecting = false;
+    /** @type {number} current reconnect delay */
+    this._reconnectDelay = RECONNECT_BASE;
+    /** @type {number|null} reconnect timer id */
+    this._reconnectTimer = null;
+    /** @type {string|null} last signal URL used */
+    this._lastUrl = null;
+    /** @type {{ type: string, msg: object }|null} pending rejoin after reconnect */
+    this._pendingRejoin = null;
   }
 
   _setStatus(s) {
@@ -167,15 +180,38 @@ export class Multiplayer {
     this.onPeersChange?.(list);
   }
 
+  /** Get the configured signal URL from localStorage or default. */
+  static getSignalUrl() {
+    return localStorage.getItem(SIGNAL_URL_KEY) || DEFAULT_SIGNAL_URL;
+  }
+
+  /** Persist a custom signal URL. */
+  static setSignalUrl(url) {
+    if (url) localStorage.setItem(SIGNAL_URL_KEY, url);
+    else localStorage.removeItem(SIGNAL_URL_KEY);
+  }
+
   // --- signaling connection ------------------------------------------------
-  connect(url = DEFAULT_SIGNAL_URL) {
+  connect(url) {
     if (this.ws) return;
+    const signalUrl = url || Multiplayer.getSignalUrl();
+    this._lastUrl = signalUrl;
+    this._reconnecting = false;
+    this._reconnectDelay = RECONNECT_BASE;
     this._setStatus('connecting');
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(signalUrl);
     this.ws = ws;
 
     ws.onopen = () => {
+      this._reconnecting = false;
+      this._reconnectDelay = RECONNECT_BASE;
       this._setStatus('connected');
+      // If we were in a session, try to rejoin.
+      if (this._pendingRejoin) {
+        const rj = this._pendingRejoin;
+        this._pendingRejoin = null;
+        this.send({ type: rj.type, ...rj.msg });
+      }
     };
 
     ws.onmessage = (e) => {
@@ -186,24 +222,45 @@ export class Multiplayer {
 
     ws.onclose = () => {
       this.ws = null;
+      // Save session info before cleanup so we can rejoin after reconnect.
+      if (this.status === 'in-session' && this.sessionId) {
+        this._pendingRejoin = { type: 'join', msg: { sessionId: this.sessionId } };
+      }
       this._cleanup();
       this._setStatus('disconnected');
+      // Auto-reconnect if we dropped unexpectedly.
+      if (!this._reconnecting) {
+        this._scheduleReconnect();
+      }
     };
 
     ws.onerror = () => {
-      this.ws = null;
-      this._cleanup();
-      this._setStatus('disconnected');
-      this.onError?.('Could not connect to signaling server');
+      // onclose will fire after onerror, which handles cleanup and reconnect.
     };
   }
 
   disconnect() {
+    this._reconnecting = false;
+    this._pendingRejoin = null;
+    if (this._reconnectTimer != null) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
     if (this.ws) {
       this.send({ type: 'leave' });
       this.ws.close();
     }
     this._cleanup();
+  }
+
+  _scheduleReconnect() {
+    this._reconnecting = true;
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      this._setStatus('connecting');
+      this.connect(this._lastUrl);
+    }, this._reconnectDelay);
+    this._reconnectDelay = Math.min(this._reconnectDelay * 2, RECONNECT_MAX);
   }
 
   _cleanup() {
@@ -254,6 +311,13 @@ export class Multiplayer {
   setPlayerInfo(name, look) {
     this.playerName = name;
     this.playerLook = look;
+    // Push identity to the server so existing peers know who we are.
+    this._sendIdentity();
+  }
+
+  /** Send our identity via the reliable signaling server. */
+  _sendIdentity() {
+    this.send({ type: 'set-identity', name: this.playerName, look: this.playerLook });
   }
 
   sendChat(text) {
@@ -282,11 +346,36 @@ export class Multiplayer {
             this._createOffer(pid);
           }
         }
-        this._notifyPeers();
+        // Apply any identities the server relayed for existing peers.
+        if (msg.identities) {
+          for (const ident of msg.identities) {
+            const p = this.peers.get(ident.peerId) || { state: null, ts: 0, name: ident.name, look: ident.look };
+            p.name = ident.name;
+            p.look = ident.look;
+            p.ts = performance.now();
+            this.peers.set(ident.peerId, p);
+          }
+          this._notifyPeers();
+        }
+        // Send our identity so existing peers know who we are.
+        this._sendIdentity();
         break;
 
       case 'peer-joined':
-        // A new peer arrived; they will initiate the offer — we wait.
+        // A new peer arrived; re-send our identity so they learn our name.
+        this._sendIdentity();
+        break;
+
+      case 'peer-identity':
+        // Server relayed a peer's identity.
+        if (msg.peerId) {
+          const p = this.peers.get(msg.peerId) || { state: null, ts: 0, name: msg.name, look: msg.look };
+          p.name = msg.name;
+          p.look = msg.look;
+          p.ts = performance.now();
+          this.peers.set(msg.peerId, p);
+          this._notifyPeers();
+        }
         break;
 
       case 'peer-left':
@@ -348,8 +437,9 @@ export class Multiplayer {
     this.channels.set(peerId, ch);
 
     ch.onopen = () => {
-      // Send our identity.
-      ch.send(JSON.stringify({ type: 'identity', name: this.playerName, look: this.playerLook }));
+      // Re-send our identity via the signaling server (reliable) so the
+      // peer knows our name even if we already had an entry.
+      this._sendIdentity();
       this._notifyPeers();
     };
 
@@ -365,14 +455,7 @@ export class Multiplayer {
         // JSON control message.
         let msg;
         try { msg = JSON.parse(e.data); } catch { return; }
-        if (msg.type === 'identity') {
-          const p = this.peers.get(peerId) || { state: null, ts: 0, name: msg.name, look: msg.look };
-          p.name = msg.name;
-          p.look = msg.look;
-          p.ts = performance.now();
-          this.peers.set(peerId, p);
-          this._notifyPeers();
-        } else if (msg.type === 'chat') {
+        if (msg.type === 'chat') {
           this.onPeerChat?.(peerId, msg.text);
         }
       }
@@ -442,7 +525,7 @@ export class Multiplayer {
 
   /**
    * Send local state to all peers. Call once per frame from the game loop;
-   // the method rate-limits internally to SYNC_RATE Hz.
+   * the method rate-limits internally to SYNC_RATE Hz.
    * @param {Float32Array} state encoded ride state
    * @param {number} dt frame delta in seconds
    */

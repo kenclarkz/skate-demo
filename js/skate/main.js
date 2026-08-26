@@ -36,7 +36,7 @@ import { makeLogos, checkPickup } from './collectible.js';
 import { registerServiceWorker, setupInstall } from '../game/pwa.js';
 import { LightingManager, DAY, NIGHT, SUNSET } from './lighting.js';
 import { boot as bootRadio } from './radio.js';
-import { multiplayer, encodeState, decodeState } from './multiplayer.js';
+import { multiplayer, encodeState, Multiplayer } from './multiplayer.js';
 import { MultiplayerUI } from './multiplayer-ui.js';
 
 const START = 'start';
@@ -1348,6 +1348,9 @@ function showMultiplayer() {
   // Sync player info from save data so remote peers see the right name/look.
   const look = currentLook();
   multiplayer.setPlayerInfo(look.character?.name || 'Skater', { palette: look.palette, style: look.style, scale: look.scale });
+  // Update the server URL input to reflect the current setting.
+  const urlInput = document.getElementById('mp-server-url');
+  if (urlInput) urlInput.value = Multiplayer.getSignalUrl();
   // Connect to signaling server if not already connected.
   if (multiplayer.status === 'disconnected') {
     multiplayer.connect();
@@ -1779,36 +1782,37 @@ input.onPause = () => {
 mpUI.onBack = () => showStart();
 mpUI.onCreateSession = () => {
   multiplayer.createSession(park.id);
-  mpUI.setFriendCode(multiplayer.friendCode || '......');
-  mpUI.addSystemLine('Session created! Share the code with friends.');
 };
 mpUI.onFindMatch = () => {
   multiplayer.findRandomMatch(park.id);
-  mpUI.addSystemLine('Looking for a match...');
 };
 mpUI.onJoinCode = (code) => {
   multiplayer.joinByFriendCode(code);
-  mpUI.addSystemLine(`Joining session with code ${code}...`);
 };
 mpUI.onJoinSession = (sessionId) => {
   multiplayer.joinSession(sessionId);
-  mpUI.addSystemLine('Joining session...');
 };
 mpUI.onLeaveSession = () => {
   multiplayer.leaveSession();
   // Remove all remote players.
   for (const [id] of remotePlayers) removeRemotePeer(id);
-  mpUI.addSystemLine('Left session.');
 };
 mpUI.onSendChat = (text) => {
   multiplayer.sendChat(text);
   mpUI.addSystemLine(`You: ${text}`);
 };
-// When the multiplayer status changes and we're in-session, update the friend code display.
+// When the multiplayer status changes, update UI accordingly.
 multiplayer.onStatusChange = (status) => {
   mpUI._updateStatus(status);
   if (status === 'in-session' && multiplayer.friendCode) {
     mpUI.setFriendCode(multiplayer.friendCode);
+    mpUI.addSystemLine('Session joined! Share the code with friends.');
+  } else if (status === 'connected') {
+    mpUI.addSystemLine('Connected to server.');
+  } else if (status === 'connecting') {
+    mpUI.addSystemLine('Connecting...');
+  } else if (status === 'disconnected') {
+    mpUI.addSystemLine('Disconnected from server.');
   }
 };
 multiplayer.onPeerChat = (peerId, text) => {

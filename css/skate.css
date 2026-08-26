@@ -3605,6 +3605,30 @@ button:disabled.primary {
   margin: 0;
 }
 
+.mp-server-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin: 6px 0 10px;
+}
+.mp-server-label {
+  font-size: 12px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.mp-server-input {
+  width: 260px;
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: monospace;
+}
+
 .mp-dot {
   display: inline-block;
   width: 8px;
