@@ -5,7 +5,7 @@
 // gameplay state flows peer-to-peer. State is sent at a fixed rate (20 Hz)
 // and the renderer interpolates between snapshots on the receiving end.
 
-const DEFAULT_SIGNAL_URL = `ws://${location.hostname}:8081`;
+const DEFAULT_SIGNAL_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:8081`;
 const SYNC_RATE = 20;           // state updates per second
 const SYNC_INTERVAL = 1000 / SYNC_RATE;
 const MAX_PEERS = 7;            // max remote players per session
@@ -148,6 +148,10 @@ export class Multiplayer {
     this.playerLook = null;
     /** @type {function|null} called when a peer sends chat */
     this.onPeerChat = null;
+    /** @type {function|null} called when the session list arrives */
+    this.onSessionList = null;
+    /** @type {function|null} called on signaling errors */
+    this.onError = null;
   }
 
   _setStatus(s) {
@@ -190,6 +194,7 @@ export class Multiplayer {
       this.ws = null;
       this._cleanup();
       this._setStatus('disconnected');
+      this.onError?.('Could not connect to signaling server');
     };
   }
 
@@ -303,6 +308,7 @@ export class Multiplayer {
 
       case 'error':
         console.warn('Signaling error:', msg.error);
+        this.onError?.(msg.error);
         break;
     }
   }

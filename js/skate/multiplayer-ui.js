@@ -33,6 +33,7 @@ export class MultiplayerUI {
     /** @type {function|null} */
     this.onJoinSession = null;
 
+    this._refreshTimer = null;
     this._bind();
   }
 
@@ -171,16 +172,39 @@ export class MultiplayerUI {
     this._updateStatus(multiplayer.status);
     // Request available sessions.
     if (multiplayer.ws?.readyState === 1) multiplayer.listSessions();
+    // Auto-refresh the session list every 5 seconds while the lobby is open.
+    this._stopRefresh();
+    this._refreshTimer = setInterval(() => {
+      if (multiplayer.ws?.readyState === 1) multiplayer.listSessions();
+    }, 5000);
   }
 
   /** Hide the lobby screen. */
   hide() {
     if (this.screenEl) this.screenEl.hidden = true;
+    this._stopRefresh();
+  }
+
+  _stopRefresh() {
+    if (this._refreshTimer != null) {
+      clearInterval(this._refreshTimer);
+      this._refreshTimer = null;
+    }
   }
 
   /** Show/hide the in-game player list overlay. */
   setInGameVisible(visible) {
     if (this.inGameOverlayEl) this.inGameOverlayEl.hidden = !visible || !multiplayer.inSession;
+  }
+
+  /** Show an error message in the chat log. */
+  showError(text) {
+    if (!this.chatLogEl) return;
+    const div = document.createElement('div');
+    div.className = 'mp-chat-line mp-chat-system mp-chat-error';
+    div.textContent = text;
+    this.chatLogEl.appendChild(div);
+    this.chatLogEl.scrollTop = this.chatLogEl.scrollHeight;
   }
 
   _esc(s) {
