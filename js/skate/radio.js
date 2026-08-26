@@ -1068,6 +1068,7 @@ export class Radio {
 
     this.el = {
       bar: ctx.root.querySelector('#radio'),
+      stationBtn: ctx.root.querySelector('#radio-station-cycle'),
       track: ctx.root.querySelector('#radio-track'),
       scroll: ctx.root.querySelector('.radio-scroll'),
       prevBtn: ctx.root.querySelector('#radio-prev'),
@@ -1120,6 +1121,7 @@ export class Radio {
     // Every one of these buttons drives the SAME authoritative provider/player
     // instance — there is no second radio implementation that could intercept
     // them.
+    if (el.stationBtn) el.stationBtn.addEventListener('click', () => this.cycleStation());
     el.prevBtn.addEventListener('click', () => this.previous());
     el.nextBtn.addEventListener('click', () => this.next());
     if (el.playBtn) el.playBtn.addEventListener('click', () => this.playPause());
@@ -1307,6 +1309,18 @@ export class Radio {
     } catch (e) {
       console.warn('radio:', e);
     }
+  }
+
+  /** Cycle to the next station from the in-game radio bar. The full station
+   *  list (built-in + Spotify playlists) is cycled in order, wrapping around
+   *  at the end. */
+  cycleStation() {
+    if (!this.enabled) return;
+    const list = this.stations || ALL_BUILTIN_STATIONS;
+    if (list.length < 2) return;
+    const idx = list.findIndex((s) => s.id === this.station?.id);
+    const next = list[(idx + 1) % list.length];
+    this.play(next);
   }
 
   // --- the settings half --------------------------------------------------
