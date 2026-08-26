@@ -3724,6 +3724,10 @@ button:disabled.primary {
   color: var(--dim);
   font-style: italic;
 }
+.mp-chat-error {
+  color: #e55;
+  font-style: normal;
+}
 .mp-chat-row {
   display: flex;
   gap: 6px;

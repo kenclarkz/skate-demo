@@ -36,7 +36,7 @@ import { makeLogos, checkPickup } from './collectible.js';
 import { registerServiceWorker, setupInstall } from '../game/pwa.js';
 import { LightingManager, DAY, NIGHT, SUNSET } from './lighting.js';
 import { boot as bootRadio } from './radio.js';
-import { multiplayer, encodeState, decodeState, lerpState } from './multiplayer.js';
+import { multiplayer, encodeState, decodeState } from './multiplayer.js';
 import { MultiplayerUI } from './multiplayer-ui.js';
 
 const START = 'start';
@@ -1345,6 +1345,9 @@ function showMultiplayer() {
   state = MULTIPLAYER;
   input.enabled = false;
   hud.show('multiplayer');
+  // Sync player info from save data so remote peers see the right name/look.
+  const look = currentLook();
+  multiplayer.setPlayerInfo(look.character?.name || 'Skater', { palette: look.palette, style: look.style, scale: look.scale });
   // Connect to signaling server if not already connected.
   if (multiplayer.status === 'disconnected') {
     multiplayer.connect();
@@ -1816,6 +1819,9 @@ multiplayer.onSessionList = (sessions) => {
 };
 multiplayer.onParkChange = (parkId) => {
   mpUI._updateStatus(`Park: ${parkId}`);
+};
+multiplayer.onError = (msg) => {
+  mpUI.showError(msg);
 };
 
 // --- events from the ride model -------------------------------------------
