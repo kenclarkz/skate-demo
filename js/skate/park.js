@@ -34,6 +34,7 @@ export const HOOP = 0xe0552f;      // a landmark colour on purpose — it's mean
 export const SMOOTH = 0;
 export const ROUGH = 1;
 export const TRANSITION = 2;
+export const WALL = 3;
 
 /**
  * The ground's own grain, drawn once into a canvas and shared by every park —
@@ -640,6 +641,132 @@ export class Grind {
   }
 }
 
+/**
+ * A rideable wall face. The wall is a rectangular vertical (or near-vertical)
+ * surface that the board can wallride along. The face is at (x, z) facing
+ * outward in the direction of (nx, nz). The rideable extent runs from
+ * baseY to baseY + height along the wall.
+ *
+ * Unlike Slab/Bank, walls do NOT participate in the standard height-field
+ * sample() — they are queried explicitly via park.wallAt() so the physics can
+ * check for them before the normal step-up bail fires. They also do NOT
+ * contribute mesh geometry (the wall face is drawn by the park layout's own
+ * add() calls, which place a Slab or Bank for the solid structure).
+ */
+export class Wall {
+  /**
+   * @param {number} x    - centre of the face on the horizontal plane
+   * @param {number} z    - centre of the face on the horizontal plane
+   * @param {number} nx   - outward-facing horizontal normal component
+   * @param {number} nz   - outward-facing horizontal normal component
+   * @param {number} baseY - height of the bottom of the face
+   * @param {number} height - how tall the rideable face is
+   * @param {number} halfW - half-width of the face along the wall plane
+   */
+  constructor(x, z, nx, nz, baseY, height, halfW) {
+    this.x = x;
+    this.z = z;
+    this.nx = nx;
+    this.nz = nz;
+    this.baseY = baseY;
+    this.height = height;
+    this.halfW = halfW;
+    // Pre-compute the face's tangent (along the wall) for projection.
+    this.tx = -nz;
+    this.tz = nx;
+  }
+
+  /**
+   * Query the wall face at a world position. `dir` is the board's movement
+   * direction (unit vector, horizontal). Returns true if the board is
+   * approaching the face, filling `out` with the face's y, normal and kind.
+   *
+   * The face is a rectangle at (x + nx*0.25, z + nz*0.25) facing (nx, nz).
+   * The board must be on the front side (dot product with normal > 0) and
+   * within the half-width along the face.
+   */
+  at(wx, wz, dirX, dirZ, out) {
+    // Board must be on the front side of the wall (approaching the face).
+    const dx = wx - this.x;
+    const dz = wz - this.z;
+    const dot = dx * this.nx + dz * this.nz;
+    if (dot < 0) return false;
+    // Board must be heading towards the face (not riding away from it).
+    const heading = dirX * this.nx + dirZ * this.nz;
+    if (heading < 0.15) return false;
+    // Project onto the wall's tangent to check lateral extent.
+    const tx = dx * this.tx + dz * this.tz;
+    if (Math.abs(tx) > this.halfW) return false;
+    // Within the vertical extent of the face — use the board's own height
+    // (the caller must set out.y to the board's height before calling).
+    if (out.y < this.baseY || out.y > this.baseY + this.height) return false;
+    // Hit: fill the output with the face's properties.
+    // The face normal is mostly horizontal, with a slight upward tilt so the
+    // ride model has a valid up vector. Without the tilt, ny = 0 would make
+    // the surface frame degenerate.
+    const hLen = Math.hypot(this.nx, this.nz) || 1;
+    const tilt = 0.15;
+    out.nx = this.nx / hLen;
+    out.ny = tilt;
+    out.nz = this.nz / hLen;
+    // Normalise so it's a unit vector.
+    const inv = 1 / Math.hypot(out.nx, out.ny, out.nz);
+    out.nx *= inv;
+    out.ny *= inv;
+    out.nz *= inv;
+    out.kind = WALL;
+    return true;
+  }
+
+  scaleXZ(s) {
+    this.x *= s;
+    this.z *= s;
+  }
+}
+
+/**
+ * A thin vertical pole that can be jammed. The pole is a vertical grind line
+ * at (x, z) rising from baseY to baseY + height. The approach must be nearly
+ * head-on (within POLEJAM_MAX_ANGLE of the pole's axis) at speed.
+ */
+export class Pole {
+  /**
+   * @param {number} x     - horizontal position
+   * @param {number} z     - horizontal position
+   * @param {number} baseY - base height
+   * @param {number} height - how tall the pole is
+   * @param {number} color - visual colour
+   */
+  constructor(x, z, baseY, height, color = STEEL) {
+    this.x = x;
+    this.z = z;
+    this.baseY = baseY;
+    this.height = height;
+    this.color = color;
+  }
+
+  /**
+   * Query whether the board is close enough to jam this pole.
+   * `dir` is the board's movement direction (unit vector, horizontal).
+   * Returns true if the board is within reach and heading towards the pole.
+   */
+  near(wx, wz, dirX, dirZ) {
+    const dx = wx - this.x;
+    const dz = wz - this.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 1.2) return false; // must be within 1.2 m
+    // Heading towards the pole.
+    const heading = dirX * dx + dirZ * dz;
+    if (heading < 0) return false; // moving away
+    return true;
+  }
+
+  scaleXZ(s) {
+    this.x *= s;
+    this.z *= s;
+  }
+}
+
 export class Park {
   constructor(def) {
     this.def = def;
@@ -674,6 +801,8 @@ export class Park {
 
     this.features = [];
     this.grinds = [];
+    this.walls = [];
+    this.poles = [];
     this.rails = [];   // mesh specs, filled by rail()
     this.copings = [];
     this.hoops = [];   // mesh specs, filled by hoop() — decorative only, no collision
@@ -874,6 +1003,43 @@ export class Park {
   /** A ledge edge — the grindable line only; the platform is a Slab of its own. */
   ledge(ax, ay, az, bx, by, bz) {
     this.grinds.push(new Grind(ax, ay, az, bx, by, bz, 'ledge', 0.05));
+  }
+
+  /**
+   * A rideable wall face. The face is centred at (x, z) and faces outward in
+   * the direction of (nx, nz). `baseY` is the bottom of the face, `height`
+   * is how tall it is, and `halfW` is half the width along the face.
+   *
+   * Walls do NOT participate in the standard height-field — they are queried
+   * explicitly by the physics via wallAt(). They also do NOT produce mesh
+   * geometry: the park layout should place a Slab or Bank behind the face to
+   * give it visual bulk.
+   */
+  wall(x, z, nx, nz, baseY, height, halfW) {
+    this.walls.push(new Wall(x, z, nx, nz, baseY, height, halfW));
+  }
+
+  /**
+   * A thin vertical pole that can be jammed. The pole is a vertical grind
+   * line at (x, z) rising from `baseY` to `baseY + height`.
+   */
+  pole(x, z, baseY, height, color) {
+    this.poles.push(new Pole(x, z, baseY, height, color));
+  }
+
+  /**
+   * Query for a wall face near a world position. Returns the first wall face
+   * the board is approaching, filling `out` with the face's normal and kind,
+   * or null if no wall is in range.
+   *
+   * This is called by the physics before the normal step-up bail fires, so
+   * the board can transition to a wallride instead of stopping dead.
+   */
+  wallAt(wx, wz, dirX, dirZ, out) {
+    for (const w of this.walls) {
+      if (w.at(wx, wz, dirX, dirZ, out)) return w;
+    }
+    return null;
   }
 
   // --- the surface query -------------------------------------------------

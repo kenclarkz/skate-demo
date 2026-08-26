@@ -209,6 +209,47 @@ export const SHUV_RATE = 15.0;       // rad/s about vertical
 export const PITCH_RATE = 13.0;      // rad/s end over end, for impossibles
 export const SPIN_RATE = 7.4;        // rad/s of rider body spin
 
+// --- wallride / wallie ---------------------------------------------------
+export const WALLRIDE_MIN_SPEED = 3.0;      // m/s needed to ride a wall
+export const WALLRIDE_MAX_ANGLE = 0.70;     // rad from vertical that counts as a wall
+export const WALLRIDE_MIN_ANGLE = 0.25;     // rad from vertical; shallower is a bank, not a wall
+export const WALLRIDE_FRICTION = 2.0;       // m/s² scrubbed while wall-riding
+export const WALLRIDE_GRAVITY = -3.2;       // reduced gravity while on the wall
+export const WALLRIDE_MAX_DUR = 1.4;        // seconds before forced off
+export const WALLRIDE_EXIT_VY = 2.8;        // m/s upward boost on exit
+export const WALLRIDE_EXIT_LATERAL = 1.6;   // m/s outward push off wall
+export const WALLIE_POP_VY = 4.0;           // m/s upward from a wallie
+export const WALLIE_POP_LATERAL = 2.5;      // m/s outward from a wallie
+export const WALLIE_MIN_SPEED = 2.0;        // m/s needed to wallie
+
+// --- pole jam -------------------------------------------------------------
+export const POLEJAM_MIN_SPEED = 3.5;       // m/s to jam up a pole
+export const POLEJAM_LAUNCH_VY = 5.5;       // m/s upward at full speed
+export const POLEJAM_LAUNCH_FWD = 2.0;      // m/s forward at full speed
+export const POLEJAM_MAX_ANGLE = 0.5;       // rad deviation from pole axis
+
+// --- enhanced landing quality ---------------------------------------------
+// Grades of landing, from best to worst, each more forgiving than the last.
+export const LAND_PERFECT_ROT = 0.08;       // rad of total rotation error for perfect
+export const LAND_PERFECT_SLIP = 0.12;      // rad of slip for perfect
+export const LAND_PERFECT_IMPACT = 3.5;     // m/s impact for perfect
+export const LAND_CLEAN_ROT = 0.20;         // rad for clean (was implicit in the old system)
+export const LAND_CLEAN_SLIP = 0.30;        // rad for clean
+export const LAND_CLEAN_IMPACT = 5.5;       // m/s for clean
+export const LAND_QUALITY_BONUS = { perfect: 1.5, clean: 1.2, sketchy: 0.45, bail: 0 };
+
+// --- enhanced combo system -----------------------------------------------
+// Technical weight: harder tricks earn multiplier faster.
+// Each trick's weight = 1 + floor(points / 200), so a 250pt kickflip = 2,
+// a 700pt tre flip = 4, a 500pt grind = 3.
+export const COMBO_TECH_WEIGHT = 200;       // points per weight tier
+export const COMBO_BASE_MULT = 1.0;
+export const COMBO_MULT_PER_TIER = 0.12;    // multiplier increase per weight tier
+export const COMBO_PERFECT_KEEP = 0.92;     // multiplier preservation on perfect landing (vs reset)
+export const COMBO_CHAIN_BONUS = 0.08;      // extra multiplier per consecutive trick (not tier)
+export const COMBO_GRIND_RATE_MULT = 1.5;   // grind points count this times faster for multiplier
+export const COMBO_MANUAL_RATE_MULT = 1.3;  // manual points count this times faster for multiplier
+
 // --- bail -----------------------------------------------------------------
 export const BAIL_SETTLE = 1.5;      // seconds of ragdoll before the reset offer
 

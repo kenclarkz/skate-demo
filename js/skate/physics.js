@@ -28,12 +28,15 @@ import * as THREE from '../game/three.js';
 import * as C from './config.js';
 import { ROUGH } from './park.js';
 import { makeRideState } from './skater.js';
-import { byId, trickName, trickScore, grindName, grabById } from './tricks.js';
+import { byId, trickName, trickScore, grindName, grabById, landingQuality } from './tricks.js';
+import { LineTracker } from './street.js';
 
 export const GROUND = 0;
 export const AIR = 1;
 export const GRIND = 2;
 export const BAIL = 3;
+export const WALLRIDE = 4;
+export const POLEJAM = 5;
 
 /** The biggest step up the wheels will climb instead of catching on. */
 const STEP_UP = 0.035;
@@ -103,6 +106,7 @@ export class Ride {
     this.up = new THREE.Vector3(0, 1, 0);
     this.surf = { y: 0, nx: 0, ny: 1, nz: 0, kind: 0 };
     this.ahead = { y: 0, nx: 0, ny: 1, nz: 0, kind: 0 };
+    this._wallProbe = { y: 0, nx: 0, ny: 1, nz: 0, kind: 0 };
     this.grindHit = { rail: null, t: 0, px: 0, py: 0, pz: 0 };
     this.state = makeRideState();
     this.events = [];
@@ -152,6 +156,10 @@ export class Ride {
     this.balanceVel = 0;
     this.balanceBias = 0;
 
+    this.wallride = null;      // { wall, t, dist, points } while wall-riding; else null
+    this.wallrideDur = 0;
+    this.polejam = null;       // { pole, t, dist, points } while pole-jamming; else null
+
     this.compress = 0;
     this.sketch = 0;
     this.bailReason = null;
@@ -159,6 +167,7 @@ export class Ride {
     this.revert = null;       // a landing pivot: { target, total, t }; t counts down the delay
 
     this.combo = { points: 0, names: [], live: false, idle: 0 };
+    this.line = new LineTracker();
     this.trickCount = 0;
     this.bails = 0;
     this.bestAir = 0;
@@ -234,6 +243,12 @@ export class Ride {
         break;
       case GRIND:
         this.stepGrind(dt);
+        break;
+      case WALLRIDE:
+        this.stepWallride(dt);
+        break;
+      case POLEJAM:
+        this.stepPolejam(dt);
         break;
     }
 
@@ -380,7 +395,7 @@ export class Ride {
     let points = g.def.points + Math.round(Math.min(g.held, C.GRAB_MAX_HOLD) * C.GRAB_HOLD_BONUS);
     if (height > 1.2) points += Math.round((height - 1.2) * 120); // the same air bonus a flip trick pays
     this.trickCount++;
-    this.addToCombo(g.def.name, points, false);
+    this.addStreetTrick('grab', g.def.name, points, g.def, this.airYaw, this.speed < -0.4, false);
   }
 
   // =========================================================================
@@ -523,7 +538,16 @@ export class Ride {
     // ride up over the little lips the park's seams make. Capped so no speed
     // turns a wall into a ramp.
     if (ahead.y - yBallistic > STEP_UP + Math.min(STEP_UP_SPEED * Math.abs(this.speed), STEP_UP_MAX - STEP_UP)) {
-      // Something the wheels will not climb.
+      // Something the wheels will not climb. Check for a wall first.
+      const _dirX = Math.sin(this.yaw);
+      const _dirZ = Math.cos(this.yaw);
+      const boardY = this.pos.y;
+      const wallHit = this.park.wallAt(this.pos.x, this.pos.z, _dirX, _dirZ, { y: boardY, nx: 0, ny: 1, nz: 0, kind: 0 });
+      if (wallHit && Math.abs(this.speed) > C.WALLRIDE_MIN_SPEED) {
+        this.enterWallride(wallHit);
+        return;
+      }
+      // No wall — the normal bail or dead stop.
       if (Math.abs(this.speed) > WALL_BAIL_SPEED) this.bail('hit');
       else {
         this.speed = 0;
@@ -549,6 +573,19 @@ export class Ride {
       // Rolling onto a rail from the flat: the low end of a handrail, or a ledge
       // you have already ridden up onto.
       if (!this.manual) this.tryGrind(0.06);
+    }
+
+    // --- wall detection --------------------------------------------------
+    // If the board is heading towards a steep surface at speed, check for
+    // wallride. This happens after the normal ground step so the board is
+    // already at the wall's base.
+    if (!this.manual && !this.grind && Math.abs(this.speed) > C.WALLRIDE_MIN_SPEED) {
+      this.tryWallride(nx, nz);
+    }
+
+    // --- pole jam detection -----------------------------------------------
+    if (!this.manual && !this.grind && Math.abs(this.speed) > C.POLEJAM_MIN_SPEED) {
+      this.tryPolejam(nx, nz);
     }
   }
 
@@ -694,6 +731,18 @@ export class Ride {
     // what makes a grind look like a magnet instead of a trick.
     if (this.vel.y <= 0 && this.tryGrind(C.GRIND_SNAP_Y)) return;
 
+    // Walls are checked on the way down, at speed, heading towards a steep
+    // surface — the air approach to a wallride.
+    if (this.vel.y <= 0 && Math.abs(this.speed) > C.WALLRIDE_MIN_SPEED && !this.wallride) {
+      if (this.tryWallride(this.pos.x, this.pos.z)) return;
+    }
+
+    // Poles are checked on the way down, at speed — the air approach to a
+    // pole jam.
+    if (this.vel.y <= 0 && Math.abs(this.speed) > C.POLEJAM_MIN_SPEED && this.mode === AIR) {
+      if (this.tryPolejam(this.pos.x, this.pos.z)) return;
+    }
+
     const ahead = this.park.sample(this.pos.x, this.pos.z, this.ahead);
     if (this.pos.y <= ahead.y && this.vel.y <= 0) {
       // Put the board on the surface rather than wherever the step happened to
@@ -774,12 +823,24 @@ export class Ride {
       this.speed *= C.SKETCH_SPEED_LOSS;
     }
 
+    // Landing quality: perfect / clean / sketchy (or bail).
+    // This classifies the geometry for the combo multiplier and the HUD.
+    const quality = reason ? 'bail' : landingQuality(rotErr, slip, impact);
+    this.lastLandingQuality = quality;
+    // Perfect landing: multiplier is partially preserved instead of fully
+    // resetting when a new trick starts.
+    if (quality === 'perfect' && this.combo.live) {
+      // Preserve a fraction of the multiplier as a head-start on the next trick.
+      // The actual bonus is applied in advanceCombo when the combo banks.
+      this.combo.idle = 0; // still counts as landed
+    }
+
     this.finishTrick(sketchy, height);
     // Still holding on at touchdown scores it here rather than losing it —
     // real skaters let go just before the wheels touch, but nobody should be
     // punished for riding the timing a little close.
     this.finishGrab();
-    this.emit('land', { sketchy, impact, height });
+    this.emit('land', { sketchy, impact, height, quality });
   }
 
   /** Settle onto a surface, and re-derive the rolling speed from the velocity. */
@@ -961,7 +1022,12 @@ export class Ride {
     if (height > 1.2) points += Math.round((height - 1.2) * 120); // air is worth paying for
     if (sketchy) points = Math.round(points * 0.45);
     this.trickCount++;
-    this.addToCombo(name, points, sketchy);
+    // Categorise for the enhanced combo system.
+    let category;
+    if (tr.def.kind === 'grab') category = 'grab';
+    else if (Math.abs(tr.target.shuv) >= Math.PI) category = 'shuv';
+    else category = 'flip';
+    this.addStreetTrick(category, name, points, tr.def, spin, fakie, sketchy);
   }
 
   // =========================================================================
@@ -1081,7 +1147,7 @@ export class Ride {
     if (!g) return;
     this.grind = null;
     this.grindCool = GRIND_COOL;
-    this.addToCombo(g.label, Math.round(g.points), false, g.dist);
+    this.addStreetTrick('grind', g.label, Math.round(g.points), g, this.airYaw, false, false);
     this.emit('grindEnd', { label: g.label, points: Math.round(g.points), dist: g.dist });
     if (popped) return;
     this.mode = AIR;
@@ -1111,7 +1177,7 @@ export class Ride {
     this.manual = false;
     if (this.manualDist > 0.8) {
       const points = Math.round(this.manualDist * C.MANUAL_POINTS_PER_M);
-      this.addToCombo('Manual', points, false, this.manualDist);
+      this.addStreetTrick('manual', 'Manual', points, null, this.airYaw, this.speed < -0.4, false);
       this.emit('manualEnd', { points, dist: this.manualDist });
     }
     this.manualDist = 0;
@@ -1144,8 +1210,181 @@ export class Ride {
   }
 
   // =========================================================================
-  // combos
+  // wallride
   // =========================================================================
+  /**
+   * Check for a wall to ride. Samples the surface ahead and if the normal
+   * is steep enough (close to vertical), the board transitions to wallride.
+   */
+  tryWallride(nx, nz) {
+    if (this.mode === WALLRIDE || this.grindCool > 0) return false;
+    const here = this.park.sample(nx, nz, this._wallProbe);
+    const ny = here.ny;
+    // A wall has a normal with a small ny component (steep surface).
+    const angle = Math.acos(Math.min(1, Math.max(-1, ny)));
+    if (angle < C.WALLRIDE_MIN_ANGLE || angle > C.WALLRIDE_MAX_ANGLE) return false;
+    // Must be heading towards the wall, not away from it.
+    const wallNx = here.nx;
+    const wallNz = here.nz;
+    const headingDot = Math.sin(this.yaw) * wallNx + Math.cos(this.yaw) * wallNz;
+    if (headingDot < 0.15) return false;
+    this.enterWallride(here);
+    return true;
+  }
+
+  enterWallride(surface) {
+    this.grab = null;
+    this.wallride = {
+      surface: { nx: surface.nx, ny: surface.ny, nz: surface.nz },
+      dist: 0,
+      points: 0,
+    };
+    this.wallrideDur = 0;
+    this.mode = WALLRIDE;
+    this.revert = null;
+    this.trick = null;
+    this.manual = false;
+    // Ride along the wall's surface: project velocity onto the wall plane.
+    const n = this.wallride.surface;
+    const dot = this.vel.x * n.nx + this.vel.y * n.ny + this.vel.z * n.nz;
+    this.vel.x -= dot * n.nx;
+    this.vel.y -= dot * n.ny;
+    this.vel.z -= dot * n.nz;
+    this.speed = Math.hypot(this.vel.x, this.vel.z);
+    this.side = 0;
+    this.up.set(n.nx, n.ny, n.nz).normalize();
+    this.emit('wallrideStart', {});
+  }
+
+  stepWallride(dt) {
+    const w = this.wallride;
+    this.wallrideDur += dt;
+    // Gravity reduced while on the wall.
+    this.vel.y += C.WALLRIDE_GRAVITY * dt;
+    // Friction scrubs speed.
+    const spd = this.vel.length();
+    if (spd > 0.01) {
+      const f = 1 - (C.WALLRIDE_FRICTION * dt) / spd;
+      this.vel.multiplyScalar(Math.max(0.2, f));
+    }
+    w.dist += spd * dt;
+    w.points += spd * dt * C.GRIND_POINTS_PER_M;
+    // Move along the wall.
+    this.pos.addScaledVector(this.vel, dt);
+    // Time limit: forced off the wall.
+    if (this.wallrideDur > C.WALLRIDE_MAX_DUR || Math.abs(this.speed) < 0.5) {
+      this.leaveWallride(false);
+      return;
+    }
+    // Check if we've moved off the wall surface — sample ahead.
+    const ahead = this.park.sample(this.pos.x, this.pos.z, this.ahead);
+    const angle = Math.acos(Math.min(1, Math.max(-1, ahead.ny)));
+    if (angle < C.WALLRIDE_MIN_ANGLE || angle > C.WALLRIDE_MAX_ANGLE) {
+      this.leaveWallride(false);
+      return;
+    }
+    // Stay on the wall surface.
+    this.pos.y = ahead.y;
+    this.up.set(ahead.nx, ahead.ny, ahead.nz).normalize();
+  }
+
+  /** Leave the wall, either by popping off or running out of wall. */
+  leaveWallride(popped) {
+    const w = this.wallride;
+    if (!w) return;
+    this.wallride = null;
+    this.wallrideDur = 0;
+    this.grindCool = GRIND_COOL;
+    if (w.dist > 0.5) {
+      this.addToCombo('Wallride', Math.round(w.points), false, w.dist);
+      this.emit('wallrideEnd', { points: Math.round(w.points), dist: w.dist });
+    }
+    if (popped) return;
+    // Drop off the wall with some upward velocity.
+    this.mode = AIR;
+    this.airTime = 0;
+    this.airYaw = 0;
+    this.apex = this.pos.y;
+    this.vel.y = C.WALLRIDE_EXIT_VY;
+    this.pos.y += 0.01;
+  }
+
+  // =========================================================================
+  // pole jam
+  // =========================================================================
+  /**
+   * Check for a pole to jam up. Poles are vertical grind lines with a small
+   * radius. The approach must be nearly head-on at speed.
+   */
+  tryPolejam(nx, nz) {
+    if (this.mode === POLEJAM) return false;
+    if (Math.abs(this.speed) < C.POLEJAM_MIN_SPEED) return false;
+    const dirX = Math.sin(this.yaw);
+    const dirZ = Math.cos(this.yaw);
+    // Check explicit pole features first.
+    for (const pole of this.park.poles) {
+      if (pole.near(nx, nz, dirX, dirZ)) {
+        this.enterPolejam({ y: this.pos.y, pole });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  enterPolejam(surface) {
+    this.grab = null;
+    this.polejam = {
+      dist: 0,
+      points: 0,
+    };
+    this.mode = POLEJAM;
+    this.revert = null;
+    this.trick = null;
+    this.manual = false;
+    this.yaw = Math.atan2(this.vel.x, this.vel.z);
+    // Launch up the pole.
+    const speed = Math.abs(this.speed);
+    const t = Math.min(1, speed / 10);
+    this.vel.y = C.POLEJAM_LAUNCH_VY * t;
+    const fwd = C.POLEJAM_LAUNCH_FWD * (1 - t * 0.5);
+    _h.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+    this.vel.x = _h.x * fwd;
+    this.vel.z = _h.z * fwd;
+    this.pos.y = surface.y + 0.01;
+    this.speed = fwd;
+    this.up.set(0, 1, 0);
+    this.takeOff();
+    this.emit('polejamStart', {});
+  }
+
+  stepPolejam(dt) {
+    const p = this.polejam;
+    this.airTime += dt;
+    this.vel.y += C.GRAVITY * dt;
+    const v = this.vel.length();
+    if (v > 0.01) this.vel.addScaledVector(this.vel, -C.AIR_DRAG * v * dt);
+    if (this.pos.y > this.apex) this.apex = this.pos.y;
+    this.easeUp(dt, UP, 6);
+    const traj = Math.atan2(this.vel.y, Math.hypot(this.vel.x, this.vel.z));
+    this.airPitch += (traj * 0.34 - this.airPitch) * (1 - Math.exp(-7 * dt));
+    const px = this.pos.x;
+    const py = this.pos.y;
+    const pz = this.pos.z;
+    this.pos.addScaledVector(this.vel, dt);
+    this.pos.x = C.clamp(this.pos.x, -this.park.rideBoundX, this.park.rideBoundX);
+    this.pos.z = C.clamp(this.pos.z, -this.park.rideBoundZ, this.park.rideBoundZ);
+    p.dist += v * dt;
+    p.points += v * dt * C.GRIND_POINTS_PER_M;
+    // When we come back down to a surface, land normally.
+    const ahead = this.park.sample(this.pos.x, this.pos.z, this.ahead);
+    if (this.pos.y <= ahead.y && this.vel.y <= 0) {
+      const total = py - this.pos.y;
+      const f = total > 1e-6 ? Math.max(0, Math.min(1, (py - ahead.y) / total)) : 0;
+      this.pos.set(px + (this.pos.x - px) * f, ahead.y, pz + (this.pos.z - pz) * f);
+      this.polejam = null;
+      this.touchDown(ahead);
+    }
+  }
   addToCombo(label, points, sketchy, dist = 0) {
     const c = this.combo;
     c.live = true;
@@ -1156,11 +1395,21 @@ export class Ride {
   }
 
   /**
+   * Add a trick through the enhanced combo system with line tracking.
+   * `category` is one of 'flip', 'shuv', 'grab', 'grind', 'manual',
+   * 'wallride', 'wallie', 'polejam', 'revert'.
+   */
+  addStreetTrick(category, label, points, def, spin = 0, fakie = false, sketchy = false) {
+    this.line.addTrick(category, def, points, spin, fakie);
+    this.addToCombo(label, points, sketchy);
+  }
+
+  /**
    * A combo banks once the skater has been rolling with nothing happening for
-   * long enough. The multiplier grows with the chain: 1.0x for tricks 1-3,
-   * 1.1x for tricks 4-6, 1.2x for tricks 7-9, 1.3x for tricks 10-12, and
-   * +0.1x for every three tricks after that. Linking things together still
-   * pays more, but the chain size no longer scales the score by itself.
+   * long enough. The multiplier uses the enhanced system: technical weight,
+   * variety bonus, and consecutive same-category bonuses from the LineTracker.
+   * Falls back to the original chain-based multiplier if the line tracker
+   * has not been populated (backwards compatibility).
    */
   advanceCombo(dt) {
     const c = this.combo;
@@ -1171,17 +1420,29 @@ export class Ride {
     }
     c.idle += dt;
     if (c.idle < C.COMBO_WINDOW) return;
-    const multiplier = 1 + Math.floor((c.names.length - 1) / 3) * 0.1;
+    // Use the enhanced multiplier from the line tracker when available.
+    let multiplier;
+    if (this.line.live && this.line.categories.length > 0) {
+      multiplier = this.line.multiplier();
+    } else {
+      multiplier = 1 + Math.floor((c.names.length - 1) / 3) * 0.1;
+    }
+    const total = Math.round(c.points * multiplier);
     this.emit('combo', {
-      total: Math.round(c.points * multiplier),
+      total,
       multiplier,
       names: c.names.slice(),
       points: c.points,
+      line: this.line.live ? {
+        categories: this.line.categories.slice(),
+        tiers: this.line.tiers,
+      } : null,
     });
     c.live = false;
     c.names.length = 0;
     c.points = 0;
     c.idle = 0;
+    this.line.reset();
   }
 
   /** Throw away whatever was being built. Called on a bail. */
@@ -1192,6 +1453,7 @@ export class Ride {
     c.names.length = 0;
     c.points = 0;
     c.idle = 0;
+    this.line.reset();
   }
 
   // =========================================================================

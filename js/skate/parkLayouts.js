@@ -1080,4 +1080,79 @@ export const PARKS = [
       { type: 'bush', x: 52, z: -56.5, r: 0.85 },
     ]
   ),
+  // --- Street Plaza: walls to wallride, poles to jam, ledges and rails -------
+  {
+    id: 'street',
+    name: 'Street Plaza',
+    blurb: 'Walls to wallride, poles to jam, ledges and rails to grind — a street skating line built from concrete and steel.',
+    scale: 1,
+    padOnly: true,
+    extentX: 48,
+    extentZ: 52,
+    ground: '#c2b9a7',
+    spawn: { x: 0, y: 0, z: -22, yaw: 0 },
+    patrol: [
+      { x: 0, z: -26 }, { x: 16, z: -10 }, { x: 16, z: 16 },
+      { x: 0, z: 24 }, { x: -16, z: 16 }, { x: -16, z: -10 },
+    ],
+    logos: [
+      { x: -18, z: -18 }, { x: 18, z: -18 },
+      { x: -18, z: 18 }, { x: 18, z: 18 },
+      { x: 0, z: 0 }, { x: 0, z: -30 },
+    ],
+    _graph: buildParkGraph([
+      { type: 'bank', x: 0, z: -15, ry: 0, w: 10, len: 5, h: 0.5 },
+      { type: 'slab', x: 0, z: -10.5, ry: 0, w: 10, d: 4, h: 0.5 },
+      { type: 'bank', x: 0, z: -6.5, ry: 180, w: 10, len: 5, h: 0.5 },
+      { type: 'bank', x: 18, z: 6, ry: 180, w: 6, len: 5, h: 0.8 },
+      { type: 'slab', x: 18, z: -0.5, ry: 0, w: 6, d: 8, h: 0.8 },
+      { type: 'stairs', x: 18, z: -7.5, ry: 0, w: 6, steps: 4, rise: 0.2, run: 1.0 },
+      { type: 'rail', x: 15, z: -1.5, ry: 90, len: 8, h: 0.65 },
+      { type: 'ledge', x: 20, z: 18, ry: 0, len: 8, h: 0.45 },
+      { type: 'ledge', x: 20, z: -18, ry: 0, len: 8, h: 0.45 },
+      { type: 'rail', x: 0, z: 12, ry: 90, len: 20, h: 0.38 },
+      { type: 'rail', x: -10, z: 0, ry: 0, len: 14, h: 0.38 },
+      { type: 'quarter', x: -20, z: 20, ry: 90, w: 8, R: 1.6, H: 0.8 },
+    ]),
+    build(p) {
+      // --- rideable walls (for wallriding) ----------------------------------
+      // North wall: faces south (towards the park centre).
+      p.wall(0, 40, 0, -1, 0, 3.5, 14);
+      // East wall: faces west.
+      p.wall(24, 0, -1, 0, 0, 3.0, 12);
+      // West wall: faces east.
+      p.wall(-24, 0, 1, 0, 0, 3.0, 12);
+
+      // --- poles (for pole jamming) -----------------------------------------
+      p.pole(10, 10, 0, 2.8, 0x9fa5ad);
+      p.pole(-10, -10, 0, 2.8, 0x9fa5ad);
+      p.pole(10, -15, 0, 2.2, 0x9fa5ad);
+
+      // --- standard park objects --------------------------------------------
+      buildObjects(p, [
+        // Central funbox: bank up, flat deck, bank down.
+        { type: 'bank', x: 0, z: -15, ry: 0, w: 10, len: 5, h: 0.5, color: '#b388eb' },
+        { type: 'slab', x: 0, z: -10.5, ry: 0, w: 10, d: 4, h: 0.5, color: '#cdb4db' },
+        { type: 'bank', x: 0, z: -6.5, ry: 180, w: 10, len: 5, h: 0.5, color: '#b388eb' },
+        // Stair set: bank up to a plateau, stairs down, handrail.
+        { type: 'bank', x: 18, z: 6, ry: 180, w: 6, len: 5, h: 0.8, color: '#90be6d' },
+        { type: 'slab', x: 18, z: -0.5, ry: 0, w: 6, d: 8, h: 0.8, color: '#e9edc9' },
+        { type: 'stairs', x: 18, z: -7.5, ry: 0, w: 6, steps: 4, rise: 0.2, run: 1.0, color: '#90be6d' },
+        { type: 'rail', x: 15, z: -1.5, ry: 90, len: 8, h: 0.65, r: 0.03, color: '#e5e7eb' },
+        // Ledges along the east side.
+        { type: 'ledge', x: 20, z: 18, ry: 0, len: 8, h: 0.45, color: '#f8e16c' },
+        { type: 'ledge', x: 20, z: -18, ry: 0, len: 8, h: 0.45, color: '#f8e16c' },
+        // Flat bars across the flow path.
+        { type: 'rail', x: 0, z: 12, ry: 90, len: 20, h: 0.38, r: 0.025, color: '#ff2fa0' },
+        { type: 'rail', x: -10, z: 0, ry: 0, len: 14, h: 0.38, r: 0.025, color: '#ff2fa0' },
+        // Quarter pipe on the west side for pumping.
+        { type: 'quarter', x: -20, z: 20, ry: 90, w: 8, R: 1.6, H: 0.8, color: '#f15bb5' },
+        // Scenery: trees along the edges.
+        { type: 'tree', x: -38, z: 44, r: 1.1, h: 3.0, color: '#46764a' },
+        { type: 'tree', x: 38, z: 44, r: 1.0, h: 2.8, color: '#46764a' },
+        { type: 'tree', x: -38, z: -44, r: 1.0, h: 2.9, color: '#46764a' },
+        { type: 'tree', x: 38, z: -44, r: 1.1, h: 3.0, color: '#46764a' },
+      ]);
+    },
+  },
 ];

@@ -1243,7 +1243,23 @@ export class Hud {
     if (key === this._comboKey) return;
     this._comboKey = key;
     this.comboList.textContent = names.join('  +  ');
-    this.comboMult.textContent = `${Math.floor(points).toLocaleString()} × ${multiplier}`;
+    // Show multiplier with the multiplier value emphasised when it's above 1.0.
+    const m = multiplier;
+    const mLabel = m >= 1.0
+      ? `${Math.floor(points).toLocaleString()} × ${m.toFixed(1)}`
+      : `${Math.floor(points).toLocaleString()} × ${m.toFixed(2)}`;
+    this.comboMult.textContent = mLabel;
+    // Highlight the multiplier text when it's above 1.5x (a strong line).
+    this.comboMult.classList.toggle('hot', m >= 1.5);
+    this.comboMult.classList.toggle('blazing', m >= 2.0);
+  }
+
+  /** Landing quality text, shown briefly on landing. */
+  showLandingQuality(quality) {
+    if (!quality || quality === 'bail') return;
+    const text = { perfect: 'PERFECT', clean: 'CLEAN', sketchy: '...' }[quality];
+    if (!text) return;
+    this.say(text, quality);
   }
 
   /** A trick's name, thrown up over the action and left to fade. */
