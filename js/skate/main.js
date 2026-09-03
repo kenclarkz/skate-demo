@@ -1345,6 +1345,9 @@ function showMultiplayer() {
   state = MULTIPLAYER;
   input.enabled = false;
   hud.show('multiplayer');
+  // Populate the park choosers with every skateable park, preselecting the
+  // one the player is currently riding.
+  mpUI.setParks(allParks(), park.id);
   // Sync player info from save data so remote peers see the right name/look.
   const look = currentLook();
   multiplayer.setPlayerInfo(look.character?.name || 'Skater', { palette: look.palette, style: look.style, scale: look.scale });
@@ -1781,10 +1784,18 @@ input.onPause = () => {
 // --- multiplayer callbacks -------------------------------------------------
 mpUI.onBack = () => showStart();
 mpUI.onCreateSession = () => {
-  multiplayer.createSession(park.id);
+  multiplayer.createSession(mpUI.getSelectedPark());
 };
 mpUI.onFindMatch = () => {
-  multiplayer.findRandomMatch(park.id);
+  multiplayer.findRandomMatch(mpUI.getSelectedPark());
+};
+mpUI.onSelectPark = (parkId) => {
+  // The player picked a park to skate before creating a session.
+  if (multiplayer.inSession) multiplayer.setPark(parkId);
+};
+mpUI.onChangeInGamePark = (parkId) => {
+  // The host (or any player while in session) changes the session park.
+  multiplayer.setPark(parkId);
 };
 mpUI.onJoinCode = (code) => {
   multiplayer.joinByFriendCode(code);
@@ -1816,6 +1827,7 @@ multiplayer.onStatusChange = (status) => {
   mpUI._updateStatus(status);
   if (status === 'in-session' && multiplayer.friendCode) {
     mpUI.setFriendCode(multiplayer.friendCode);
+    mpUI.setParks(allParks(), multiplayer.parkId);
     mpUI.addSystemLine('Session joined! Share the code with friends.');
   } else if (status === 'connected') {
     mpUI.addSystemLine('Connected to server.');
@@ -1833,6 +1845,8 @@ multiplayer.onSessionList = (sessions) => {
 };
 multiplayer.onParkChange = (parkId) => {
   mpUI._updateStatus(`Park: ${parkId}`);
+  // Keep both choosers in sync with the session's park.
+  mpUI.setParks(allParks(), parkId);
 };
 multiplayer.onError = (msg) => {
   mpUI.showError(msg);

@@ -3674,6 +3674,26 @@ button:disabled.primary {
   letter-spacing: 0;
 }
 
+.mp-park-label {
+  display: block;
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 8px 0 4px;
+}
+.mp-park-select {
+  width: 100%;
+  background: rgba(30, 37, 46, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 8px 10px;
+  font-size: 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
 .mp-session-list {
   max-height: 200px;
   overflow-y: auto;

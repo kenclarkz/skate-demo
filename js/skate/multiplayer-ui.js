@@ -13,6 +13,8 @@ export class MultiplayerUI {
     this.chatLogEl = document.getElementById('mp-chat-log');
     this.chatInputEl = document.getElementById('mp-chat-input');
     this.sessionListEl = document.getElementById('mp-session-list');
+    this.parkSelectEl = document.getElementById('mp-park-select');
+    this.inGameParkSelectEl = document.getElementById('mp-ingame-park-select');
     this.lobbySessionEl = document.getElementById('mp-ingame-panel');
     this.inGameListEl = document.getElementById('mp-ingame-list');
     this.inGameOverlayEl = document.getElementById('mp-ingame-overlay');
@@ -35,6 +37,10 @@ export class MultiplayerUI {
     this.onJoinSession = null;
     /** @type {function|null} */
     this.onStartGame = null;
+    /** @type {function|null} */
+    this.onSelectPark = null;
+    /** @type {function|null} */
+    this.onChangeInGamePark = null;
 
     this._refreshTimer = null;
     this._bind();
@@ -53,6 +59,11 @@ export class MultiplayerUI {
     click('btn-mp-leave', () => this.onLeaveSession?.());
     click('btn-mp-start', () => this.onStartGame?.());
     click('btn-mp-send', () => this._sendChat());
+
+    this.parkSelectEl?.addEventListener('change', () => this.onSelectPark?.(this.getSelectedPark()));
+    this.inGameParkSelectEl?.addEventListener('change', () => {
+      this.onChangeInGamePark?.(this.getInGamePark());
+    });
 
     this.chatInputEl?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this._sendChat();
@@ -167,6 +178,42 @@ export class MultiplayerUI {
         this.onJoinSession?.(s.sessionId);
       });
       this.sessionListEl.appendChild(div);
+    }
+  }
+
+  /** Get the park id selected in the pre-session chooser. */
+  getSelectedPark() {
+    return this.parkSelectEl?.value || multiplayer.parkId;
+  }
+
+  /** Get the park id selected in the in-session chooser. */
+  getInGamePark() {
+    return this.inGameParkSelectEl?.value || multiplayer.parkId;
+  }
+
+  /**
+   * Populate both park choosers with the given park list. Each entry has
+   * `id` and `name`. The pre-session select preselects `current`.
+   * @param {Array<{id: string, name: string}>} parks
+   * @param {string} [current]
+   */
+  setParks(parks, current) {
+    if (this.parkSelectEl) {
+      this._fillParkOptions(this.parkSelectEl, parks, current);
+    }
+    if (this.inGameParkSelectEl) {
+      this._fillParkOptions(this.inGameParkSelectEl, parks, multiplayer.parkId);
+    }
+  }
+
+  _fillParkOptions(select, parks, current) {
+    select.innerHTML = '';
+    for (const p of parks) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      if (p.id === current) opt.selected = true;
+      select.appendChild(opt);
     }
   }
 

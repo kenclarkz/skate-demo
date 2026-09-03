@@ -297,6 +297,8 @@
 
           <!-- Pre-session: create, match, or join by code -->
           <div id="mp-lobby" class="mp-lobby">
+            <label for="mp-park-select" class="mp-park-label">Park to skate</label>
+            <select id="mp-park-select" class="mp-park-select" aria-label="Choose the park to skate"></select>
             <nav class="menu">
               <button id="btn-mp-create" class="primary" type="button">Create Session</button>
               <button id="btn-mp-match" type="button">Find Random Match</button>
@@ -321,6 +323,8 @@
               <h2 class="store-section-title">Players</h2>
               <ul id="mp-peer-list" class="mp-peer-list"></ul>
             </div>
+            <label for="mp-ingame-park-select" class="mp-park-label">Park to skate</label>
+            <select id="mp-ingame-park-select" class="mp-park-select" aria-label="Change the park for this session"></select>
             <div class="mp-chat">
               <div id="mp-chat-log" class="mp-chat-log"></div>
               <div class="mp-chat-row">
